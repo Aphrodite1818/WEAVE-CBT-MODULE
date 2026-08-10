@@ -1,0 +1,92 @@
+# Environment variables and local secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+.secrets/
+
+# Python bytecode and tool caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Python virtual environments and build output
+.venv/
+venv/
+env/
+ENV/
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Node and Vite
+node_modules/
+.vite/
+.vite-temp/
+dist-ssr/
+*.local
+.eslintcache
+
+# Frontend test and browser automation output
+coverage/
+playwright-report/
+test-results/
+
+# Runtime data and local service state
+*.pid
+*.pid.lock
+*.sock
+*.sqlite
+*.sqlite3
+dump.rdb
+appendonlydir/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# IDE and editor settings
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.code-workspace
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Operating-system metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.orig
+*~
