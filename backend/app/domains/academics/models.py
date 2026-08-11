@@ -157,18 +157,7 @@ class AcademicTerm(SyncTimestampMixin, Base):
 
 
 class AcademicLevel(SyncTimestampMixin, Base):
-    """
-    Academic level synchronized from Weave.
-
-    A level groups several class arms that represent the same academic stage.
-
-    Example:
-
-        JSS1
-        ├── JSS1 A
-        ├── JSS1 B
-        └── JSS1 C
-    """
+    """Academic level such as JSS1, JSS2, SS1, or SS2."""
 
     __tablename__ = "academic_levels"
 
@@ -215,15 +204,7 @@ class AcademicLevel(SyncTimestampMixin, Base):
 
 
 class AcademicClass(SyncTimestampMixin, Base):
-    """
-    Actual class/arm synchronized from Weave.
-
-    Example:
-
-        level = JSS1
-        name = JSS1 A
-        arm = A
-    """
+    """Actual class arm belonging to an AcademicLevel, such as JSS1 A."""
 
     __tablename__ = "academic_classes"
 
@@ -299,13 +280,16 @@ class AcademicSubject(SyncTimestampMixin, Base):
     )
 
 
-class AcademicClassSubject(SyncTimestampMixin, Base):
+class AcademicLevelSubject(SyncTimestampMixin, Base):
     """
-    Mapping showing that a subject is taught to a particular class
-    during a particular academic session.
+    Curriculum mapping showing that a subject belongs to an academic level.
+
+    Example: JSS1 -> Mathematics. Teacher delivery remains arm-specific through
+    TeacherAssignment; sharing a level never grants a teacher access to every
+    class arm in that level.
     """
 
-    __tablename__ = "academic_class_subjects"
+    __tablename__ = "academic_level_subjects"
 
     weave_mapping_id: Mapped[str | None] = mapped_column(
         String(WEAVE_ID_MAX_LENGTH),
@@ -314,18 +298,9 @@ class AcademicClassSubject(SyncTimestampMixin, Base):
         index=True,
     )
 
-    session_id: Mapped[UUID] = mapped_column(
+    level_id: Mapped[UUID] = mapped_column(
         ForeignKey(
-            "academic_sessions.id",
-            ondelete="RESTRICT",
-        ),
-        nullable=False,
-        index=True,
-    )
-
-    class_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "academic_classes.id",
+            "academic_levels.id",
             ondelete="RESTRICT",
         ),
         nullable=False,
@@ -350,14 +325,13 @@ class AcademicClassSubject(SyncTimestampMixin, Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "session_id",
-            "class_id",
+            "level_id",
             "subject_id",
-            name="uq_academic_class_subjects_session_class_subject",
+            name="uq_academic_level_subjects_level_subject",
         ),
         Index(
-            "ix_academic_class_subjects_class_subject_active",
-            "class_id",
+            "ix_academic_level_subjects_level_subject_active",
+            "level_id",
             "subject_id",
             "is_active",
         ),
@@ -365,12 +339,7 @@ class AcademicClassSubject(SyncTimestampMixin, Base):
 
 
 class AssessmentComponent(SyncTimestampMixin, Base):
-    """
-    Dynamic assessment component synchronized from Weave.
-
-    Examples may include Test, CA, Midterm, Exam, Practical, or any other
-    component configured by the school.
-    """
+    """Dynamic assessment component synchronized from Weave."""
 
     __tablename__ = "assessment_components"
 
@@ -414,8 +383,8 @@ class AssessmentComponent(SyncTimestampMixin, Base):
 
     __table_args__ = (
         CheckConstraint(
-            "maximum_score >  0",
-            name="ck_assessment_components_maximum_score_nonnegative",
+            "maximum_score > 0",
+            name="ck_assessment_components_maximum_score_positive",
         ),
         CheckConstraint(
             "position >= 1",
@@ -431,12 +400,7 @@ class AssessmentComponent(SyncTimestampMixin, Base):
 
 
 class TeacherAssignment(SyncTimestampMixin, Base):
-    """
-    Local projection of a teacher's Weave class-subject assignment.
-
-    Authorization services use these rows to determine which class and subject
-    combinations a teacher may manage locally.
-    """
+    """Local projection of a teacher's arm-specific class-subject assignment."""
 
     __tablename__ = "teacher_assignments"
 
@@ -516,12 +480,7 @@ class TeacherAssignment(SyncTimestampMixin, Base):
 
 
 class StudentEnrollment(SyncTimestampMixin, Base):
-    """
-    Local projection of an active/current Weave student enrollment.
-
-    Records are retained when they later become inactive so historical CBT
-    records remain valid.
-    """
+    """Local projection of a Weave student enrollment for one session/class."""
 
     __tablename__ = "student_enrollments"
 
@@ -594,7 +553,7 @@ class StudentEnrollment(SyncTimestampMixin, Base):
 
 
 class AcademicSyncState(Base):
-    """Bookkeeping state for synchronization with Weave."""
+    """Cursor/checkpoint and health bookkeeping for academic synchronization."""
 
     __tablename__ = "academic_sync_states"
 
@@ -626,7 +585,7 @@ class AcademicSyncState(Base):
 
     __table_args__ = (
         CheckConstraint(
-            f"char_length(last_error) <= {SYNC_ERROR_MAX_LENGTH}",
+            f"last_error IS NULL OR char_length(last_error) <= {SYNC_ERROR_MAX_LENGTH}",
             name="ck_academic_sync_states_error_length",
         ),
     )

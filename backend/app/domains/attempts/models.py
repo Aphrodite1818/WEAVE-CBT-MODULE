@@ -14,15 +14,13 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Enum as SQLEnum,
     ForeignKey,
     Index,
     Integer,
     String,
     UniqueConstraint,
     text,
-)
-from sqlalchemy import (
-    Enum as SQLEnum,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -35,6 +33,7 @@ class AttemptStatus(str, PyEnum):
     """Lifecycle states for a candidate examination attempt."""
 
     IN_PROGRESS = "in_progress"
+    INTERRUPTED = "interrupted"
     SUBMITTED = "submitted"
     TERMINATED = "terminated"
 
@@ -52,11 +51,15 @@ class ExamAttempt(Base):
     """
     One candidate's sitting of one exam.
 
-    ExamCandidate already belongs to a specific exam, so each candidate
-    receives at most one attempt.
+    Timing is interruption-aware. `time_limit_seconds` snapshots the exam time
+    budget. `elapsed_seconds` stores already-consumed active time, while
+    `active_since` marks the start of the currently running segment.
 
-    The attempt stores its own deadline when it begins so later exam schedule
-    changes do not silently alter an already-running candidate timer.
+    When an interruption is confirmed, the service adds the current active
+    segment to `elapsed_seconds`, clears `active_since`, marks the attempt as
+    INTERRUPTED, and records an AttemptInterruption row. An approved resume
+    starts a new active segment without charging the candidate for the paused
+    interval.
     """
 
     __tablename__ = "exam_attempts"
@@ -91,9 +94,27 @@ class ExamAttempt(Base):
         nullable=False,
     )
 
-    deadline_at: Mapped[datetime] = mapped_column(
+    time_limit_seconds: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    elapsed_seconds: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+
+    active_since: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    last_heartbeat_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
+        index=True,
     )
 
     last_activity_at: Mapped[datetime] = mapped_column(
@@ -125,13 +146,113 @@ class ExamAttempt(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "deadline_at > started_at",
-            name="ck_exam_attempts_valid_deadline",
+            "time_limit_seconds > 0",
+            name="ck_exam_attempts_time_limit_positive",
+        ),
+        CheckConstraint(
+            "elapsed_seconds >= 0",
+            name="ck_exam_attempts_elapsed_nonnegative",
+        ),
+        CheckConstraint(
+            "elapsed_seconds <= time_limit_seconds",
+            name="ck_exam_attempts_elapsed_within_limit",
+        ),
+        CheckConstraint(
+            "active_since IS NULL OR active_since >= started_at",
+            name="ck_exam_attempts_valid_active_since",
+        ),
+        CheckConstraint(
+            "last_heartbeat_at >= started_at",
+            name="ck_exam_attempts_valid_heartbeat",
+        ),
+        CheckConstraint(
+            "last_activity_at >= started_at",
+            name="ck_exam_attempts_valid_activity",
+        ),
+        CheckConstraint(
+            "submitted_at IS NULL OR submitted_at >= started_at",
+            name="ck_exam_attempts_valid_submission",
+        ),
+        CheckConstraint(
+            "(status = 'in_progress' AND active_since IS NOT NULL) "
+            "OR (status <> 'in_progress' AND active_since IS NULL)",
+            name="ck_exam_attempts_active_segment_matches_status",
         ),
         Index(
-            "ix_exam_attempts_status_deadline",
+            "ix_exam_attempts_status_heartbeat",
             "status",
-            "deadline_at",
+            "last_heartbeat_at",
+        ),
+    )
+
+
+class AttemptInterruption(Base):
+    """
+    Historical record of one interruption and any later approved resume.
+
+    Multiple rows may exist for one attempt. Audit records capture the broader
+    administrative action; this table preserves timing-specific state needed
+    to explain and reconstruct attempt resumes.
+    """
+
+    __tablename__ = "attempt_interruptions"
+
+    attempt_id: Mapped[UUID] = mapped_column(
+        ForeignKey(
+            "exam_attempts.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    interrupted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    remaining_seconds: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    reason: Mapped[str | None] = mapped_column(
+        String(ATTEMPT_REASON_MAX_LENGTH),
+        nullable=True,
+    )
+
+    resumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    resumed_by_actor_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey(
+            "local_actors.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+        index=True,
+    )
+
+    resume_reason: Mapped[str | None] = mapped_column(
+        String(ATTEMPT_REASON_MAX_LENGTH),
+        nullable=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "remaining_seconds >= 0",
+            name="ck_attempt_interruptions_remaining_nonnegative",
+        ),
+        CheckConstraint(
+            "resumed_at IS NULL OR resumed_at >= interrupted_at",
+            name="ck_attempt_interruptions_valid_resume",
+        ),
+        Index(
+            "ix_attempt_interruptions_attempt_interrupted",
+            "attempt_id",
+            "interrupted_at",
         ),
     )
 
@@ -140,9 +261,8 @@ class AttemptQuestionAllocation(Base):
     """
     One exam question allocated to one candidate attempt.
 
-    The allocation is generated once when the attempt starts and then
-    persisted. This prevents question order from changing when the candidate
-    refreshes, disconnects, or resumes on another device.
+    Allocation is generated once and persisted so refresh, reconnection, or a
+    device change never reshuffles the candidate's question order.
     """
 
     __tablename__ = "attempt_question_allocations"
@@ -194,12 +314,7 @@ class AttemptQuestionAllocation(Base):
 
 
 class AttemptOptionAllocation(Base):
-    """
-    Presentation order for an answer option within a candidate attempt.
-
-    Options are allocated once so shuffled answer choices remain in the same
-    order after refreshes, reconnects, or device changes.
-    """
+    """Persisted presentation order for one allocated answer option."""
 
     __tablename__ = "attempt_option_allocations"
 
@@ -250,12 +365,7 @@ class AttemptOptionAllocation(Base):
 
 
 class AttemptAnswer(Base):
-    """
-    Candidate answer state for one allocated question.
-
-    Selected choices live in AttemptAnswerSelection so single-choice and
-    multiple-choice questions use the same storage structure.
-    """
+    """Candidate answer state for one allocated question."""
 
     __tablename__ = "attempt_answers"
 
@@ -283,12 +393,7 @@ class AttemptAnswer(Base):
 
 
 class AttemptAnswerSelection(Base):
-    """
-    One option currently selected by the candidate.
-
-    Multiple rows allow multiple-choice questions to have several selected
-    answers. Single-choice validation is enforced by the attempts service.
-    """
+    """One option currently selected by the candidate."""
 
     __tablename__ = "attempt_answer_selections"
 

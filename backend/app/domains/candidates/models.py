@@ -2,40 +2,9 @@
 # backend.app.domains.candidates.models
 # ===================================== #
 
-"""
-Candidate models for Weave CBT.
+"""Candidate models for Weave CBT."""
 
-The candidates domain represents students who have been placed onto
-the roster of a specific local CBT examination.
-
-Academic enrollment and examination candidacy are separate concepts.
-
-StudentEnrollment means:
-
-    "Weave says this student is academically enrolled."
-
-ExamCandidate means:
-
-    "This student has been placed onto this specific examination roster."
-
-This domain owns:
-
-- examination candidate rosters;
-- candidate eligibility state;
-- stable candidate identity snapshots;
-- per-examination candidate PIN credentials.
-
-This domain does NOT own:
-
-- student academic enrollment;
-- examination definitions;
-- live examination attempts;
-- candidate answers;
-- examination scores;
-- result synchronization.
-
-Those responsibilities belong to their respective domains.
-"""
+from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum as PyEnum
@@ -44,7 +13,7 @@ from uuid import UUID
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
-    Enum,
+    Enum as SQLEnum,
     ForeignKey,
     Integer,
     String,
@@ -55,10 +24,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 
-# ========================== #
-# CONSTANTS
-# ========================== #
-
 WEAVE_ID_MAX_LENGTH = 128
 ADMISSION_NUMBER_MAX_LENGTH = 128
 NAME_MAX_LENGTH = 255
@@ -66,73 +31,28 @@ STATUS_REASON_MAX_LENGTH = 500
 PIN_HASH_MAX_LENGTH = 512
 
 
-# ========================== #
-# ENUMS
-# ========================== #
-
-
 class CandidateStatus(str, PyEnum):
-    """
-    Eligibility state of a candidate on an examination roster.
-
-    ELIGIBLE:
-        Candidate may enter the examination when the exam lifecycle
-        and authentication requirements allow it.
-
-    BLOCKED:
-        Candidate remains on the roster but cannot enter the exam.
-
-    WITHDRAWN:
-        Candidate has been removed from active participation while
-        preserving the historical roster record.
-    """
+    """Eligibility state of a candidate on an examination roster."""
 
     ELIGIBLE = "eligible"
     BLOCKED = "blocked"
     WITHDRAWN = "withdrawn"
 
 
-# ========================== #
-# EXAM CANDIDATE
-# ========================== #
-
-
 class ExamCandidate(Base):
     """
-    Represent one student on one examination roster.
+    One student on one examination roster.
 
-    Identity fields are intentionally snapshotted from the academic
-    enrollment projection.
-
-    This prevents later academic synchronization changes, such as
-    admission-number or display-name changes, from silently changing
-    the historical identity attached to an already-prepared exam.
-
-    The original academic enrollment is still referenced through
-    enrollment_id.
+    Identity fields are snapshotted from StudentEnrollment so later academic
+    synchronization changes cannot silently rewrite historical exam identity.
     """
 
     __tablename__ = "exam_candidates"
 
-    __table_args__ = (
-        UniqueConstraint(
-            "exam_id",
-            "enrollment_id",
-        ),
-        UniqueConstraint(
-            "exam_id",
-            "weave_student_id",
-        ),
-        UniqueConstraint(
-            "exam_id",
-            "admission_number",
-        ),
-    )
-
     exam_id: Mapped[UUID] = mapped_column(
         ForeignKey(
             "exams.id",
-            ondelete="CASCADE",
+            ondelete="RESTRICT",
         ),
         nullable=False,
         index=True,
@@ -140,7 +60,7 @@ class ExamCandidate(Base):
 
     enrollment_id: Mapped[UUID] = mapped_column(
         ForeignKey(
-            "academic_student_enrollments.id",
+            "student_enrollments.id",
             ondelete="RESTRICT",
         ),
         nullable=False,
@@ -165,12 +85,13 @@ class ExamCandidate(Base):
     )
 
     status: Mapped[CandidateStatus] = mapped_column(
-        Enum(
+        SQLEnum(
             CandidateStatus,
             name="candidate_status",
             native_enum=False,
             create_constraint=True,
             validate_strings=True,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
         ),
         nullable=False,
         default=CandidateStatus.ELIGIBLE,
@@ -183,39 +104,35 @@ class ExamCandidate(Base):
         nullable=True,
     )
 
-
-# ========================== #
-# CANDIDATE CREDENTIAL
-# ========================== #
+    __table_args__ = (
+        UniqueConstraint(
+            "exam_id",
+            "enrollment_id",
+            name="uq_exam_candidates_exam_enrollment",
+        ),
+        UniqueConstraint(
+            "exam_id",
+            "weave_student_id",
+            name="uq_exam_candidates_exam_weave_student",
+        ),
+        UniqueConstraint(
+            "exam_id",
+            "admission_number",
+            name="uq_exam_candidates_exam_admission_number",
+        ),
+    )
 
 
 class CandidateCredential(Base):
     """
-    Store the current examination PIN credential for a candidate.
+    Current per-exam PIN credential for one candidate.
 
-    The raw PIN must never be stored.
-
-    security.py generates the PIN and stores only its Argon2 hash here.
-
-    Each ExamCandidate has at most one current credential record.
-
-    Regenerating a PIN updates:
-
-    - pin_hash;
-    - credential_version;
-    - issued_at;
-    - revoked_at.
-
-    Detailed regeneration/revocation history belongs to the audit domain.
+    The raw PIN is never stored. security.py creates the PIN and only its
+    Argon2 hash is persisted. Credential regeneration updates this row while
+    the audit domain records the historical administration action.
     """
 
     __tablename__ = "candidate_credentials"
-
-    __table_args__ = (
-        CheckConstraint(
-            "credential_version >= 1"
-        ),
-    )
 
     candidate_id: Mapped[UUID] = mapped_column(
         ForeignKey(
@@ -248,4 +165,15 @@ class CandidateCredential(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "credential_version >= 1",
+            name="ck_candidate_credentials_version_positive",
+        ),
+        CheckConstraint(
+            "revoked_at IS NULL OR revoked_at >= issued_at",
+            name="ck_candidate_credentials_valid_revocation",
+        ),
     )
