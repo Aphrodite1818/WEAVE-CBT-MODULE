@@ -15,6 +15,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Enum as SQLEnum,
     ForeignKey,
     Index,
     Integer,
@@ -24,9 +25,6 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
     text,
-)
-from sqlalchemy import (
-    Enum as SQLEnum,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -53,16 +51,12 @@ class Exam(Base):
     Local definition of an examination.
 
     An exam belongs to an academic level and subject rather than one class arm.
-
-    Example:
-
-        JSS1 Mathematics First Term Exam
-
     The actual class arms participating in the exam are stored separately in
     ExamTargetClass.
 
-    This allows one exam and one question set to serve JSS1 A, JSS1 B,
-    JSS1 C, or any chosen combination of arms.
+    `opens_at` and `closes_at` define the window in which a candidate may create
+    a NEW attempt. They do not invalidate an already-created interrupted
+    attempt. Resume policy is handled by the attempts domain.
     """
 
     __tablename__ = "exams"
@@ -218,21 +212,7 @@ class Exam(Base):
 
 
 class ExamTargetClass(Base):
-    """
-    One actual class arm participating in an exam.
-
-    Example:
-
-        Exam: JSS1 Mathematics First Term Exam
-
-        Targets:
-            JSS1 A
-            JSS1 B
-            JSS1 C
-
-    The service layer must verify that every selected class belongs to the
-    exam's academic level.
-    """
+    """One actual class arm participating in an exam."""
 
     __tablename__ = "exam_target_classes"
 
@@ -268,14 +248,60 @@ class ExamTargetClass(Base):
     )
 
 
+class ExamInvigilator(Base):
+    """
+    Assign one synced school teacher to invigilate one exam.
+
+    Invigilation is exam-specific and is independent from ordinary teaching
+    assignments. A teacher may invigilate an exam even when they do not teach
+    that exam's subject or target class.
+
+    The authorization layer can map a logged-in LocalActor to AcademicTeacher
+    through the shared Weave membership identifier, then verify this row before
+    granting invigilation controls.
+    """
+
+    __tablename__ = "exam_invigilators"
+
+    exam_id: Mapped[UUID] = mapped_column(
+        ForeignKey(
+            "exams.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    teacher_id: Mapped[UUID] = mapped_column(
+        ForeignKey(
+            "academic_teachers.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "exam_id",
+            "teacher_id",
+            name="uq_exam_invigilators_exam_teacher",
+        ),
+        Index(
+            "ix_exam_invigilators_teacher_exam",
+            "teacher_id",
+            "exam_id",
+        ),
+    )
+
+
 class ExamQuestion(Base):
     """
     Immutable question snapshot belonging to an exam.
 
     When an exam is sealed, the selected question is copied from the live
-    question bank into this table.
-
-    Later edits to the live question therefore cannot alter the sealed exam.
+    question bank into this table. Later edits to the live question therefore
+    cannot alter the sealed exam.
     """
 
     __tablename__ = "exam_questions"
@@ -372,12 +398,7 @@ class ExamQuestion(Base):
 
 
 class ExamQuestionOption(Base):
-    """
-    Immutable answer-option snapshot belonging to an ExamQuestion.
-
-    Candidates receive these snapshot options rather than the live options in
-    the question bank.
-    """
+    """Immutable answer-option snapshot belonging to an ExamQuestion."""
 
     __tablename__ = "exam_question_options"
 

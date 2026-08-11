@@ -34,6 +34,7 @@ ACADEMIC_STATUS_MAX_LENGTH = 64
 ACADEMIC_CODE_MAX_LENGTH = 64
 CLASS_ARM_MAX_LENGTH = 64
 ADMISSION_NUMBER_MAX_LENGTH = 128
+TEACHER_EMAIL_MAX_LENGTH = 255
 SYNC_CURSOR_MAX_LENGTH = 512
 SYNC_ERROR_MAX_LENGTH = 1024
 
@@ -399,6 +400,66 @@ class AssessmentComponent(SyncTimestampMixin, Base):
     )
 
 
+class AcademicTeacher(SyncTimestampMixin, Base):
+    """
+    Minimal local directory projection of an active Weave teacher.
+
+    This is not a local authentication record. It exists so CBT can assign
+    teachers to invigilation and relate Weave teacher assignments without
+    requiring the teacher to have logged into the local CBT before assignment.
+    """
+
+    __tablename__ = "academic_teachers"
+
+    weave_teacher_id: Mapped[str] = mapped_column(
+        String(WEAVE_ID_MAX_LENGTH),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+
+    weave_membership_id: Mapped[str] = mapped_column(
+        String(WEAVE_ID_MAX_LENGTH),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+
+    display_name: Mapped[str] = mapped_column(
+        String(ACADEMIC_NAME_MAX_LENGTH),
+        nullable=False,
+    )
+
+    email: Mapped[str] = mapped_column(
+        String(TEACHER_EMAIL_MAX_LENGTH),
+        nullable=False,
+        index=True,
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "char_length(trim(display_name)) > 0",
+            name="ck_academic_teachers_display_name_not_blank",
+        ),
+        CheckConstraint(
+            "char_length(trim(email)) > 0",
+            name="ck_academic_teachers_email_not_blank",
+        ),
+        Index(
+            "ix_academic_teachers_active_name",
+            "is_active",
+            "display_name",
+        ),
+    )
+
+
 class TeacherAssignment(SyncTimestampMixin, Base):
     """Local projection of a teacher's arm-specific class-subject assignment."""
 
@@ -411,14 +472,11 @@ class TeacherAssignment(SyncTimestampMixin, Base):
         index=True,
     )
 
-    weave_teacher_id: Mapped[str] = mapped_column(
-        String(WEAVE_ID_MAX_LENGTH),
-        nullable=False,
-        index=True,
-    )
-
-    weave_membership_id: Mapped[str] = mapped_column(
-        String(WEAVE_ID_MAX_LENGTH),
+    teacher_id: Mapped[UUID] = mapped_column(
+        ForeignKey(
+            "academic_teachers.id",
+            ondelete="RESTRICT",
+        ),
         nullable=False,
         index=True,
     )
@@ -460,14 +518,14 @@ class TeacherAssignment(SyncTimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint(
             "session_id",
-            "weave_membership_id",
+            "teacher_id",
             "class_id",
             "subject_id",
-            name="uq_teacher_assignments_session_membership_class_subject",
+            name="uq_teacher_assignments_session_teacher_class_subject",
         ),
         Index(
-            "ix_teacher_assignments_membership_active",
-            "weave_membership_id",
+            "ix_teacher_assignments_teacher_active",
+            "teacher_id",
             "is_active",
         ),
         Index(
