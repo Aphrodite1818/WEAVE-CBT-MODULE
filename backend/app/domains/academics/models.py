@@ -2,17 +2,24 @@
 # backend.app.domains.academics.models
 # ===================================== #
 
-"""Local academic projection models synchronized from Weave."""
+"""Local academic projection models synchronized from Weave.
+
+These tables are not a second academic-management system. They are the minimum
+local projection the CBT runtime needs for authoring authorization, exam scope,
+candidate preparation, and result attribution while remaining operational on
+the school LAN.
+"""
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -78,20 +85,18 @@ class AcademicSession(SyncTimestampMixin, Base):
         server_default=text("false"),
     )
 
-    starts_on: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-    )
-
-    ends_on: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-    )
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     __table_args__ = (
         CheckConstraint(
-            "ends_on IS NULL OR starts_on IS NULL OR ends_on >= starts_on",
+            "end_date IS NULL OR start_date IS NULL OR end_date >= start_date",
             name="ck_academic_sessions_valid_dates",
+        ),
+        Index(
+            "ix_academic_sessions_current_status",
+            "is_current",
+            "status",
         ),
     )
 
@@ -109,10 +114,7 @@ class AcademicTerm(SyncTimestampMixin, Base):
     )
 
     session_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "academic_sessions.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("academic_sessions.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
@@ -134,19 +136,12 @@ class AcademicTerm(SyncTimestampMixin, Base):
         server_default=text("false"),
     )
 
-    starts_on: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-    )
-
-    ends_on: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-    )
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     __table_args__ = (
         CheckConstraint(
-            "ends_on IS NULL OR starts_on IS NULL OR ends_on >= starts_on",
+            "end_date IS NULL OR start_date IS NULL OR end_date >= start_date",
             name="ck_academic_terms_valid_dates",
         ),
         Index(
@@ -158,7 +153,7 @@ class AcademicTerm(SyncTimestampMixin, Base):
 
 
 class AcademicLevel(SyncTimestampMixin, Base):
-    """Academic level such as JSS1, JSS2, SS1, or SS2."""
+    """Curriculum level such as JSS1, JSS2, SS1, or SS2."""
 
     __tablename__ = "academic_levels"
 
@@ -174,16 +169,6 @@ class AcademicLevel(SyncTimestampMixin, Base):
         nullable=False,
     )
 
-    code: Mapped[str | None] = mapped_column(
-        String(ACADEMIC_CODE_MAX_LENGTH),
-        nullable=True,
-    )
-
-    position: Mapped[int | None] = mapped_column(
-        Integer,
-        nullable=True,
-    )
-
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
@@ -191,21 +176,30 @@ class AcademicLevel(SyncTimestampMixin, Base):
         server_default=text("true"),
     )
 
+    is_terminal: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
+
+    weave_next_level_id: Mapped[str | None] = mapped_column(
+        String(WEAVE_ID_MAX_LENGTH),
+        nullable=True,
+        index=True,
+    )
+
     __table_args__ = (
-        CheckConstraint(
-            "position IS NULL OR position >= 1",
-            name="ck_academic_levels_position_positive",
-        ),
         Index(
-            "ix_academic_levels_active_position",
+            "ix_academic_levels_active_name",
             "is_active",
-            "position",
+            "name",
         ),
     )
 
 
 class AcademicClass(SyncTimestampMixin, Base):
-    """Actual class arm belonging to an AcademicLevel, such as JSS1 A."""
+    """Concrete class arm belonging to one AcademicLevel, for example JSS1 A."""
 
     __tablename__ = "academic_classes"
 
@@ -217,22 +211,14 @@ class AcademicClass(SyncTimestampMixin, Base):
     )
 
     level_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "academic_levels.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("academic_levels.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
 
-    name: Mapped[str] = mapped_column(
-        String(ACADEMIC_NAME_MAX_LENGTH),
-        nullable=False,
-    )
-
-    arm: Mapped[str | None] = mapped_column(
+    arm: Mapped[str] = mapped_column(
         String(CLASS_ARM_MAX_LENGTH),
-        nullable=True,
+        nullable=False,
     )
 
     is_active: Mapped[bool] = mapped_column(
@@ -243,6 +229,11 @@ class AcademicClass(SyncTimestampMixin, Base):
     )
 
     __table_args__ = (
+        UniqueConstraint(
+            "level_id",
+            "arm",
+            name="uq_academic_classes_level_arm",
+        ),
         Index(
             "ix_academic_classes_level_active",
             "level_id",
@@ -282,39 +273,34 @@ class AcademicSubject(SyncTimestampMixin, Base):
 
 
 class AcademicLevelSubject(SyncTimestampMixin, Base):
-    """
-    Curriculum mapping showing that a subject belongs to an academic level.
-
-    Example: JSS1 -> Mathematics. Teacher delivery remains arm-specific through
-    TeacherAssignment; sharing a level never grants a teacher access to every
-    class arm in that level.
-    """
+    """Weave LevelSubject projection: one subject taught at one academic level."""
 
     __tablename__ = "academic_level_subjects"
 
-    weave_mapping_id: Mapped[str | None] = mapped_column(
+    weave_level_subject_id: Mapped[str] = mapped_column(
         String(WEAVE_ID_MAX_LENGTH),
-        nullable=True,
+        nullable=False,
         unique=True,
         index=True,
     )
 
     level_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "academic_levels.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("academic_levels.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
 
     subject_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "academic_subjects.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("academic_subjects.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
+    )
+
+    is_core: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
     )
 
     is_active: Mapped[bool] = mapped_column(
@@ -339,8 +325,49 @@ class AcademicLevelSubject(SyncTimestampMixin, Base):
     )
 
 
+class AssessmentScheme(SyncTimestampMixin, Base):
+    """Assessment scheme synchronized from Weave."""
+
+    __tablename__ = "assessment_schemes"
+
+    weave_scheme_id: Mapped[str] = mapped_column(
+        String(WEAVE_ID_MAX_LENGTH),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+
+    name: Mapped[str] = mapped_column(
+        String(ACADEMIC_NAME_MAX_LENGTH),
+        nullable=False,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(ACADEMIC_STATUS_MAX_LENGTH),
+        nullable=False,
+        index=True,
+    )
+
+    activated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_assessment_schemes_status",
+            "status",
+        ),
+    )
+
+
 class AssessmentComponent(SyncTimestampMixin, Base):
-    """Dynamic assessment component synchronized from Weave."""
+    """Assessment component belonging to a synchronized Weave scheme."""
 
     __tablename__ = "assessment_components"
 
@@ -351,11 +378,8 @@ class AssessmentComponent(SyncTimestampMixin, Base):
         index=True,
     )
 
-    term_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "academic_terms.id",
-            ondelete="RESTRICT",
-        ),
+    assessment_scheme_id: Mapped[UUID] = mapped_column(
+        ForeignKey("assessment_schemes.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
@@ -365,15 +389,17 @@ class AssessmentComponent(SyncTimestampMixin, Base):
         nullable=False,
     )
 
+    code: Mapped[str | None] = mapped_column(
+        String(ACADEMIC_CODE_MAX_LENGTH),
+        nullable=True,
+    )
+
     maximum_score: Mapped[Decimal] = mapped_column(
-        Numeric(8, 2),
+        Numeric(5, 2),
         nullable=False,
     )
 
-    position: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
 
     is_active: Mapped[bool] = mapped_column(
         Boolean,
@@ -383,17 +409,27 @@ class AssessmentComponent(SyncTimestampMixin, Base):
     )
 
     __table_args__ = (
-        CheckConstraint(
-            "maximum_score > 0",
-            name="ck_assessment_components_maximum_score_positive",
+        UniqueConstraint(
+            "assessment_scheme_id",
+            "name",
+            name="uq_assessment_components_scheme_name",
+        ),
+        UniqueConstraint(
+            "assessment_scheme_id",
+            "position",
+            name="uq_assessment_components_scheme_position",
         ),
         CheckConstraint(
-            "position >= 1",
-            name="ck_assessment_components_position_positive",
+            "maximum_score > 0 AND maximum_score <= 100",
+            name="ck_assessment_components_maximum_score",
+        ),
+        CheckConstraint(
+            "position >= 0",
+            name="ck_assessment_components_position_nonnegative",
         ),
         Index(
-            "ix_assessment_components_term_active_position",
-            "term_id",
+            "ix_assessment_components_scheme_active_position",
+            "assessment_scheme_id",
             "is_active",
             "position",
         ),
@@ -401,13 +437,7 @@ class AssessmentComponent(SyncTimestampMixin, Base):
 
 
 class AcademicTeacher(SyncTimestampMixin, Base):
-    """
-    Minimal local directory projection of an active Weave teacher.
-
-    This is not a local authentication record. It exists so CBT can assign
-    teachers to invigilation and relate Weave teacher assignments without
-    requiring the teacher to have logged into the local CBT before assignment.
-    """
+    """Minimal local directory projection of a Weave teacher membership."""
 
     __tablename__ = "academic_teachers"
 
@@ -461,49 +491,31 @@ class AcademicTeacher(SyncTimestampMixin, Base):
 
 
 class TeacherAssignment(SyncTimestampMixin, Base):
-    """Local projection of a teacher's arm-specific class-subject assignment."""
+    """Arm-specific Weave teacher assignment projected into the CBT runtime."""
 
     __tablename__ = "teacher_assignments"
 
-    weave_assignment_id: Mapped[str | None] = mapped_column(
+    weave_assignment_id: Mapped[str] = mapped_column(
         String(WEAVE_ID_MAX_LENGTH),
-        nullable=True,
+        nullable=False,
         unique=True,
         index=True,
     )
 
     teacher_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "academic_teachers.id",
-            ondelete="RESTRICT",
-        ),
-        nullable=False,
-        index=True,
-    )
-
-    session_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "academic_sessions.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("academic_teachers.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
 
     class_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "academic_classes.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("academic_classes.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
 
-    subject_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "academic_subjects.id",
-            ondelete="RESTRICT",
-        ),
+    level_subject_id: Mapped[UUID] = mapped_column(
+        ForeignKey("academic_level_subjects.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
@@ -515,13 +527,20 @@ class TeacherAssignment(SyncTimestampMixin, Base):
         server_default=text("true"),
     )
 
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+
     __table_args__ = (
-        UniqueConstraint(
-            "session_id",
-            "teacher_id",
+        CheckConstraint(
+            "effective_to IS NULL OR effective_to >= effective_from",
+            name="ck_teacher_assignments_effective_range",
+        ),
+        Index(
+            "uq_teacher_assignments_active_class_level_subject",
             "class_id",
-            "subject_id",
-            name="uq_teacher_assignments_session_teacher_class_subject",
+            "level_subject_id",
+            unique=True,
+            postgresql_where=text("is_active = true"),
         ),
         Index(
             "ix_teacher_assignments_teacher_active",
@@ -529,22 +548,22 @@ class TeacherAssignment(SyncTimestampMixin, Base):
             "is_active",
         ),
         Index(
-            "ix_teacher_assignments_class_subject_active",
-            "class_id",
-            "subject_id",
+            "ix_teacher_assignments_teacher_level_subject_active",
+            "teacher_id",
+            "level_subject_id",
             "is_active",
         ),
     )
 
 
 class StudentEnrollment(SyncTimestampMixin, Base):
-    """Local projection of a Weave student enrollment for one session/class."""
+    """Historical local projection of one Weave StudentEnrollment row."""
 
     __tablename__ = "student_enrollments"
 
-    weave_enrollment_id: Mapped[str | None] = mapped_column(
+    weave_enrollment_id: Mapped[str] = mapped_column(
         String(WEAVE_ID_MAX_LENGTH),
-        nullable=True,
+        nullable=False,
         unique=True,
         index=True,
     )
@@ -556,19 +575,13 @@ class StudentEnrollment(SyncTimestampMixin, Base):
     )
 
     session_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "academic_sessions.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("academic_sessions.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
 
     class_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "academic_classes.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("academic_classes.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
@@ -584,28 +597,52 @@ class StudentEnrollment(SyncTimestampMixin, Base):
         nullable=False,
     )
 
-    is_active: Mapped[bool] = mapped_column(
+    started_on: Mapped[date] = mapped_column(Date, nullable=False)
+    ended_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    is_current: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
         default=True,
         server_default=text("true"),
     )
 
+    outcome: Mapped[str] = mapped_column(
+        String(ACADEMIC_STATUS_MAX_LENGTH),
+        nullable=False,
+    )
+
     __table_args__ = (
-        UniqueConstraint(
-            "session_id",
-            "weave_student_id",
-            name="uq_student_enrollments_session_student",
+        CheckConstraint(
+            "ended_on IS NULL OR ended_on >= started_on",
+            name="ck_student_enrollments_valid_dates",
         ),
-        UniqueConstraint(
-            "session_id",
-            "admission_number",
-            name="uq_student_enrollments_session_admission_number",
+        CheckConstraint(
+            "(is_current = true AND ended_on IS NULL) OR "
+            "(is_current = false AND ended_on IS NOT NULL)",
+            name="ck_student_enrollments_current_end_consistency",
         ),
         Index(
-            "ix_student_enrollments_class_active",
+            "uq_student_enrollments_one_current_student",
+            "weave_student_id",
+            unique=True,
+            postgresql_where=text("is_current = true"),
+        ),
+        Index(
+            "uq_student_enrollments_one_current_admission_number",
+            "admission_number",
+            unique=True,
+            postgresql_where=text("is_current = true"),
+        ),
+        Index(
+            "ix_student_enrollments_class_current",
             "class_id",
-            "is_active",
+            "is_current",
+        ),
+        Index(
+            "ix_student_enrollments_student_session",
+            "weave_student_id",
+            "session_id",
         ),
     )
 
@@ -636,10 +673,7 @@ class AcademicSyncState(Base):
         nullable=True,
     )
 
-    last_error: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
-    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         CheckConstraint(
