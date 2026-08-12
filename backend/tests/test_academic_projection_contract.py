@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import inspect
+import os
 import unittest
 
-from app.domains.academics.models import (
+os.environ.setdefault(
+    "DATABASE_URL",
+    "postgresql+asyncpg://weave:weave@localhost:5432/weave_cbt_test",
+)
+os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
+
+from app.domains.academics.models import (  # noqa: E402
     AcademicClass,
     AcademicLevelSubject,
     AssessmentComponent,
@@ -11,11 +18,11 @@ from app.domains.academics.models import (
     StudentEnrollment,
     TeacherAssignment,
 )
-from app.domains.academics.repository import AcademicRepository
-from app.domains.exams.models import Exam, ExamStatus, ExamTargetClass
-from app.domains.exams.repository import ExamRepository
-from app.domains.questions.models import Question, QuestionBank
-from app.domains.questions.repository import QuestionRepository
+from app.domains.academics.repository import AcademicRepository  # noqa: E402
+from app.domains.exams.models import Exam, ExamStatus, ExamTargetClass  # noqa: E402
+from app.domains.exams.repository import ExamRepository  # noqa: E402
+from app.domains.questions.models import Question, QuestionBank  # noqa: E402
+from app.domains.questions.repository import QuestionRepository  # noqa: E402
 
 
 class AcademicProjectionContractTests(unittest.TestCase):
