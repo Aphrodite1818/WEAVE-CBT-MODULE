@@ -765,7 +765,7 @@ class AcademicRepository:
         return (await db.execute(query)).scalar_one_or_none()
 
     @staticmethod
-    async def get_assignment_for_scope(
+    async def get_active_assignment_for_scope(
         db: AsyncSession,
         teacher_id: UUID,
         class_id: UUID,
@@ -774,11 +774,12 @@ class AcademicRepository:
         effective_on: date | None = None,
         lock: bool = False,
     ) -> TeacherAssignment | None:
-        """Return a teacher's arm-specific assignment for one LevelSubject."""
+        """Return the current active assignment for one teacher/arm/curriculum scope."""
         query = select(TeacherAssignment).where(
             TeacherAssignment.teacher_id == teacher_id,
             TeacherAssignment.class_id == class_id,
             TeacherAssignment.level_subject_id == level_subject_id,
+            TeacherAssignment.is_active.is_(True),
         )
         if effective_on is not None:
             query = query.where(
@@ -791,6 +792,39 @@ class AcademicRepository:
         if lock:
             query = query.with_for_update()
         return (await db.execute(query)).scalar_one_or_none()
+
+    @staticmethod
+    async def get_assignment_effective_on(
+        db: AsyncSession,
+        teacher_id: UUID,
+        class_id: UUID,
+        level_subject_id: UUID,
+        *,
+        effective_on: date,
+        lock: bool = False,
+    ) -> TeacherAssignment | None:
+        """Return the most recent assignment row valid on an explicit historical date."""
+        query = (
+            select(TeacherAssignment)
+            .where(
+                TeacherAssignment.teacher_id == teacher_id,
+                TeacherAssignment.class_id == class_id,
+                TeacherAssignment.level_subject_id == level_subject_id,
+                TeacherAssignment.effective_from <= effective_on,
+                or_(
+                    TeacherAssignment.effective_to.is_(None),
+                    TeacherAssignment.effective_to >= effective_on,
+                ),
+            )
+            .order_by(
+                TeacherAssignment.effective_from.desc(),
+                TeacherAssignment.id.desc(),
+            )
+            .limit(1)
+        )
+        if lock:
+            query = query.with_for_update()
+        return (await db.execute(query)).scalars().first()
 
     @staticmethod
     async def get_active_assignment_for_class_level_subject(

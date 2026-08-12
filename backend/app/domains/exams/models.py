@@ -205,6 +205,11 @@ class Exam(Base):
         nullable=True,
     )
 
+    source_assessment_component_maximum_score: Mapped[Decimal | None] = mapped_column(
+        Numeric(8, 2),
+        nullable=True,
+    )
+
     weave_calendar_event_id: Mapped[str | None] = mapped_column(
         String(WEAVE_ID_MAX_LENGTH),
         nullable=True,
@@ -232,6 +237,11 @@ class Exam(Base):
         CheckConstraint(
             "maximum_score > 0",
             name="ck_exams_maximum_score_positive",
+        ),
+        CheckConstraint(
+            "source_assessment_component_maximum_score IS NULL OR "
+            "source_assessment_component_maximum_score > 0",
+            name="ck_exams_source_component_maximum_positive",
         ),
         CheckConstraint(
             "closes_at IS NULL OR opens_at IS NULL OR closes_at > opens_at",
@@ -264,9 +274,9 @@ class ExamTargetClass(Base):
     """
     One concrete class arm participating in an exam.
 
-    teacher_assignment_id records the local synchronized assignment used for
-    this arm. weave_teacher_assignment_id snapshots the upstream assignment ID
-    so historical result attribution survives later assignment changes.
+    Assignment provenance may be empty while the exam is a draft. The exam
+    service resolves and freezes both identifiers before the exam is sealed so
+    later Weave assignment changes cannot rewrite historical result attribution.
     """
 
     __tablename__ = "exam_target_classes"

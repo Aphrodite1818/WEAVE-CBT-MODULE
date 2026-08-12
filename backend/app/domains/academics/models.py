@@ -8,6 +8,10 @@ These tables are not a second academic-management system. They are the minimum
 local projection the CBT runtime needs for authoring authorization, exam scope,
 candidate preparation, and result attribution while remaining operational on
 the school LAN.
+
+Student progression is intentionally absent from this projection. Weave owns
+promotion, repetition, graduation, and destination selection; CBT only consumes
+the resulting academic levels, class arms, and enrollment rows.
 """
 
 from __future__ import annotations
@@ -153,7 +157,7 @@ class AcademicTerm(SyncTimestampMixin, Base):
 
 
 class AcademicLevel(SyncTimestampMixin, Base):
-    """Curriculum level such as JSS1, JSS2, SS1, or SS2."""
+    """Curriculum level identity required by CBT, for example JSS1 or SS2."""
 
     __tablename__ = "academic_levels"
 
@@ -174,19 +178,6 @@ class AcademicLevel(SyncTimestampMixin, Base):
         nullable=False,
         default=True,
         server_default=text("true"),
-    )
-
-    is_terminal: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default=text("false"),
-    )
-
-    weave_next_level_id: Mapped[str | None] = mapped_column(
-        String(WEAVE_ID_MAX_LENGTH),
-        nullable=True,
-        index=True,
     )
 
     __table_args__ = (

@@ -12,6 +12,7 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
 from app.domains.academics.models import (  # noqa: E402
     AcademicClass,
+    AcademicLevel,
     AcademicLevelSubject,
     AssessmentComponent,
     AssessmentScheme,
@@ -26,6 +27,16 @@ from app.domains.questions.repository import QuestionRepository  # noqa: E402
 
 
 class AcademicProjectionContractTests(unittest.TestCase):
+    def test_level_does_not_project_weave_progression_ownership(self) -> None:
+        columns = set(AcademicLevel.__table__.c.keys())
+        self.assertIn("weave_level_id", columns)
+        self.assertIn("name", columns)
+        self.assertIn("is_active", columns)
+        self.assertNotIn("is_terminal", columns)
+        self.assertNotIn("weave_next_level_id", columns)
+        self.assertNotIn("progression_mode", columns)
+        self.assertNotIn("selection_target_type", columns)
+
     def test_class_is_an_arm_of_a_level(self) -> None:
         columns = set(AcademicClass.__table__.c.keys())
         self.assertIn("level_id", columns)
@@ -86,6 +97,10 @@ class AcademicProjectionContractTests(unittest.TestCase):
         self.assertNotIn("subject_id", columns)
         self.assertIn(ExamStatus.SUBMITTED, set(ExamStatus))
 
+    def test_exam_seal_can_snapshot_component_maximum(self) -> None:
+        columns = set(Exam.__table__.c.keys())
+        self.assertIn("source_assessment_component_maximum_score", columns)
+
     def test_exam_target_class_can_snapshot_assignment_provenance(self) -> None:
         columns = set(ExamTargetClass.__table__.c.keys())
         self.assertIn("class_id", columns)
@@ -99,6 +114,22 @@ class AcademicProjectionContractTests(unittest.TestCase):
         self.assertIn("level_subject_id", params)
         self.assertNotIn("session_id", params)
         self.assertNotIn("subject_id", params)
+
+    def test_assignment_repository_separates_current_and_historical_queries(self) -> None:
+        self.assertFalse(hasattr(AcademicRepository, "get_assignment_for_scope"))
+
+        active_params = inspect.signature(
+            AcademicRepository.get_active_assignment_for_scope
+        ).parameters
+        self.assertIn("teacher_id", active_params)
+        self.assertIn("class_id", active_params)
+        self.assertIn("level_subject_id", active_params)
+        self.assertIn("effective_on", active_params)
+
+        historical_params = inspect.signature(
+            AcademicRepository.get_assignment_effective_on
+        ).parameters
+        self.assertIn("effective_on", historical_params)
 
     def test_question_repository_uses_level_subject_scope(self) -> None:
         params = inspect.signature(QuestionRepository.get_bank_by_scope_and_name).parameters
