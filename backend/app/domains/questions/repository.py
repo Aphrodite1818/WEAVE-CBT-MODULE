@@ -9,14 +9,15 @@ from __future__ import annotations
 from collections.abc import Sequence
 from uuid import UUID
 
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.domains.questions.models import (
     Question,
     QuestionBank,
     QuestionOption,
     QuestionType,
 )
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class QuestionRepository:
@@ -24,7 +25,6 @@ class QuestionRepository:
 
     @staticmethod
     async def add_bank(db: AsyncSession, bank: QuestionBank) -> QuestionBank:
-        """Add a question bank and flush pending changes."""
         db.add(bank)
         await db.flush()
         return bank
@@ -36,7 +36,6 @@ class QuestionRepository:
         *,
         lock: bool = False,
     ) -> QuestionBank | None:
-        """Return a question bank by local ID."""
         query = select(QuestionBank).where(QuestionBank.id == bank_id)
         if lock:
             query = query.with_for_update()
@@ -45,16 +44,14 @@ class QuestionRepository:
     @staticmethod
     async def get_bank_by_scope_and_name(
         db: AsyncSession,
-        level_id: UUID,
-        subject_id: UUID,
+        level_subject_id: UUID,
         name: str,
         *,
         lock: bool = False,
     ) -> QuestionBank | None:
-        """Return the uniquely named bank within a level-subject scope."""
+        """Return a bank by canonical LevelSubject scope and name."""
         query = select(QuestionBank).where(
-            QuestionBank.level_id == level_id,
-            QuestionBank.subject_id == subject_id,
+            QuestionBank.level_subject_id == level_subject_id,
             QuestionBank.name == name,
         )
         if lock:
@@ -65,19 +62,17 @@ class QuestionRepository:
     async def list_banks(
         db: AsyncSession,
         *,
-        level_id: UUID | None = None,
-        subject_id: UUID | None = None,
+        level_subject_id: UUID | None = None,
+        created_by_actor_id: UUID | None = None,
         active_only: bool = False,
     ) -> list[QuestionBank]:
-        """Return question banks matching the supplied academic filters."""
         query = select(QuestionBank)
-        if level_id is not None:
-            query = query.where(QuestionBank.level_id == level_id)
-        if subject_id is not None:
-            query = query.where(QuestionBank.subject_id == subject_id)
+        if level_subject_id is not None:
+            query = query.where(QuestionBank.level_subject_id == level_subject_id)
+        if created_by_actor_id is not None:
+            query = query.where(QuestionBank.created_by_actor_id == created_by_actor_id)
         if active_only:
             query = query.where(QuestionBank.is_active.is_(True))
-
         result = await db.execute(
             query.order_by(QuestionBank.name.asc(), QuestionBank.id.asc())
         )
@@ -85,7 +80,6 @@ class QuestionRepository:
 
     @staticmethod
     async def save_bank(db: AsyncSession, bank: QuestionBank) -> QuestionBank:
-        """Attach a question bank and flush pending changes."""
         db.add(bank)
         await db.flush()
         return bank
@@ -95,7 +89,6 @@ class QuestionRepository:
         db: AsyncSession,
         question: Question,
     ) -> Question:
-        """Add a source question and flush pending changes."""
         db.add(question)
         await db.flush()
         return question
@@ -105,11 +98,9 @@ class QuestionRepository:
         db: AsyncSession,
         questions: Sequence[Question],
     ) -> list[Question]:
-        """Add source questions and return the flushed rows."""
         rows = list(questions)
         if not rows:
             return []
-
         db.add_all(rows)
         await db.flush()
         return rows
@@ -121,7 +112,6 @@ class QuestionRepository:
         *,
         lock: bool = False,
     ) -> Question | None:
-        """Return a source question by local ID."""
         query = select(Question).where(Question.id == question_id)
         if lock:
             query = query.with_for_update()
@@ -133,17 +123,18 @@ class QuestionRepository:
         bank_id: UUID,
         *,
         question_type: QuestionType | None = None,
+        created_by_actor_id: UUID | None = None,
         active_only: bool = False,
         offset: int = 0,
         limit: int | None = None,
     ) -> list[Question]:
-        """Return source questions belonging to a question bank."""
         query = select(Question).where(Question.bank_id == bank_id)
         if question_type is not None:
             query = query.where(Question.question_type == question_type)
+        if created_by_actor_id is not None:
+            query = query.where(Question.created_by_actor_id == created_by_actor_id)
         if active_only:
             query = query.where(Question.is_active.is_(True))
-
         query = query.order_by(Question.created_at.asc(), Question.id.asc()).offset(
             offset
         )
@@ -158,10 +149,8 @@ class QuestionRepository:
         *,
         active_only: bool = False,
     ) -> list[Question]:
-        """Return source questions matching the supplied IDs."""
         if not question_ids:
             return []
-
         query = select(Question).where(Question.id.in_(question_ids))
         if active_only:
             query = query.where(Question.is_active.is_(True))
@@ -174,7 +163,6 @@ class QuestionRepository:
         *,
         active_only: bool = False,
     ) -> int:
-        """Return the number of source questions in a bank."""
         query = select(func.count()).select_from(Question).where(
             Question.bank_id == bank_id,
         )
@@ -187,7 +175,6 @@ class QuestionRepository:
         db: AsyncSession,
         question: Question,
     ) -> Question:
-        """Attach a source question and flush pending changes."""
         db.add(question)
         await db.flush()
         return question
@@ -197,11 +184,9 @@ class QuestionRepository:
         db: AsyncSession,
         questions: Sequence[Question],
     ) -> list[Question]:
-        """Attach source questions and return the flushed rows."""
         rows = list(questions)
         if not rows:
             return []
-
         db.add_all(rows)
         await db.flush()
         return rows
@@ -211,7 +196,6 @@ class QuestionRepository:
         db: AsyncSession,
         option: QuestionOption,
     ) -> QuestionOption:
-        """Add a source question option and flush pending changes."""
         db.add(option)
         await db.flush()
         return option
@@ -221,11 +205,9 @@ class QuestionRepository:
         db: AsyncSession,
         options: Sequence[QuestionOption],
     ) -> list[QuestionOption]:
-        """Add source question options and return the flushed rows."""
         rows = list(options)
         if not rows:
             return []
-
         db.add_all(rows)
         await db.flush()
         return rows
@@ -238,7 +220,6 @@ class QuestionRepository:
         *,
         lock: bool = False,
     ) -> QuestionOption | None:
-        """Return an option belonging to a source question."""
         query = select(QuestionOption).where(
             QuestionOption.question_id == question_id,
             QuestionOption.id == option_id,
@@ -252,7 +233,6 @@ class QuestionRepository:
         db: AsyncSession,
         question_id: UUID,
     ) -> list[QuestionOption]:
-        """Return a question's options in canonical order."""
         result = await db.execute(
             select(QuestionOption)
             .where(QuestionOption.question_id == question_id)
@@ -265,10 +245,8 @@ class QuestionRepository:
         db: AsyncSession,
         question_ids: Sequence[UUID],
     ) -> list[QuestionOption]:
-        """Return options for multiple source questions without N+1 queries."""
         if not question_ids:
             return []
-
         result = await db.execute(
             select(QuestionOption)
             .where(QuestionOption.question_id.in_(question_ids))
@@ -284,7 +262,6 @@ class QuestionRepository:
         db: AsyncSession,
         option: QuestionOption,
     ) -> QuestionOption:
-        """Attach a source question option and flush pending changes."""
         db.add(option)
         await db.flush()
         return option
@@ -294,17 +271,14 @@ class QuestionRepository:
         db: AsyncSession,
         options: Sequence[QuestionOption],
     ) -> list[QuestionOption]:
-        """Attach source options and return the flushed rows."""
         rows = list(options)
         if not rows:
             return []
-
         db.add_all(rows)
         await db.flush()
         return rows
 
     @staticmethod
     async def remove_option(db: AsyncSession, option: QuestionOption) -> None:
-        """Remove a source option and flush pending changes."""
         await db.delete(option)
         await db.flush()
