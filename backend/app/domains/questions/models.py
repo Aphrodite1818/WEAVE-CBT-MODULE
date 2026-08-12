@@ -20,9 +20,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy import (
-    Enum as SQLEnum,
-)
+from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -40,32 +38,23 @@ class QuestionType(str, PyEnum):
 
 class QuestionBank(Base):
     """
-    Locally owned collection of questions for one academic level and subject.
+    Locally owned collection of questions for one synchronized LevelSubject.
 
     Example:
 
-        Level: JSS1
-        Subject: Mathematics
+        LevelSubject: JSS1 -> Mathematics
         Bank: Algebra Questions
 
-    The bank may therefore be reused across JSS1 A, JSS1 B, JSS1 C, and any
-    other class arm belonging to JSS1.
+    The bank is intentionally not tied to a class arm. JSS1 A and JSS1 B may
+    have different teachers while sharing the same JSS1 Mathematics curriculum
+    and therefore the same local question-bank scope.
     """
 
     __tablename__ = "question_banks"
 
-    level_id: Mapped[UUID] = mapped_column(
+    level_subject_id: Mapped[UUID] = mapped_column(
         ForeignKey(
-            "academic_levels.id",
-            ondelete="RESTRICT",
-        ),
-        nullable=False,
-        index=True,
-    )
-
-    subject_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "academic_subjects.id",
+            "academic_level_subjects.id",
             ondelete="RESTRICT",
         ),
         nullable=False,
@@ -77,9 +66,15 @@ class QuestionBank(Base):
         nullable=False,
     )
 
-    description: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_by_actor_id: Mapped[UUID] = mapped_column(
+        ForeignKey(
+            "local_actors.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        index=True,
     )
 
     is_active: Mapped[bool] = mapped_column(
@@ -91,29 +86,20 @@ class QuestionBank(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "level_id",
-            "subject_id",
+            "level_subject_id",
             "name",
             name="uq_question_banks_level_subject_name",
         ),
         Index(
             "ix_question_banks_level_subject_active",
-            "level_id",
-            "subject_id",
+            "level_subject_id",
             "is_active",
         ),
     )
 
 
 class Question(Base):
-    """
-    Authoritative locally stored question.
-
-    Questions may optionally reference an image stored on the local CBT server.
-
-    `version` increases whenever the question's meaningful content changes.
-    Sealed exams later store their own immutable snapshot of the question.
-    """
+    """Authoritative editable question stored only on the school CBT server."""
 
     __tablename__ = "questions"
 
@@ -140,15 +126,8 @@ class Question(Base):
         server_default=QuestionType.SINGLE_CHOICE.value,
     )
 
-    prompt: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-    )
-
-    instruction: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
-    )
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    instruction: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     image_url: Mapped[str | None] = mapped_column(
         String(QUESTION_IMAGE_URL_MAX_LENGTH),
@@ -160,6 +139,24 @@ class Question(Base):
         nullable=False,
         default=1,
         server_default=text("1"),
+    )
+
+    created_by_actor_id: Mapped[UUID] = mapped_column(
+        ForeignKey(
+            "local_actors.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    last_edited_by_actor_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey(
+            "local_actors.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+        index=True,
     )
 
     is_active: Mapped[bool] = mapped_column(
@@ -183,12 +180,7 @@ class Question(Base):
 
 
 class QuestionOption(Base):
-    """
-    One selectable answer option belonging to a question.
-
-    `is_correct` is server-side information and must never be exposed through
-    candidate-facing APIs.
-    """
+    """One selectable answer option belonging to a question."""
 
     __tablename__ = "question_options"
 
@@ -201,15 +193,8 @@ class QuestionOption(Base):
         index=True,
     )
 
-    position: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-    )
-
-    text: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
 
     is_correct: Mapped[bool] = mapped_column(
         Boolean,
