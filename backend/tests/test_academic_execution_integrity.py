@@ -125,7 +125,9 @@ class ExamAcademicIntegrityTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 AcademicRepository,
                 "get_class_by_id",
-                AsyncMock(return_value=SimpleNamespace(is_active=True, level_id=level_id)),
+                AsyncMock(
+                    return_value=SimpleNamespace(is_active=True, level_id=level_id)
+                ),
             ),
             patch.object(
                 AcademicRepository,
@@ -172,7 +174,9 @@ class ExamAcademicIntegrityTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 AcademicRepository,
                 "get_class_by_id",
-                AsyncMock(return_value=SimpleNamespace(is_active=True, level_id=level_id)),
+                AsyncMock(
+                    return_value=SimpleNamespace(is_active=True, level_id=level_id)
+                ),
             ),
             patch.object(
                 AcademicRepository,
@@ -299,7 +303,9 @@ class ExamAcademicIntegrityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sealed.status, ExamStatus.SEALED)
         self.assertEqual(sealed.source_assessment_scheme_weave_id, "scheme-1")
         self.assertEqual(sealed.source_assessment_component_weave_id, "component-1")
-        self.assertEqual(sealed.source_assessment_component_maximum_score, Decimal("10"))
+        self.assertEqual(
+            sealed.source_assessment_component_maximum_score, Decimal("10")
+        )
         self.assertEqual(sealed.sealed_at, now)
         db.commit.assert_awaited_once()
 

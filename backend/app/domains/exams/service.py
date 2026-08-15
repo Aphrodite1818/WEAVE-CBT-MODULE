@@ -84,7 +84,9 @@ class ExamService:
         """Validate cross-table academic references that SQL foreign keys cannot express."""
         session = await AcademicRepository.get_session_by_id(db, exam.session_id)
         if session is None:
-            raise ExamAcademicScopeError("Exam academic session does not exist locally.")
+            raise ExamAcademicScopeError(
+                "Exam academic session does not exist locally."
+            )
 
         term = await AcademicRepository.get_term_by_id(db, exam.term_id)
         if term is None:
@@ -173,7 +175,10 @@ class ExamService:
                     "Every target class must have an active teacher assignment for the exam LevelSubject."
                 )
 
-            if required_teacher_id is not None and assignment.teacher_id != required_teacher_id:
+            if (
+                required_teacher_id is not None
+                and assignment.teacher_id != required_teacher_id
+            ):
                 raise ExamAuthorizationError(
                     "Teacher may only target class arms they are actively assigned to teach."
                 )
@@ -328,7 +333,11 @@ class ExamService:
             if actor.role not in ADMIN_ROLES:
                 raise ExamAuthorizationError("Only a school admin can seal an exam.")
 
-            level_subject, scheme, component = await ExamService._validate_academic_scope(
+            (
+                level_subject,
+                scheme,
+                component,
+            ) = await ExamService._validate_academic_scope(
                 db,
                 exam,
             )

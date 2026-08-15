@@ -27,6 +27,7 @@ Architectural rules:
 - Redis and process memory must never replace PostgreSQL
   for durable examination state.
 """
+
 from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Annotated, TypeAlias
@@ -70,6 +71,7 @@ metadata = MetaData(naming_convention=CONSTRAINT_NAMING_CONVENTION)
 # SQLALCHEMY BASE
 # ========================== #
 
+
 class TimestampMixin:
     """
     Track when a local projection row was created and last updated
@@ -92,13 +94,10 @@ class TimestampMixin:
     )
 
 
-    
 class UUIDMixin:
     """Provide a UUID primary key for local CBT records"""
-    id : Mapped[UUID] = mapped_column(
-        primary_key = True,
-        default = uuid4
-    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
 
 
 class Base(
@@ -222,9 +221,3 @@ DbSession: TypeAlias = Annotated[
     AsyncSession,
     Depends(get_database_session),
 ]
-
-
-
-
-
-

@@ -57,9 +57,7 @@ class AcademicRepository:
         *,
         lock: bool = False,
     ) -> AcademicSession | None:
-        query = select(AcademicSession).where(
-            AcademicSession.id == academic_session_id
-        )
+        query = select(AcademicSession).where(AcademicSession.id == academic_session_id)
         if lock:
             query = query.with_for_update()
         return (await db.execute(query)).scalar_one_or_none()
@@ -449,9 +447,7 @@ class AcademicRepository:
         )
         if active_only:
             query = query.where(AcademicLevelSubject.is_active.is_(True))
-        result = await db.execute(
-            query.order_by(AcademicLevelSubject.subject_id.asc())
-        )
+        result = await db.execute(query.order_by(AcademicLevelSubject.subject_id.asc()))
         return list(result.scalars().all())
 
     @staticmethod

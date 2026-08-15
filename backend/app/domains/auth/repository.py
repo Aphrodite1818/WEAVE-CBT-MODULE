@@ -178,9 +178,7 @@ class AuthRepository:
         if not include_revoked:
             query = query.where(LocalActorSession.revoked_at.is_(None))
 
-        result = await db.execute(
-            query.order_by(LocalActorSession.created_at.desc())
-        )
+        result = await db.execute(query.order_by(LocalActorSession.created_at.desc()))
         return list(result.scalars().all())
 
     @staticmethod
@@ -252,9 +250,7 @@ class AuthRepository:
         if not include_revoked:
             query = query.where(LocalRefreshToken.revoked_at.is_(None))
 
-        result = await db.execute(
-            query.order_by(LocalRefreshToken.created_at.desc())
-        )
+        result = await db.execute(query.order_by(LocalRefreshToken.created_at.desc()))
         return list(result.scalars().all())
 
     @staticmethod

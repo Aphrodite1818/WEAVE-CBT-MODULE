@@ -122,11 +122,7 @@ class Settings(BaseSettings):
         ge=1,
     )
 
-
-    REDIS_MAX_CONNECTIONS : int = Field(
-        default = 20,
-        ge = 1
-    )
+    REDIS_MAX_CONNECTIONS: int = Field(default=20, ge=1)
     # Taskiq may use a separate Redis database/instance when desired.
     #
     # If omitted, the normal REDIS_URL is reused.
@@ -136,13 +132,17 @@ class Settings(BaseSettings):
     # PERSISTENT CBT IDENTITY
     # ========================== #
 
-    # This directory must be backed by persistent Docker storage.
+    # This directory must be backed by persistent Docker storage in
+    # production.
     #
     # It survives:
     # - container replacement;
     # - image updates;
     # - Docker restarts;
     # - host restarts.
+    #
+    # Local development may override this through `.env`, for example:
+    # `IDENTITY_STORAGE_PATH=./.weave-cbt/identity`.
     #
     # Runtime installation state such as the Weave-issued installation
     # credential and local JWT signing secret belongs here.

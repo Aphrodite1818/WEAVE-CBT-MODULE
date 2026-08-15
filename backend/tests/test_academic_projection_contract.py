@@ -108,14 +108,18 @@ class AcademicProjectionContractTests(unittest.TestCase):
         self.assertIn("weave_teacher_assignment_id", columns)
 
     def test_assignment_repository_scope_matches_new_contract(self) -> None:
-        params = inspect.signature(AcademicRepository.active_assignment_exists).parameters
+        params = inspect.signature(
+            AcademicRepository.active_assignment_exists
+        ).parameters
         self.assertIn("teacher_id", params)
         self.assertIn("class_id", params)
         self.assertIn("level_subject_id", params)
         self.assertNotIn("session_id", params)
         self.assertNotIn("subject_id", params)
 
-    def test_assignment_repository_separates_current_and_historical_queries(self) -> None:
+    def test_assignment_repository_separates_current_and_historical_queries(
+        self,
+    ) -> None:
         self.assertFalse(hasattr(AcademicRepository, "get_assignment_for_scope"))
 
         active_params = inspect.signature(
@@ -132,7 +136,9 @@ class AcademicProjectionContractTests(unittest.TestCase):
         self.assertIn("effective_on", historical_params)
 
     def test_question_repository_uses_level_subject_scope(self) -> None:
-        params = inspect.signature(QuestionRepository.get_bank_by_scope_and_name).parameters
+        params = inspect.signature(
+            QuestionRepository.get_bank_by_scope_and_name
+        ).parameters
         self.assertIn("level_subject_id", params)
         self.assertNotIn("level_id", params)
         self.assertNotIn("subject_id", params)

@@ -82,10 +82,9 @@ class LocalActor(Base):
         nullable=False,
     )
 
-
     last_weave_revalidated_at: Mapped[datetime | None] = mapped_column(
-    DateTime(timezone=True),
-    nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
     )
 
     __table_args__ = (

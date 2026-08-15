@@ -146,9 +146,7 @@ class ExamRepository:
         if assessment_scheme_id is not None:
             query = query.where(Exam.assessment_scheme_id == assessment_scheme_id)
         if assessment_component_id is not None:
-            query = query.where(
-                Exam.assessment_component_id == assessment_component_id
-            )
+            query = query.where(Exam.assessment_component_id == assessment_component_id)
         if created_by_actor_id is not None:
             query = query.where(Exam.created_by_actor_id == created_by_actor_id)
         if status is not None:
@@ -319,9 +317,7 @@ class ExamRepository:
         if assessment_scheme_id is not None:
             query = query.where(Exam.assessment_scheme_id == assessment_scheme_id)
         if assessment_component_id is not None:
-            query = query.where(
-                Exam.assessment_component_id == assessment_component_id
-            )
+            query = query.where(Exam.assessment_component_id == assessment_component_id)
         if created_by_actor_id is not None:
             query = query.where(Exam.created_by_actor_id == created_by_actor_id)
         if status is not None:
@@ -579,9 +575,9 @@ class ExamRepository:
         db: AsyncSession,
         exam_id: UUID,
     ) -> Decimal:
-        query = select(
-            func.coalesce(func.sum(ExamQuestion.points), 0)
-        ).where(ExamQuestion.exam_id == exam_id)
+        query = select(func.coalesce(func.sum(ExamQuestion.points), 0)).where(
+            ExamQuestion.exam_id == exam_id
+        )
         value = (await db.execute(query)).scalar_one()
         return Decimal(str(value))
 

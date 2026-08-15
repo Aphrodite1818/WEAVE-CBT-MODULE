@@ -141,8 +141,12 @@ class CandidateRepository:
         status: CandidateStatus | None = None,
     ) -> int:
         """Return the number of candidates on an exam roster."""
-        query = select(func.count()).select_from(ExamCandidate).where(
-            ExamCandidate.exam_id == exam_id,
+        query = (
+            select(func.count())
+            .select_from(ExamCandidate)
+            .where(
+                ExamCandidate.exam_id == exam_id,
+            )
         )
         if status is not None:
             query = query.where(ExamCandidate.status == status)

@@ -170,8 +170,7 @@ class RateLimitPolicy:
     def __post_init__(self) -> None:
         if self.limit < MIN_RATE_LIMIT:
             raise RateLimiterConfigurationError(
-                "Rate-limit policy limit must be at least "
-                f"{MIN_RATE_LIMIT}."
+                f"Rate-limit policy limit must be at least {MIN_RATE_LIMIT}."
             )
 
         if self.window_seconds < MIN_WINDOW_SECONDS:
@@ -234,21 +233,15 @@ def _validate_scope(
     """
 
     if not isinstance(scope, str):
-        raise RateLimiterConfigurationError(
-            "Rate-limit scope must be a string."
-        )
+        raise RateLimiterConfigurationError("Rate-limit scope must be a string.")
 
     normalized = scope.strip().lower()
 
     if not normalized:
-        raise RateLimiterConfigurationError(
-            "Rate-limit scope cannot be empty."
-        )
+        raise RateLimiterConfigurationError("Rate-limit scope cannot be empty.")
 
     if len(normalized) > MAX_SCOPE_LENGTH:
-        raise RateLimiterConfigurationError(
-            "Rate-limit scope is too long."
-        )
+        raise RateLimiterConfigurationError("Rate-limit scope is too long.")
 
     if not re.fullmatch(
         r"[a-z0-9][a-z0-9._-]*",
@@ -278,16 +271,12 @@ def _validate_identifier(
     """
 
     if not isinstance(identifier, str):
-        raise RateLimiterConfigurationError(
-            "Rate-limit identifier must be a string."
-        )
+        raise RateLimiterConfigurationError("Rate-limit identifier must be a string.")
 
     normalized = identifier.strip()
 
     if not normalized:
-        raise RateLimiterConfigurationError(
-            "Rate-limit identifier cannot be empty."
-        )
+        raise RateLimiterConfigurationError("Rate-limit identifier cannot be empty.")
 
     return normalized
 
@@ -307,9 +296,7 @@ def _hash_rate_limit_identifier(
     or similar identifiers inside Redis key names.
     """
 
-    return hashlib.sha256(
-        identifier.encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(identifier.encode("utf-8")).hexdigest()
 
 
 def _build_rate_limit_key(
@@ -321,23 +308,13 @@ def _build_rate_limit_key(
     Construct the Redis key used by the rate limiter.
     """
 
-    normalized_scope = _validate_scope(
-        scope
-    )
+    normalized_scope = _validate_scope(scope)
 
-    normalized_identifier = _validate_identifier(
-        identifier
-    )
+    normalized_identifier = _validate_identifier(identifier)
 
-    identifier_hash = _hash_rate_limit_identifier(
-        normalized_identifier
-    )
+    identifier_hash = _hash_rate_limit_identifier(normalized_identifier)
 
-    return (
-        f"{RATE_LIMIT_KEY_PREFIX}:"
-        f"{normalized_scope}:"
-        f"{identifier_hash}"
-    )
+    return f"{RATE_LIMIT_KEY_PREFIX}:{normalized_scope}:{identifier_hash}"
 
 
 # ========================== #
@@ -354,26 +331,15 @@ def _parse_rate_limit_response(
     Convert the Redis Lua response into a typed decision.
     """
 
-    if (
-        not isinstance(response, (list, tuple))
-        or len(response) != 3
-    ):
-        raise RateLimiterResponseError(
-            "Redis returned an invalid rate-limit response."
-        )
+    if not isinstance(response, (list, tuple)) or len(response) != 3:
+        raise RateLimiterResponseError("Redis returned an invalid rate-limit response.")
 
     try:
-        allowed_raw = int(
-            response[0]
-        )
+        allowed_raw = int(response[0])
 
-        current_count = int(
-            response[1]
-        )
+        current_count = int(response[1])
 
-        retry_after_seconds = int(
-            response[2]
-        )
+        retry_after_seconds = int(response[2])
 
     except (
         TypeError,
@@ -478,15 +444,11 @@ async def reset_rate_limit(
     )
 
     try:
-        deleted_count = await redis.delete(
-            key
-        )
+        deleted_count = await redis.delete(key)
 
     except RedisError as exc:
         raise RateLimiterBackendUnavailableError(
             "Redis is unavailable for rate-limit reset."
         ) from exc
 
-    return bool(
-        deleted_count
-    )
+    return bool(deleted_count)

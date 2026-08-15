@@ -1,6 +1,7 @@
 import os
 import unittest
 from unittest.mock import patch
+from pathlib import Path
 
 from pydantic import ValidationError
 
@@ -64,6 +65,19 @@ class DatabaseSettingsTests(unittest.TestCase):
         self.assertEqual(
             settings.DATABASE_URL,
             "postgresql+asyncpg://user:password@localhost/cbt",
+        )
+
+    def test_identity_storage_path_can_be_overridden_from_environment(self):
+        settings = Settings(
+            _env_file=None,
+            DATABASE_URL="postgresql+asyncpg://user:password@localhost/cbt",
+            IDENTITY_STORAGE_PATH="./.weave-cbt/identity",
+            **self.required_settings,
+        )
+
+        self.assertEqual(
+            settings.IDENTITY_STORAGE_PATH,
+            Path(".weave-cbt/identity"),
         )
 
 

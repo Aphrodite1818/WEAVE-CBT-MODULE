@@ -276,8 +276,7 @@ class AttemptRepository:
         """Return one allocated option for an allocated question."""
         query = select(AttemptOptionAllocation).where(
             AttemptOptionAllocation.attempt_question_id == attempt_question_id,
-            AttemptOptionAllocation.exam_question_option_id
-            == exam_question_option_id,
+            AttemptOptionAllocation.exam_question_option_id == exam_question_option_id,
         )
         return (await db.execute(query)).scalar_one_or_none()
 
@@ -289,9 +288,7 @@ class AttemptRepository:
         """Return allocated options in persisted presentation order."""
         result = await db.execute(
             select(AttemptOptionAllocation)
-            .where(
-                AttemptOptionAllocation.attempt_question_id == attempt_question_id
-            )
+            .where(AttemptOptionAllocation.attempt_question_id == attempt_question_id)
             .order_by(AttemptOptionAllocation.position.asc())
         )
         return list(result.scalars().all())
@@ -308,9 +305,7 @@ class AttemptRepository:
         result = await db.execute(
             select(AttemptOptionAllocation)
             .where(
-                AttemptOptionAllocation.attempt_question_id.in_(
-                    attempt_question_ids
-                )
+                AttemptOptionAllocation.attempt_question_id.in_(attempt_question_ids)
             )
             .order_by(
                 AttemptOptionAllocation.attempt_question_id.asc(),

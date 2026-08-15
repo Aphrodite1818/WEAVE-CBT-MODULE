@@ -163,8 +163,12 @@ class QuestionRepository:
         *,
         active_only: bool = False,
     ) -> int:
-        query = select(func.count()).select_from(Question).where(
-            Question.bank_id == bank_id,
+        query = (
+            select(func.count())
+            .select_from(Question)
+            .where(
+                Question.bank_id == bank_id,
+            )
         )
         if active_only:
             query = query.where(Question.is_active.is_(True))
