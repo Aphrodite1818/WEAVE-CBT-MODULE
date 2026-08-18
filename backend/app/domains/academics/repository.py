@@ -1,1174 +1,480 @@
-# ======================================== #
-# backend.app.domains.academics.repository
-# ======================================== #
+"""Persistence operations for Weave academic projections.
 
-"""Persistence operations for academic data projected from Weave.
-
-The repository only reads and writes local projection models. It does not call
-Weave, authorize actors, decide synchronization policy, or commit transactions.
-Services own business rules and transaction boundaries.
+Repositories only read/write local PostgreSQL projections. They never call
+Weave and never commit transactions. Synchronization policy belongs to the sync
+domain; exam/question authorization belongs to their respective services.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date
+from datetime import UTC, datetime
+from typing import Any, TypeVar
 from uuid import UUID
 
-from sqlalchemy import exists, or_, select
+from sqlalchemy import delete, exists, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import Base
 from app.domains.academics.models import (
+    AcademicAdmin,
     AcademicClass,
     AcademicLevel,
-    AcademicLevelSubject,
     AcademicSession,
     AcademicSubject,
-    AcademicSyncState,
     AcademicTeacher,
     AcademicTerm,
+    ArmLabel,
     AssessmentComponent,
     AssessmentScheme,
+    ClassTermDepartment,
+    Curriculum,
+    CurriculumSubject,
+    Department,
     StudentEnrollment,
+    SubjectOffering,
+    SubjectOfferingEligibility,
     TeacherAssignment,
+)
+
+ProjectionT = TypeVar("ProjectionT", bound=Base)
+
+PROJECTION_MODELS: tuple[type[Base], ...] = (
+    AcademicSession,
+    AcademicTerm,
+    AcademicLevel,
+    ArmLabel,
+    Department,
+    AcademicClass,
+    ClassTermDepartment,
+    AcademicSubject,
+    Curriculum,
+    CurriculumSubject,
+    SubjectOffering,
+    AssessmentScheme,
+    AssessmentComponent,
+    AcademicAdmin,
+    AcademicTeacher,
+    TeacherAssignment,
+    StudentEnrollment,
 )
 
 
 class AcademicRepository:
-    """Database operations for local academic projections."""
-
-    # ========================== #
-    # SESSIONS
-    # ========================== #
+    """Data-access layer for current and historical Weave projections."""
 
     @staticmethod
-    async def add_session(
+    async def upsert_projection(
         db: AsyncSession,
-        academic_session: AcademicSession,
-    ) -> AcademicSession:
-        db.add(academic_session)
+        model: type[ProjectionT],
+        entity_id: UUID,
+        values: dict[str, Any],
+        *,
+        synced_at: datetime | None = None,
+    ) -> ProjectionT:
+        row = await db.get(model, entity_id)
+        if row is None:
+            row = model(id=entity_id, **values)
+        else:
+            for key, value in values.items():
+                setattr(row, key, value)
+
+        if hasattr(row, "synced_at"):
+            row.synced_at = synced_at or datetime.now(UTC)
+        if hasattr(row, "source_deleted_at"):
+            row.source_deleted_at = None
+
+        db.add(row)
         await db.flush()
-        return academic_session
+        return row
 
     @staticmethod
-    async def get_session_by_id(
+    async def tombstone_projection(
         db: AsyncSession,
-        academic_session_id: UUID,
+        model: type[ProjectionT],
+        entity_id: UUID,
+        *,
+        deleted_at: datetime | None = None,
+    ) -> ProjectionT | None:
+        row = await db.get(model, entity_id)
+        if row is None:
+            return None
+        if hasattr(row, "source_deleted_at"):
+            row.source_deleted_at = deleted_at or datetime.now(UTC)
+        db.add(row)
+        await db.flush()
+        return row
+
+    @staticmethod
+    async def mark_all_projection_rows_deleted(
+        db: AsyncSession,
+        *,
+        deleted_at: datetime | None = None,
+    ) -> None:
+        timestamp = deleted_at or datetime.now(UTC)
+        for model in PROJECTION_MODELS:
+            await db.execute(update(model).values(source_deleted_at=timestamp))
+        await db.execute(delete(SubjectOfferingEligibility))
+        await db.flush()
+
+    @staticmethod
+    async def _get_by_id(
+        db: AsyncSession,
+        model: type[ProjectionT],
+        entity_id: UUID,
         *,
         lock: bool = False,
-    ) -> AcademicSession | None:
-        query = select(AcademicSession).where(AcademicSession.id == academic_session_id)
+        include_deleted: bool = False,
+    ) -> ProjectionT | None:
+        query = select(model).where(model.id == entity_id)
+        if not include_deleted and hasattr(model, "source_deleted_at"):
+            query = query.where(model.source_deleted_at.is_(None))
         if lock:
-            query = query.with_for_update()
+            query = query.with_for_update(of=model)
         return (await db.execute(query)).scalar_one_or_none()
 
+    @classmethod
+    async def get_session_by_id(cls, db: AsyncSession, session_id: UUID, *, lock: bool = False) -> AcademicSession | None:
+        return await cls._get_by_id(db, AcademicSession, session_id, lock=lock)
+
     @staticmethod
-    async def get_session_by_weave_id(
-        db: AsyncSession,
-        academic_session_weave_id: str,
-        *,
-        lock: bool = False,
-    ) -> AcademicSession | None:
+    async def get_current_session(db: AsyncSession, *, lock: bool = False) -> AcademicSession | None:
         query = select(AcademicSession).where(
-            AcademicSession.weave_session_id == academic_session_weave_id
+            AcademicSession.is_current.is_(True),
+            AcademicSession.source_deleted_at.is_(None),
         )
         if lock:
-            query = query.with_for_update()
+            query = query.with_for_update(of=AcademicSession)
         return (await db.execute(query)).scalar_one_or_none()
 
-    @staticmethod
-    async def get_current_session(
-        db: AsyncSession,
-        *,
-        lock: bool = False,
-    ) -> AcademicSession | None:
-        query = select(AcademicSession).where(AcademicSession.is_current.is_(True))
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
+    @classmethod
+    async def get_term_by_id(cls, db: AsyncSession, term_id: UUID, *, lock: bool = False) -> AcademicTerm | None:
+        return await cls._get_by_id(db, AcademicTerm, term_id, lock=lock)
 
     @staticmethod
-    async def list_sessions(db: AsyncSession) -> list[AcademicSession]:
-        result = await db.execute(
-            select(AcademicSession).order_by(
-                AcademicSession.start_date.desc().nulls_last(),
-                AcademicSession.name.desc(),
-            )
-        )
-        return list(result.scalars().all())
-
-    @staticmethod
-    async def save_session(
-        db: AsyncSession,
-        academic_session: AcademicSession,
-    ) -> AcademicSession:
-        db.add(academic_session)
-        await db.flush()
-        return academic_session
-
-    # ========================== #
-    # TERMS
-    # ========================== #
-
-    @staticmethod
-    async def add_term(db: AsyncSession, term: AcademicTerm) -> AcademicTerm:
-        db.add(term)
-        await db.flush()
-        return term
-
-    @staticmethod
-    async def get_term_by_id(
-        db: AsyncSession,
-        academic_term_id: UUID,
-        *,
-        lock: bool = False,
-    ) -> AcademicTerm | None:
-        query = select(AcademicTerm).where(AcademicTerm.id == academic_term_id)
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def get_term_by_weave_id(
-        db: AsyncSession,
-        academic_term_weave_id: str,
-        *,
-        lock: bool = False,
-    ) -> AcademicTerm | None:
+    async def get_current_term(db: AsyncSession, *, session_id: UUID | None = None) -> AcademicTerm | None:
         query = select(AcademicTerm).where(
-            AcademicTerm.weave_term_id == academic_term_weave_id
-        )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def get_current_term(
-        db: AsyncSession,
-        session_id: UUID,
-        *,
-        lock: bool = False,
-    ) -> AcademicTerm | None:
-        query = select(AcademicTerm).where(
-            AcademicTerm.session_id == session_id,
             AcademicTerm.is_current.is_(True),
+            AcademicTerm.source_deleted_at.is_(None),
         )
-        if lock:
-            query = query.with_for_update()
+        if session_id is not None:
+            query = query.where(AcademicTerm.academic_session_id == session_id)
         return (await db.execute(query)).scalar_one_or_none()
 
-    @staticmethod
-    async def list_terms_for_session(
-        db: AsyncSession,
-        session_id: UUID,
-    ) -> list[AcademicTerm]:
-        result = await db.execute(
-            select(AcademicTerm)
-            .where(AcademicTerm.session_id == session_id)
-            .order_by(
-                AcademicTerm.start_date.asc().nulls_last(),
-                AcademicTerm.name.asc(),
-            )
-        )
-        return list(result.scalars().all())
+    @classmethod
+    async def get_level_by_id(cls, db: AsyncSession, level_id: UUID, *, lock: bool = False) -> AcademicLevel | None:
+        return await cls._get_by_id(db, AcademicLevel, level_id, lock=lock)
 
     @staticmethod
-    async def save_term(db: AsyncSession, term: AcademicTerm) -> AcademicTerm:
-        db.add(term)
-        await db.flush()
-        return term
-
-    # ========================== #
-    # LEVELS
-    # ========================== #
-
-    @staticmethod
-    async def add_level(db: AsyncSession, level: AcademicLevel) -> AcademicLevel:
-        db.add(level)
-        await db.flush()
-        return level
-
-    @staticmethod
-    async def get_level_by_id(
-        db: AsyncSession,
-        academic_level_id: UUID,
-        *,
-        lock: bool = False,
-    ) -> AcademicLevel | None:
-        query = select(AcademicLevel).where(AcademicLevel.id == academic_level_id)
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def get_level_by_weave_id(
-        db: AsyncSession,
-        weave_academic_level_id: str,
-        *,
-        lock: bool = False,
-    ) -> AcademicLevel | None:
-        query = select(AcademicLevel).where(
-            AcademicLevel.weave_level_id == weave_academic_level_id
-        )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def list_active_levels(db: AsyncSession) -> list[AcademicLevel]:
+    async def list_levels(db: AsyncSession) -> list[AcademicLevel]:
         result = await db.execute(
             select(AcademicLevel)
-            .where(AcademicLevel.is_active.is_(True))
-            .order_by(AcademicLevel.name.asc())
+            .where(AcademicLevel.source_deleted_at.is_(None))
+            .order_by(AcademicLevel.category.asc(), AcademicLevel.position.asc(), AcademicLevel.name.asc())
         )
         return list(result.scalars().all())
 
-    @staticmethod
-    async def save_level(db: AsyncSession, level: AcademicLevel) -> AcademicLevel:
-        db.add(level)
-        await db.flush()
-        return level
+    @classmethod
+    async def get_arm_label_by_id(cls, db: AsyncSession, arm_label_id: UUID) -> ArmLabel | None:
+        return await cls._get_by_id(db, ArmLabel, arm_label_id)
 
-    # ========================== #
-    # CLASSES / ARMS
-    # ========================== #
+    @classmethod
+    async def get_department_by_id(cls, db: AsyncSession, department_id: UUID) -> Department | None:
+        return await cls._get_by_id(db, Department, department_id)
 
-    @staticmethod
-    async def add_class(
-        db: AsyncSession,
-        academic_class: AcademicClass,
-    ) -> AcademicClass:
-        db.add(academic_class)
-        await db.flush()
-        return academic_class
-
-    @staticmethod
-    async def get_class_by_id(
-        db: AsyncSession,
-        class_id: UUID,
-        *,
-        lock: bool = False,
-    ) -> AcademicClass | None:
-        query = select(AcademicClass).where(AcademicClass.id == class_id)
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def get_class_by_weave_id(
-        db: AsyncSession,
-        weave_class_id: str,
-        *,
-        lock: bool = False,
-    ) -> AcademicClass | None:
-        query = select(AcademicClass).where(
-            AcademicClass.weave_class_id == weave_class_id
-        )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def get_class_for_level_and_arm(
-        db: AsyncSession,
-        level_id: UUID,
-        arm: str,
-        *,
-        lock: bool = False,
-    ) -> AcademicClass | None:
-        query = select(AcademicClass).where(
-            AcademicClass.level_id == level_id,
-            AcademicClass.arm == arm,
-        )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
+    @classmethod
+    async def get_class_by_id(cls, db: AsyncSession, class_id: UUID, *, lock: bool = False) -> AcademicClass | None:
+        return await cls._get_by_id(db, AcademicClass, class_id, lock=lock)
 
     @staticmethod
     async def list_classes_for_level(
         db: AsyncSession,
-        level_id: UUID,
+        academic_level_id: UUID,
         *,
         active_only: bool = True,
     ) -> list[AcademicClass]:
-        query = select(AcademicClass).where(AcademicClass.level_id == level_id)
+        query = select(AcademicClass).where(
+            AcademicClass.academic_level_id == academic_level_id,
+            AcademicClass.source_deleted_at.is_(None),
+        )
         if active_only:
             query = query.where(AcademicClass.is_active.is_(True))
-        result = await db.execute(query.order_by(AcademicClass.arm.asc()))
+        result = await db.execute(query.order_by(AcademicClass.display_name.asc()))
         return list(result.scalars().all())
 
     @staticmethod
-    async def list_classes_by_ids(
+    async def get_class_term_department(
         db: AsyncSession,
-        class_ids: Sequence[UUID],
-        *,
-        active_only: bool = False,
-    ) -> list[AcademicClass]:
-        if not class_ids:
-            return []
-        query = select(AcademicClass).where(AcademicClass.id.in_(class_ids))
-        if active_only:
-            query = query.where(AcademicClass.is_active.is_(True))
-        result = await db.execute(query.order_by(AcademicClass.arm.asc()))
-        return list(result.scalars().all())
+        class_id: UUID,
+        academic_term_id: UUID,
+    ) -> ClassTermDepartment | None:
+        return (
+            await db.execute(
+                select(ClassTermDepartment).where(
+                    ClassTermDepartment.class_id == class_id,
+                    ClassTermDepartment.academic_term_id == academic_term_id,
+                    ClassTermDepartment.source_deleted_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+
+    @classmethod
+    async def get_subject_by_id(cls, db: AsyncSession, subject_id: UUID) -> AcademicSubject | None:
+        return await cls._get_by_id(db, AcademicSubject, subject_id)
+
+    @classmethod
+    async def get_curriculum_by_id(cls, db: AsyncSession, curriculum_id: UUID) -> Curriculum | None:
+        return await cls._get_by_id(db, Curriculum, curriculum_id)
 
     @staticmethod
-    async def save_class(
-        db: AsyncSession,
-        academic_class: AcademicClass,
-    ) -> AcademicClass:
-        db.add(academic_class)
-        await db.flush()
-        return academic_class
+    async def get_curriculum_for_level(db: AsyncSession, academic_level_id: UUID) -> Curriculum | None:
+        return (
+            await db.execute(
+                select(Curriculum).where(
+                    Curriculum.academic_level_id == academic_level_id,
+                    Curriculum.source_deleted_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
 
-    # ========================== #
-    # SUBJECTS
-    # ========================== #
-
-    @staticmethod
-    async def add_subject(
+    @classmethod
+    async def get_curriculum_subject_by_id(
+        cls,
         db: AsyncSession,
-        subject: AcademicSubject,
-    ) -> AcademicSubject:
-        db.add(subject)
-        await db.flush()
-        return subject
-
-    @staticmethod
-    async def get_subject_by_id(
-        db: AsyncSession,
-        subject_id: UUID,
-        *,
-        lock: bool = False,
-    ) -> AcademicSubject | None:
-        query = select(AcademicSubject).where(AcademicSubject.id == subject_id)
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def get_subject_by_weave_id(
-        db: AsyncSession,
-        weave_subject_id: str,
+        curriculum_subject_id: UUID,
         *,
         lock: bool = False,
-    ) -> AcademicSubject | None:
-        query = select(AcademicSubject).where(
-            AcademicSubject.weave_subject_id == weave_subject_id
-        )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
+    ) -> CurriculumSubject | None:
+        return await cls._get_by_id(db, CurriculumSubject, curriculum_subject_id, lock=lock)
 
     @staticmethod
-    async def list_active_subjects(db: AsyncSession) -> list[AcademicSubject]:
-        result = await db.execute(
-            select(AcademicSubject)
-            .where(AcademicSubject.is_active.is_(True))
-            .order_by(AcademicSubject.name.asc())
-        )
-        return list(result.scalars().all())
-
-    @staticmethod
-    async def save_subject(
+    async def list_curriculum_subjects(
         db: AsyncSession,
-        subject: AcademicSubject,
-    ) -> AcademicSubject:
-        db.add(subject)
-        await db.flush()
-        return subject
-
-    # ========================== #
-    # LEVEL SUBJECTS
-    # ========================== #
-
-    @staticmethod
-    async def add_level_subject(
-        db: AsyncSession,
-        level_subject: AcademicLevelSubject,
-    ) -> AcademicLevelSubject:
-        db.add(level_subject)
-        await db.flush()
-        return level_subject
-
-    @staticmethod
-    async def get_level_subject_by_id(
-        db: AsyncSession,
-        level_subject_id: UUID,
-        *,
-        lock: bool = False,
-    ) -> AcademicLevelSubject | None:
-        query = select(AcademicLevelSubject).where(
-            AcademicLevelSubject.id == level_subject_id
-        )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def get_level_subject_by_weave_id(
-        db: AsyncSession,
-        weave_level_subject_id: str,
-        *,
-        lock: bool = False,
-    ) -> AcademicLevelSubject | None:
-        query = select(AcademicLevelSubject).where(
-            AcademicLevelSubject.weave_level_subject_id == weave_level_subject_id
-        )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def get_level_subject(
-        db: AsyncSession,
-        level_id: UUID,
-        subject_id: UUID,
-        *,
-        lock: bool = False,
-    ) -> AcademicLevelSubject | None:
-        query = select(AcademicLevelSubject).where(
-            AcademicLevelSubject.level_id == level_id,
-            AcademicLevelSubject.subject_id == subject_id,
-        )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def list_level_subjects_for_level(
-        db: AsyncSession,
-        level_id: UUID,
+        curriculum_id: UUID,
         *,
         active_only: bool = True,
-    ) -> list[AcademicLevelSubject]:
-        query = select(AcademicLevelSubject).where(
-            AcademicLevelSubject.level_id == level_id
+    ) -> list[CurriculumSubject]:
+        query = select(CurriculumSubject).where(
+            CurriculumSubject.curriculum_id == curriculum_id,
+            CurriculumSubject.source_deleted_at.is_(None),
         )
         if active_only:
-            query = query.where(AcademicLevelSubject.is_active.is_(True))
-        result = await db.execute(query.order_by(AcademicLevelSubject.subject_id.asc()))
-        return list(result.scalars().all())
+            query = query.where(CurriculumSubject.is_active.is_(True))
+        return list((await db.execute(query.order_by(CurriculumSubject.subject_id.asc()))).scalars().all())
+
+    @classmethod
+    async def get_offering_by_id(cls, db: AsyncSession, offering_id: UUID) -> SubjectOffering | None:
+        return await cls._get_by_id(db, SubjectOffering, offering_id)
 
     @staticmethod
-    async def list_subjects_for_level(
+    async def get_offering_for_scope(
         db: AsyncSession,
-        level_id: UUID,
         *,
-        active_only: bool = False,
-    ) -> list[AcademicSubject]:
-        query = (
-            select(AcademicSubject)
-            .join(
-                AcademicLevelSubject,
-                AcademicLevelSubject.subject_id == AcademicSubject.id,
-            )
-            .where(AcademicLevelSubject.level_id == level_id)
+        academic_term_id: UUID,
+        curriculum_subject_id: UUID,
+        department_id: UUID | None,
+    ) -> SubjectOffering | None:
+        query = select(SubjectOffering).where(
+            SubjectOffering.academic_term_id == academic_term_id,
+            SubjectOffering.curriculum_subject_id == curriculum_subject_id,
+            SubjectOffering.source_deleted_at.is_(None),
         )
-        if active_only:
-            query = query.where(
-                AcademicLevelSubject.is_active.is_(True),
-                AcademicSubject.is_active.is_(True),
+        if department_id is None:
+            query = query.where(SubjectOffering.department_id.is_(None))
+        else:
+            query = query.where(SubjectOffering.department_id == department_id)
+        return (await db.execute(query)).scalar_one_or_none()
+
+    @classmethod
+    async def get_offering_for_class_scope(
+        cls,
+        db: AsyncSession,
+        *,
+        academic_term_id: UUID,
+        curriculum_subject_id: UUID,
+        class_id: UUID,
+    ) -> SubjectOffering | None:
+        specialization = await cls.get_class_term_department(db, class_id, academic_term_id)
+        if specialization is not None:
+            departmental = await cls.get_offering_for_scope(
+                db,
+                academic_term_id=academic_term_id,
+                curriculum_subject_id=curriculum_subject_id,
+                department_id=specialization.department_id,
             )
-        result = await db.execute(query.order_by(AcademicSubject.name.asc()))
-        return list(result.scalars().unique().all())
+            if departmental is not None:
+                return departmental
+        return await cls.get_offering_for_scope(
+            db,
+            academic_term_id=academic_term_id,
+            curriculum_subject_id=curriculum_subject_id,
+            department_id=None,
+        )
 
     @staticmethod
-    async def active_level_subject_exists(
+    async def replace_offering_eligibility(
         db: AsyncSession,
-        level_id: UUID,
-        subject_id: UUID,
+        offering_id: UUID,
+        enrollment_ids: Sequence[UUID],
+    ) -> None:
+        await db.execute(
+            delete(SubjectOfferingEligibility).where(
+                SubjectOfferingEligibility.offering_id == offering_id
+            )
+        )
+        unique_ids = tuple(dict.fromkeys(enrollment_ids))
+        if unique_ids:
+            db.add_all(
+                SubjectOfferingEligibility(offering_id=offering_id, enrollment_id=enrollment_id)
+                for enrollment_id in unique_ids
+            )
+        await db.flush()
+
+    @staticmethod
+    async def enrollment_is_eligible_for_offering(
+        db: AsyncSession,
+        *,
+        offering_id: UUID,
+        enrollment_id: UUID,
     ) -> bool:
-        query = select(
-            exists().where(
-                AcademicLevelSubject.level_id == level_id,
-                AcademicLevelSubject.subject_id == subject_id,
-                AcademicLevelSubject.is_active.is_(True),
+        return bool(
+            await db.scalar(
+                select(
+                    exists().where(
+                        SubjectOfferingEligibility.offering_id == offering_id,
+                        SubjectOfferingEligibility.enrollment_id == enrollment_id,
+                    )
+                )
             )
         )
-        return bool(await db.scalar(query))
 
     @staticmethod
-    async def save_level_subject(
+    async def list_eligible_enrollments_for_offering(
         db: AsyncSession,
-        level_subject: AcademicLevelSubject,
-    ) -> AcademicLevelSubject:
-        db.add(level_subject)
-        await db.flush()
-        return level_subject
-
-    # ========================== #
-    # ASSESSMENT SCHEMES
-    # ========================== #
-
-    @staticmethod
-    async def add_assessment_scheme(
-        db: AsyncSession,
-        scheme: AssessmentScheme,
-    ) -> AssessmentScheme:
-        db.add(scheme)
-        await db.flush()
-        return scheme
-
-    @staticmethod
-    async def get_assessment_scheme_by_id(
-        db: AsyncSession,
-        scheme_id: UUID,
+        offering_id: UUID,
         *,
-        lock: bool = False,
-    ) -> AssessmentScheme | None:
-        query = select(AssessmentScheme).where(AssessmentScheme.id == scheme_id)
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def get_assessment_scheme_by_weave_id(
-        db: AsyncSession,
-        weave_scheme_id: str,
-        *,
-        lock: bool = False,
-    ) -> AssessmentScheme | None:
-        query = select(AssessmentScheme).where(
-            AssessmentScheme.weave_scheme_id == weave_scheme_id
-        )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def get_active_assessment_scheme(
-        db: AsyncSession,
-        *,
-        lock: bool = False,
-    ) -> AssessmentScheme | None:
-        query = select(AssessmentScheme).where(AssessmentScheme.status == "active")
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def list_assessment_schemes(
-        db: AsyncSession,
-    ) -> list[AssessmentScheme]:
-        result = await db.execute(
-            select(AssessmentScheme).order_by(
-                AssessmentScheme.activated_at.desc().nulls_last(),
-                AssessmentScheme.name.asc(),
+        class_id: UUID | None = None,
+    ) -> list[StudentEnrollment]:
+        query = (
+            select(StudentEnrollment)
+            .join(
+                SubjectOfferingEligibility,
+                SubjectOfferingEligibility.enrollment_id == StudentEnrollment.id,
+            )
+            .where(
+                SubjectOfferingEligibility.offering_id == offering_id,
+                StudentEnrollment.source_deleted_at.is_(None),
+                StudentEnrollment.is_current.is_(True),
+                StudentEnrollment.student_status == "active",
             )
         )
-        return list(result.scalars().all())
+        if class_id is not None:
+            query = query.where(StudentEnrollment.class_id == class_id)
+        return list((await db.execute(query.order_by(StudentEnrollment.admission_number.asc()))).scalars().all())
 
-    @staticmethod
-    async def save_assessment_scheme(
-        db: AsyncSession,
-        scheme: AssessmentScheme,
-    ) -> AssessmentScheme:
-        db.add(scheme)
-        await db.flush()
-        return scheme
+    @classmethod
+    async def get_assessment_scheme_by_id(cls, db: AsyncSession, scheme_id: UUID) -> AssessmentScheme | None:
+        return await cls._get_by_id(db, AssessmentScheme, scheme_id)
 
-    # ========================== #
-    # ASSESSMENT COMPONENTS
-    # ========================== #
+    @classmethod
+    async def get_component_by_id(cls, db: AsyncSession, component_id: UUID) -> AssessmentComponent | None:
+        return await cls._get_by_id(db, AssessmentComponent, component_id)
 
-    @staticmethod
-    async def add_component(
-        db: AsyncSession,
-        component: AssessmentComponent,
-    ) -> AssessmentComponent:
-        db.add(component)
-        await db.flush()
-        return component
+    @classmethod
+    async def get_admin_by_id(cls, db: AsyncSession, admin_id: UUID) -> AcademicAdmin | None:
+        return await cls._get_by_id(db, AcademicAdmin, admin_id)
 
-    @staticmethod
-    async def get_component_by_id(
-        db: AsyncSession,
-        component_id: UUID,
-        *,
-        lock: bool = False,
-    ) -> AssessmentComponent | None:
-        query = select(AssessmentComponent).where(
-            AssessmentComponent.id == component_id
-        )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
+    @classmethod
+    async def get_teacher_by_id(cls, db: AsyncSession, teacher_id: UUID) -> AcademicTeacher | None:
+        return await cls._get_by_id(db, AcademicTeacher, teacher_id)
 
-    @staticmethod
-    async def get_component_by_weave_id(
-        db: AsyncSession,
-        weave_component_id: str,
-        *,
-        lock: bool = False,
-    ) -> AssessmentComponent | None:
-        query = select(AssessmentComponent).where(
-            AssessmentComponent.weave_component_id == weave_component_id
-        )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def list_components_for_scheme(
-        db: AsyncSession,
-        assessment_scheme_id: UUID,
-        *,
-        active_only: bool = True,
-    ) -> list[AssessmentComponent]:
-        query = select(AssessmentComponent).where(
-            AssessmentComponent.assessment_scheme_id == assessment_scheme_id
-        )
-        if active_only:
-            query = query.where(AssessmentComponent.is_active.is_(True))
-        result = await db.execute(
-            query.order_by(
-                AssessmentComponent.position.asc(),
-                AssessmentComponent.name.asc(),
-            )
-        )
-        return list(result.scalars().all())
-
-    @staticmethod
-    async def save_component(
-        db: AsyncSession,
-        component: AssessmentComponent,
-    ) -> AssessmentComponent:
-        db.add(component)
-        await db.flush()
-        return component
-
-    # ========================== #
-    # TEACHERS
-    # ========================== #
-
-    @staticmethod
-    async def add_teacher(
-        db: AsyncSession,
-        teacher: AcademicTeacher,
-    ) -> AcademicTeacher:
-        db.add(teacher)
-        await db.flush()
-        return teacher
-
-    @staticmethod
-    async def get_teacher_by_id(
-        db: AsyncSession,
-        teacher_id: UUID,
-        *,
-        lock: bool = False,
-    ) -> AcademicTeacher | None:
-        query = select(AcademicTeacher).where(AcademicTeacher.id == teacher_id)
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def get_teacher_by_weave_id(
-        db: AsyncSession,
-        weave_teacher_id: str,
-        *,
-        lock: bool = False,
-    ) -> AcademicTeacher | None:
-        query = select(AcademicTeacher).where(
-            AcademicTeacher.weave_teacher_id == weave_teacher_id
-        )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
+    @classmethod
     async def get_teacher_by_membership_id(
+        cls,
         db: AsyncSession,
-        membership_id: str,
-        *,
-        lock: bool = False,
+        membership_id: UUID | str,
     ) -> AcademicTeacher | None:
-        query = select(AcademicTeacher).where(
-            AcademicTeacher.weave_membership_id == membership_id
-        )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
+        try:
+            teacher_id = membership_id if isinstance(membership_id, UUID) else UUID(membership_id)
+        except (TypeError, ValueError):
+            return None
+        return await cls.get_teacher_by_id(db, teacher_id)
 
-    @staticmethod
-    async def list_active_teachers(db: AsyncSession) -> list[AcademicTeacher]:
-        result = await db.execute(
-            select(AcademicTeacher)
-            .where(AcademicTeacher.is_active.is_(True))
-            .order_by(AcademicTeacher.display_name.asc())
-        )
-        return list(result.scalars().all())
-
-    @staticmethod
-    async def save_teacher(
-        db: AsyncSession,
-        teacher: AcademicTeacher,
-    ) -> AcademicTeacher:
-        db.add(teacher)
-        await db.flush()
-        return teacher
-
-    # ========================== #
-    # TEACHER ASSIGNMENTS
-    # ========================== #
-
-    @staticmethod
-    async def add_assignment(
-        db: AsyncSession,
-        assignment: TeacherAssignment,
-    ) -> TeacherAssignment:
-        db.add(assignment)
-        await db.flush()
-        return assignment
-
-    @staticmethod
-    async def add_assignments(
-        db: AsyncSession,
-        assignments: Sequence[TeacherAssignment],
-    ) -> list[TeacherAssignment]:
-        rows = list(assignments)
-        if not rows:
-            return []
-        db.add_all(rows)
-        await db.flush()
-        return rows
-
-    @staticmethod
-    async def get_assignment_by_id(
-        db: AsyncSession,
-        assignment_id: UUID,
-        *,
-        lock: bool = False,
-    ) -> TeacherAssignment | None:
-        query = select(TeacherAssignment).where(TeacherAssignment.id == assignment_id)
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def get_assignment_by_weave_id(
-        db: AsyncSession,
-        weave_assignment_id: str,
-        *,
-        lock: bool = False,
-    ) -> TeacherAssignment | None:
-        query = select(TeacherAssignment).where(
-            TeacherAssignment.weave_assignment_id == weave_assignment_id
-        )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
+    @classmethod
+    async def get_assignment_by_id(cls, db: AsyncSession, assignment_id: UUID) -> TeacherAssignment | None:
+        return await cls._get_by_id(db, TeacherAssignment, assignment_id)
 
     @staticmethod
     async def get_active_assignment_for_scope(
         db: AsyncSession,
-        teacher_id: UUID,
-        class_id: UUID,
-        level_subject_id: UUID,
         *,
-        effective_on: date | None = None,
-        lock: bool = False,
+        teacher_membership_id: UUID,
+        class_id: UUID,
+        curriculum_subject_id: UUID,
     ) -> TeacherAssignment | None:
-        """Return the current active assignment for one teacher/arm/curriculum scope."""
-        query = select(TeacherAssignment).where(
-            TeacherAssignment.teacher_id == teacher_id,
-            TeacherAssignment.class_id == class_id,
-            TeacherAssignment.level_subject_id == level_subject_id,
-            TeacherAssignment.is_active.is_(True),
-        )
-        if effective_on is not None:
-            query = query.where(
-                TeacherAssignment.effective_from <= effective_on,
-                or_(
-                    TeacherAssignment.effective_to.is_(None),
-                    TeacherAssignment.effective_to >= effective_on,
-                ),
+        return (
+            await db.execute(
+                select(TeacherAssignment).where(
+                    TeacherAssignment.teacher_membership_id == teacher_membership_id,
+                    TeacherAssignment.class_id == class_id,
+                    TeacherAssignment.curriculum_subject_id == curriculum_subject_id,
+                    TeacherAssignment.is_active.is_(True),
+                    TeacherAssignment.source_deleted_at.is_(None),
+                )
             )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
+        ).scalar_one_or_none()
 
     @staticmethod
-    async def get_assignment_effective_on(
+    async def get_active_assignment_for_class_curriculum_subject(
         db: AsyncSession,
-        teacher_id: UUID,
         class_id: UUID,
-        level_subject_id: UUID,
-        *,
-        effective_on: date,
-        lock: bool = False,
+        curriculum_subject_id: UUID,
     ) -> TeacherAssignment | None:
-        """Return the most recent assignment row valid on an explicit historical date."""
-        query = (
-            select(TeacherAssignment)
-            .where(
-                TeacherAssignment.teacher_id == teacher_id,
-                TeacherAssignment.class_id == class_id,
-                TeacherAssignment.level_subject_id == level_subject_id,
-                TeacherAssignment.effective_from <= effective_on,
-                or_(
-                    TeacherAssignment.effective_to.is_(None),
-                    TeacherAssignment.effective_to >= effective_on,
-                ),
+        return (
+            await db.execute(
+                select(TeacherAssignment).where(
+                    TeacherAssignment.class_id == class_id,
+                    TeacherAssignment.curriculum_subject_id == curriculum_subject_id,
+                    TeacherAssignment.is_active.is_(True),
+                    TeacherAssignment.source_deleted_at.is_(None),
+                )
             )
-            .order_by(
-                TeacherAssignment.effective_from.desc(),
-                TeacherAssignment.id.desc(),
-            )
-            .limit(1)
-        )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalars().first()
+        ).scalar_one_or_none()
 
     @staticmethod
-    async def get_active_assignment_for_class_level_subject(
+    async def teacher_has_curriculum_subject_assignment(
         db: AsyncSession,
-        class_id: UUID,
-        level_subject_id: UUID,
-        *,
-        effective_on: date | None = None,
-        lock: bool = False,
-    ) -> TeacherAssignment | None:
-        """Return the active teacher assignment for a concrete arm/subject pair."""
-        query = select(TeacherAssignment).where(
-            TeacherAssignment.class_id == class_id,
-            TeacherAssignment.level_subject_id == level_subject_id,
-            TeacherAssignment.is_active.is_(True),
-        )
-        if effective_on is not None:
-            query = query.where(
-                TeacherAssignment.effective_from <= effective_on,
-                or_(
-                    TeacherAssignment.effective_to.is_(None),
-                    TeacherAssignment.effective_to >= effective_on,
-                ),
-            )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def list_assignments_for_teacher(
-        db: AsyncSession,
-        teacher_id: UUID,
-        *,
-        active_only: bool = True,
-        effective_on: date | None = None,
-    ) -> list[TeacherAssignment]:
-        query = select(TeacherAssignment).where(
-            TeacherAssignment.teacher_id == teacher_id
-        )
-        if active_only:
-            query = query.where(TeacherAssignment.is_active.is_(True))
-        if effective_on is not None:
-            query = query.where(
-                TeacherAssignment.effective_from <= effective_on,
-                or_(
-                    TeacherAssignment.effective_to.is_(None),
-                    TeacherAssignment.effective_to >= effective_on,
-                ),
-            )
-        result = await db.execute(
-            query.order_by(
-                TeacherAssignment.class_id.asc(),
-                TeacherAssignment.level_subject_id.asc(),
-                TeacherAssignment.effective_from.desc(),
-            )
-        )
-        return list(result.scalars().all())
-
-    @staticmethod
-    async def list_assignments_for_level_subject(
-        db: AsyncSession,
-        level_subject_id: UUID,
-        *,
-        active_only: bool = True,
-    ) -> list[TeacherAssignment]:
-        query = select(TeacherAssignment).where(
-            TeacherAssignment.level_subject_id == level_subject_id
-        )
-        if active_only:
-            query = query.where(TeacherAssignment.is_active.is_(True))
-        result = await db.execute(
-            query.order_by(
-                TeacherAssignment.class_id.asc(),
-                TeacherAssignment.teacher_id.asc(),
-            )
-        )
-        return list(result.scalars().all())
-
-    @staticmethod
-    async def active_assignment_exists(
-        db: AsyncSession,
-        teacher_id: UUID,
-        class_id: UUID,
-        level_subject_id: UUID,
-        *,
-        effective_on: date | None = None,
+        teacher_membership_id: UUID,
+        curriculum_subject_id: UUID,
     ) -> bool:
-        conditions = [
-            TeacherAssignment.teacher_id == teacher_id,
-            TeacherAssignment.class_id == class_id,
-            TeacherAssignment.level_subject_id == level_subject_id,
-            TeacherAssignment.is_active.is_(True),
-        ]
-        if effective_on is not None:
-            conditions.extend(
-                [
-                    TeacherAssignment.effective_from <= effective_on,
-                    or_(
-                        TeacherAssignment.effective_to.is_(None),
-                        TeacherAssignment.effective_to >= effective_on,
-                    ),
-                ]
-            )
-        query = select(exists().where(*conditions))
-        return bool(await db.scalar(query))
-
-    @staticmethod
-    async def teacher_has_level_subject_assignment(
-        db: AsyncSession,
-        teacher_id: UUID,
-        level_subject_id: UUID,
-        *,
-        effective_on: date | None = None,
-    ) -> bool:
-        """Check question-authoring eligibility for a shared level-subject bank."""
-        conditions = [
-            TeacherAssignment.teacher_id == teacher_id,
-            TeacherAssignment.level_subject_id == level_subject_id,
-            TeacherAssignment.is_active.is_(True),
-        ]
-        if effective_on is not None:
-            conditions.extend(
-                [
-                    TeacherAssignment.effective_from <= effective_on,
-                    or_(
-                        TeacherAssignment.effective_to.is_(None),
-                        TeacherAssignment.effective_to >= effective_on,
-                    ),
-                ]
-            )
-        query = select(exists().where(*conditions))
-        return bool(await db.scalar(query))
-
-    @staticmethod
-    async def save_assignment(
-        db: AsyncSession,
-        assignment: TeacherAssignment,
-    ) -> TeacherAssignment:
-        db.add(assignment)
-        await db.flush()
-        return assignment
-
-    @staticmethod
-    async def save_assignments(
-        db: AsyncSession,
-        assignments: Sequence[TeacherAssignment],
-    ) -> list[TeacherAssignment]:
-        rows = list(assignments)
-        if not rows:
-            return []
-        db.add_all(rows)
-        await db.flush()
-        return rows
-
-    # ========================== #
-    # STUDENT ENROLLMENTS
-    # ========================== #
-
-    @staticmethod
-    async def add_enrollment(
-        db: AsyncSession,
-        student_enrollment: StudentEnrollment,
-    ) -> StudentEnrollment:
-        db.add(student_enrollment)
-        await db.flush()
-        return student_enrollment
-
-    @staticmethod
-    async def add_enrollments(
-        db: AsyncSession,
-        enrollments: Sequence[StudentEnrollment],
-    ) -> list[StudentEnrollment]:
-        rows = list(enrollments)
-        if not rows:
-            return []
-        db.add_all(rows)
-        await db.flush()
-        return rows
-
-    @staticmethod
-    async def get_enrollment_by_id(
-        db: AsyncSession,
-        enrollment_id: UUID,
-        *,
-        lock: bool = False,
-    ) -> StudentEnrollment | None:
-        query = select(StudentEnrollment).where(StudentEnrollment.id == enrollment_id)
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def get_enrollment_by_weave_id(
-        db: AsyncSession,
-        weave_enrollment_id: str,
-        *,
-        lock: bool = False,
-    ) -> StudentEnrollment | None:
-        query = select(StudentEnrollment).where(
-            StudentEnrollment.weave_enrollment_id == weave_enrollment_id
-        )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def get_current_enrollment_by_weave_student_id(
-        db: AsyncSession,
-        weave_student_id: str,
-        *,
-        lock: bool = False,
-    ) -> StudentEnrollment | None:
-        query = select(StudentEnrollment).where(
-            StudentEnrollment.weave_student_id == weave_student_id,
-            StudentEnrollment.is_current.is_(True),
-        )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def get_current_enrollment_by_admission_number(
-        db: AsyncSession,
-        admission_number: str,
-        *,
-        lock: bool = False,
-    ) -> StudentEnrollment | None:
-        query = select(StudentEnrollment).where(
-            StudentEnrollment.admission_number == admission_number,
-            StudentEnrollment.is_current.is_(True),
-        )
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def list_enrollment_history_for_student(
-        db: AsyncSession,
-        weave_student_id: str,
-    ) -> list[StudentEnrollment]:
-        result = await db.execute(
-            select(StudentEnrollment)
-            .where(StudentEnrollment.weave_student_id == weave_student_id)
-            .order_by(
-                StudentEnrollment.started_on.desc(),
-                StudentEnrollment.id.desc(),
+        return bool(
+            await db.scalar(
+                select(
+                    exists().where(
+                        TeacherAssignment.teacher_membership_id == teacher_membership_id,
+                        TeacherAssignment.curriculum_subject_id == curriculum_subject_id,
+                        TeacherAssignment.is_active.is_(True),
+                        TeacherAssignment.source_deleted_at.is_(None),
+                    )
+                )
             )
         )
-        return list(result.scalars().all())
+
+    @classmethod
+    async def get_enrollment_by_id(cls, db: AsyncSession, enrollment_id: UUID) -> StudentEnrollment | None:
+        return await cls._get_by_id(db, StudentEnrollment, enrollment_id)
 
     @staticmethod
-    async def list_enrollments_for_class(
+    async def list_current_enrollments_for_class(
         db: AsyncSession,
-        session_id: UUID,
         class_id: UUID,
-        *,
-        current_only: bool = True,
     ) -> list[StudentEnrollment]:
-        query = select(StudentEnrollment).where(
-            StudentEnrollment.session_id == session_id,
-            StudentEnrollment.class_id == class_id,
-        )
-        if current_only:
-            query = query.where(StudentEnrollment.is_current.is_(True))
         result = await db.execute(
-            query.order_by(
-                StudentEnrollment.display_name.asc(),
-                StudentEnrollment.admission_number.asc(),
-            )
+            select(StudentEnrollment).where(
+                StudentEnrollment.class_id == class_id,
+                StudentEnrollment.is_current.is_(True),
+                StudentEnrollment.student_status == "active",
+                StudentEnrollment.source_deleted_at.is_(None),
+            ).order_by(StudentEnrollment.admission_number.asc())
         )
         return list(result.scalars().all())
-
-    @staticmethod
-    async def list_enrollments_for_classes(
-        db: AsyncSession,
-        session_id: UUID,
-        class_ids: Sequence[UUID],
-        *,
-        current_only: bool = True,
-    ) -> list[StudentEnrollment]:
-        if not class_ids:
-            return []
-        query = select(StudentEnrollment).where(
-            StudentEnrollment.session_id == session_id,
-            StudentEnrollment.class_id.in_(class_ids),
-        )
-        if current_only:
-            query = query.where(StudentEnrollment.is_current.is_(True))
-        result = await db.execute(
-            query.order_by(
-                StudentEnrollment.class_id.asc(),
-                StudentEnrollment.display_name.asc(),
-                StudentEnrollment.admission_number.asc(),
-            )
-        )
-        return list(result.scalars().all())
-
-    @staticmethod
-    async def save_enrollment(
-        db: AsyncSession,
-        enrollment: StudentEnrollment,
-    ) -> StudentEnrollment:
-        db.add(enrollment)
-        await db.flush()
-        return enrollment
-
-    @staticmethod
-    async def save_enrollments(
-        db: AsyncSession,
-        enrollments: Sequence[StudentEnrollment],
-    ) -> list[StudentEnrollment]:
-        rows = list(enrollments)
-        if not rows:
-            return []
-        db.add_all(rows)
-        await db.flush()
-        return rows
-
-    # ========================== #
-    # SYNC STATE
-    # ========================== #
-
-    @staticmethod
-    async def add_sync_state(
-        db: AsyncSession,
-        sync_state: AcademicSyncState,
-    ) -> AcademicSyncState:
-        db.add(sync_state)
-        await db.flush()
-        return sync_state
-
-    @staticmethod
-    async def get_sync_state_by_scope(
-        db: AsyncSession,
-        scope: str,
-        *,
-        lock: bool = False,
-    ) -> AcademicSyncState | None:
-        query = select(AcademicSyncState).where(AcademicSyncState.scope == scope)
-        if lock:
-            query = query.with_for_update()
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def save_sync_state(
-        db: AsyncSession,
-        sync_state: AcademicSyncState,
-    ) -> AcademicSyncState:
-        db.add(sync_state)
-        await db.flush()
-        return sync_state
