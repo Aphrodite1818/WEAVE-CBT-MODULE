@@ -5,7 +5,18 @@ from __future__ import annotations
 from enum import Enum as PyEnum
 from uuid import UUID
 
-from sqlalchemy import Boolean, CheckConstraint, Enum as SQLEnum, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Enum as SQLEnum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text as sql_text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -33,7 +44,7 @@ class QuestionBank(Base):
         ForeignKey("local_actors.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("true")
+        Boolean, nullable=False, default=True, server_default=sql_text("true")
     )
 
     __table_args__ = (
@@ -70,7 +81,12 @@ class Question(Base):
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
     instruction: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(QUESTION_IMAGE_URL_MAX_LENGTH), nullable=True)
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
+    version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default=sql_text("1"),
+    )
     created_by_actor_id: Mapped[UUID] = mapped_column(
         ForeignKey("local_actors.id", ondelete="RESTRICT"), nullable=False, index=True
     )
@@ -78,7 +94,7 @@ class Question(Base):
         ForeignKey("local_actors.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("true")
+        Boolean, nullable=False, default=True, server_default=sql_text("true")
     )
 
     __table_args__ = (
@@ -96,7 +112,10 @@ class QuestionOption(Base):
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     is_correct: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=text("false")
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=sql_text("false"),
     )
 
     __table_args__ = (
