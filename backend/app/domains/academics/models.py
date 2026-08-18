@@ -35,6 +35,8 @@ ADMISSION_NUMBER_MAX_LENGTH = 128
 STAFF_ID_MAX_LENGTH = 128
 EMAIL_MAX_LENGTH = 255
 CATEGORY_MAX_LENGTH = 64
+TIMEZONE_MAX_LENGTH = 128
+INSTITUTION_TYPE_MAX_LENGTH = 64
 
 
 class WeaveProjectionMixin:
@@ -52,6 +54,18 @@ class WeaveProjectionMixin:
     )
 
 
+class SchoolProfile(WeaveProjectionMixin, Base):
+    """Paired school identity/context projected from the bootstrap envelope."""
+
+    __tablename__ = "school_profiles"
+
+    name: Mapped[str] = mapped_column(String(NAME_MAX_LENGTH), nullable=False)
+    institution_type: Mapped[str | None] = mapped_column(
+        String(INSTITUTION_TYPE_MAX_LENGTH), nullable=True
+    )
+    timezone: Mapped[str] = mapped_column(String(TIMEZONE_MAX_LENGTH), nullable=False)
+
+
 class AcademicSession(WeaveProjectionMixin, Base):
     __tablename__ = "academic_sessions"
 
@@ -61,7 +75,9 @@ class AcademicSession(WeaveProjectionMixin, Base):
         Boolean, nullable=False, default=False, server_default=text("false"), index=True
     )
 
-    __table_args__ = (Index("ix_academic_sessions_current_status", "is_current", "status"),)
+    __table_args__ = (
+        Index("ix_academic_sessions_current_status", "is_current", "status"),
+    )
 
 
 class AcademicTerm(WeaveProjectionMixin, Base):
@@ -97,7 +113,16 @@ class AcademicLevel(WeaveProjectionMixin, Base):
 class ArmLabel(WeaveProjectionMixin, Base):
     __tablename__ = "arm_labels"
 
-    label: Mapped[str] = mapped_column(String(CODE_MAX_LENGTH), nullable=False, unique=True)
+    label: Mapped[str] = mapped_column(String(CODE_MAX_LENGTH), nullable=False)
+
+    __table_args__ = (
+        Index(
+            "uq_arm_labels_current_label",
+            "label",
+            unique=True,
+            postgresql_where=text("source_deleted_at IS NULL"),
+        ),
+    )
 
 
 class Department(WeaveProjectionMixin, Base):
@@ -109,7 +134,13 @@ class Department(WeaveProjectionMixin, Base):
     name: Mapped[str] = mapped_column(String(NAME_MAX_LENGTH), nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("academic_level_id", "name", name="uq_departments_level_name"),
+        Index(
+            "uq_departments_current_level_name",
+            "academic_level_id",
+            "name",
+            unique=True,
+            postgresql_where=text("source_deleted_at IS NULL"),
+        ),
         Index("ix_departments_level_name", "academic_level_id", "name"),
     )
 
@@ -129,8 +160,12 @@ class AcademicClass(WeaveProjectionMixin, Base):
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            "academic_level_id", "arm_label_id", name="uq_academic_classes_level_arm_label"
+        Index(
+            "uq_academic_classes_current_level_arm_label",
+            "academic_level_id",
+            "arm_label_id",
+            unique=True,
+            postgresql_where=text("source_deleted_at IS NULL"),
         ),
         Index("ix_academic_classes_level_active", "academic_level_id", "is_active"),
     )
@@ -150,7 +185,13 @@ class ClassTermDepartment(WeaveProjectionMixin, Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("class_id", "academic_term_id", name="uq_class_term_departments_class_term"),
+        Index(
+            "uq_class_term_departments_current_class_term",
+            "class_id",
+            "academic_term_id",
+            unique=True,
+            postgresql_where=text("source_deleted_at IS NULL"),
+        ),
         Index("ix_class_term_departments_term_department", "academic_term_id", "department_id"),
     )
 
@@ -169,7 +210,16 @@ class Curriculum(WeaveProjectionMixin, Base):
     __tablename__ = "curricula"
 
     academic_level_id: Mapped[UUID] = mapped_column(
-        ForeignKey("academic_levels.id", ondelete="RESTRICT"), nullable=False, unique=True, index=True
+        ForeignKey("academic_levels.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+
+    __table_args__ = (
+        Index(
+            "uq_curricula_current_level",
+            "academic_level_id",
+            unique=True,
+            postgresql_where=text("source_deleted_at IS NULL"),
+        ),
     )
 
 
@@ -190,7 +240,13 @@ class CurriculumSubject(WeaveProjectionMixin, Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("curriculum_id", "subject_id", name="uq_curriculum_subjects_curriculum_subject"),
+        Index(
+            "uq_curriculum_subjects_current_curriculum_subject",
+            "curriculum_id",
+            "subject_id",
+            unique=True,
+            postgresql_where=text("source_deleted_at IS NULL"),
+        ),
         Index("ix_curriculum_subjects_curriculum_active", "curriculum_id", "is_active"),
     )
 
@@ -214,7 +270,9 @@ class SubjectOffering(WeaveProjectionMixin, Base):
             "curriculum_subject_id",
             "academic_term_id",
             unique=True,
-            postgresql_where=text("department_id IS NULL"),
+            postgresql_where=text(
+                "department_id IS NULL AND source_deleted_at IS NULL"
+            ),
         ),
         Index(
             "uq_subject_offerings_department",
@@ -222,7 +280,9 @@ class SubjectOffering(WeaveProjectionMixin, Base):
             "academic_term_id",
             "department_id",
             unique=True,
-            postgresql_where=text("department_id IS NOT NULL"),
+            postgresql_where=text(
+                "department_id IS NOT NULL AND source_deleted_at IS NULL"
+            ),
         ),
         Index("ix_subject_offerings_term_subject", "academic_term_id", "curriculum_subject_id"),
     )
@@ -250,7 +310,13 @@ class AssessmentComponent(WeaveProjectionMixin, Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("assessment_scheme_id", "position", name="uq_assessment_components_scheme_position"),
+        Index(
+            "uq_assessment_components_current_scheme_position",
+            "assessment_scheme_id",
+            "position",
+            unique=True,
+            postgresql_where=text("source_deleted_at IS NULL"),
+        ),
         CheckConstraint("maximum_score > 0", name="ck_assessment_components_maximum_positive"),
         CheckConstraint("position >= 0", name="ck_assessment_components_position_nonnegative"),
         Index("ix_assessment_components_scheme_active", "assessment_scheme_id", "is_active"),
@@ -273,7 +339,9 @@ class AcademicTeacher(WeaveProjectionMixin, Base):
     staff_id: Mapped[str | None] = mapped_column(String(STAFF_ID_MAX_LENGTH), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(STATUS_MAX_LENGTH), nullable=False, index=True)
 
-    __table_args__ = (Index("ix_academic_teachers_status_name", "status", "last_name", "first_name"),)
+    __table_args__ = (
+        Index("ix_academic_teachers_status_name", "status", "last_name", "first_name"),
+    )
 
 
 class TeacherAssignment(WeaveProjectionMixin, Base):
@@ -295,11 +363,12 @@ class TeacherAssignment(WeaveProjectionMixin, Base):
     __table_args__ = (
         Index(
             "uq_teacher_assignments_active_scope",
-            "teacher_membership_id",
             "class_id",
             "curriculum_subject_id",
             unique=True,
-            postgresql_where=text("is_active = true AND source_deleted_at IS NULL"),
+            postgresql_where=text(
+                "is_active = true AND source_deleted_at IS NULL"
+            ),
         ),
         Index("ix_teacher_assignments_teacher_active", "teacher_membership_id", "is_active"),
         Index("ix_teacher_assignments_class_subject_active", "class_id", "curriculum_subject_id", "is_active"),
