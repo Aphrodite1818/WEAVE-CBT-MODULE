@@ -20,7 +20,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
-    text,
+    text as sql_text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -84,10 +84,16 @@ class Exam(Base):
     opens_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closes_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     shuffle_questions: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("true")
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=sql_text("true"),
     )
     shuffle_options: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("true")
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=sql_text("true"),
     )
     created_by_actor_id: Mapped[UUID] = mapped_column(
         ForeignKey("local_actors.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -101,7 +107,6 @@ class Exam(Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # Frozen Weave academic provenance captured at seal time.
     source_assessment_scheme_id: Mapped[UUID | None] = mapped_column(nullable=True)
     source_assessment_component_id: Mapped[UUID | None] = mapped_column(nullable=True)
     source_assessment_component_name: Mapped[str | None] = mapped_column(
@@ -240,7 +245,10 @@ class ExamQuestionOption(Base):
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     is_correct: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=text("false")
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=sql_text("false"),
     )
 
     __table_args__ = (
