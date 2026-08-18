@@ -72,19 +72,27 @@ class AcademicProjectionContractTests(unittest.TestCase):
             callable(AcademicRepository.list_eligible_enrollments_for_offering)
         )
 
-    def test_teacher_assignment_is_class_curriculum_subject_scoped(self) -> None:
+    def test_teacher_assignment_is_time_safe_and_curriculum_subject_scoped(self) -> None:
         columns = set(TeacherAssignment.__table__.c.keys())
         self.assertTrue(
-            {"teacher_membership_id", "class_id", "curriculum_subject_id", "is_active"}
+            {
+                "teacher_membership_id",
+                "class_id",
+                "curriculum_subject_id",
+                "is_active",
+                "effective_from",
+                "effective_to",
+            }
             <= columns
         )
         self.assertNotIn("level_subject_id", columns)
-        self.assertNotIn("effective_from", columns)
 
         indexes = {index.name for index in TeacherAssignment.__table__.indexes}
         self.assertIn("uq_teacher_assignments_active_scope", indexes)
         self.assertIn("ix_teacher_assignments_live_teacher", indexes)
         self.assertIn("ix_teacher_assignments_live_class_subject", indexes)
+        self.assertIn("ix_teacher_assignments_effective_from", indexes)
+        self.assertIn("ix_teacher_assignments_effective_to", indexes)
 
     def test_enrollment_matches_bootstrap_contract_and_has_live_indexes(self) -> None:
         columns = set(StudentEnrollment.__table__.c.keys())
