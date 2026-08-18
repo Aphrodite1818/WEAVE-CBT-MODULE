@@ -13,7 +13,10 @@ from websockets.exceptions import ConnectionClosed
 
 from app.core.database import async_session_factory
 from app.core.redis import redis_client
-from app.domains.node.exceptions import NodeIdentityNotFoundError
+from app.domains.node.exceptions import (
+    NodeIdentityNotFoundError,
+    NodeIdentityStorageError,
+)
 from app.domains.node.identity_store import node_identity_store
 from app.domains.sync.service import sync_service
 from app.integrations.weave.academics import weave_academics_gateway
@@ -50,12 +53,23 @@ class SyncSupervisor:
         self._stop.set()
 
     async def run(self) -> None:
+        # Lifespan/test reloads may start the same singleton again after a
+        # graceful shutdown. A previous stop must not permanently disable it.
+        self._stop.clear()
         backoff = RECONNECT_MIN_SECONDS
+
         while not self._stop.is_set():
             try:
                 identity = node_identity_store.load()
             except NodeIdentityNotFoundError:
+                # An unpaired installation is a normal startup state.
                 await self._sleep(5)
+                continue
+            except NodeIdentityStorageError:
+                # Corrupt/unreadable identity is serious but must not crash the
+                # FastAPI process that still serves the local recovery UI.
+                logger.exception("Unable to load persistent CBT installation identity.")
+                await self._sleep(15)
                 continue
 
             lease_token = secrets.token_urlsafe(24)
@@ -65,7 +79,10 @@ class SyncSupervisor:
 
             try:
                 await self._reconcile_once()
-                await self._stream(identity.server_credential.get_secret_value(), lease_token)
+                await self._stream(
+                    identity.server_credential.get_secret_value(),
+                    lease_token,
+                )
                 backoff = RECONNECT_MIN_SECONDS
             except asyncio.CancelledError:
                 raise
@@ -88,7 +105,9 @@ class SyncSupervisor:
         ) as websocket:
             while not self._stop.is_set():
                 if not await self._renew_lease(lease_token):
-                    logger.warning("CBT sync WebSocket lease was lost; closing local stream.")
+                    logger.warning(
+                        "CBT sync WebSocket lease was lost; closing local stream."
+                    )
                     return
 
                 try:
