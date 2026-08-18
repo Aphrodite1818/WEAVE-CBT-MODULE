@@ -4,7 +4,7 @@ Alembic owns the PostgreSQL schema for the local CBT runtime.
 
 `env.py` imports `app.model_registry` before reading `Base.metadata`, so every durable SQLAlchemy model must be imported by `app/model_registry.py`. Autogenerate and `alembic check` therefore see academics, auth, questions, exams, candidates, attempts, results, audit, and sync tables.
 
-The first revision, `0001_initial_schema`, creates the complete schema from the frozen model sources in `alembic/schema_v1/`. Do not update that snapshot after a later revision exists. Any future model change must be represented by a new Alembic revision.
+The domain model files under `app/domains/*/models.py` are the canonical SQLAlchemy model definitions. Alembic uses that metadata when generating a revision; committed revisions are then immutable schema history and must not import the live application models. `0001_initial_schema` is the static baseline for the current pre-launch schema. Any future model change must be represented by a new Alembic revision rather than editing `0001`.
 
 Run Alembic from `backend/`:
 
