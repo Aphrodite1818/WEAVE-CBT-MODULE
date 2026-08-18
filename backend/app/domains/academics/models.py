@@ -8,13 +8,14 @@ physically deleted.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -357,6 +358,8 @@ class TeacherAssignment(WeaveProjectionMixin, Base):
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true"), index=True
     )
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    effective_to: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
 
     __table_args__ = (
         Index(
@@ -382,6 +385,10 @@ class TeacherAssignment(WeaveProjectionMixin, Base):
             postgresql_where=text(
                 "is_active = true AND source_deleted_at IS NULL"
             ),
+        ),
+        CheckConstraint(
+            "effective_to IS NULL OR effective_to >= effective_from",
+            name="ck_teacher_assignments_effective_range",
         ),
     )
 
