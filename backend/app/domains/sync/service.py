@@ -264,9 +264,14 @@ class SyncService:
                     "Weave returned non-increasing synchronization changes."
                 )
             previous = change.cursor
-        if changes and next_cursor != previous:
+        if changes:
+            if next_cursor != previous:
+                raise SyncContractViolation(
+                    "Weave delta next_cursor does not match the last returned change."
+                )
+        elif next_cursor != cursor:
             raise SyncContractViolation(
-                "Weave delta next_cursor does not match the last returned change."
+                "Weave returned an empty delta that advanced the synchronization cursor."
             )
 
     @staticmethod
@@ -303,9 +308,6 @@ class SyncService:
                 )
             upserts[change.entity_type].append((change, snapshot))
 
-        # Soft-delete every obsolete live row before installing replacements. This
-        # releases partial unique scopes such as active teacher assignment and
-        # current student enrollment without destroying historical FK targets.
         for entity_type in reversed(UPSERT_ORDER):
             entries = tombstones.get(entity_type)
             if not entries:
@@ -408,9 +410,6 @@ class SyncService:
                 if not delta.has_more:
                     break
         except (IntegrityError, SyncContractViolation) as exc:
-            # A stale pre-v3 projection or an impossible delta must never poison the
-            # cursor forever. Roll the page back and rebuild from Weave's current
-            # authoritative snapshot once.
             logger.warning(
                 "Incremental CBT sync could not be safely applied; forcing bootstrap: %s",
                 exc,
