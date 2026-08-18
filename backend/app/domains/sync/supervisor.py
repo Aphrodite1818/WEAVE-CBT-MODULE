@@ -1,4 +1,9 @@
-"""Singleton WebSocket supervisor for live Weave -> CBT synchronization."""
+"""Singleton WebSocket supervisor for live Weave -> CBT synchronization.
+
+The socket is the low-latency wake path. A slow periodic cursor reconciliation
+runs while the socket is healthy so a missed live frame cannot leave the local
+academic projection stale indefinitely.
+"""
 
 from __future__ import annotations
 
@@ -26,6 +31,7 @@ logger = logging.getLogger(__name__)
 SYNC_LEADER_KEY = "weave-cbt:sync:websocket-leader"
 SYNC_LEADER_TTL_SECONDS = 30
 SYNC_LEADER_RENEW_SECONDS = 10
+RECONCILE_FALLBACK_SECONDS = 60
 RECONNECT_MIN_SECONDS = 2
 RECONNECT_MAX_SECONDS = 30
 
@@ -94,6 +100,11 @@ class SyncSupervisor:
                 await self._release_lease(lease_token)
 
     async def _stream(self, credential: str, lease_token: str) -> None:
+        loop = asyncio.get_running_loop()
+        # run() reconciles immediately before opening the socket, so the fallback
+        # clock starts from a known authoritative cursor check.
+        last_reconcile_at = loop.time()
+
         async with connect(
             weave_academics_gateway.stream_url(),
             additional_headers={"Authorization": f"Bearer {credential}"},
@@ -109,6 +120,11 @@ class SyncSupervisor:
                         "CBT sync WebSocket lease was lost; closing local stream."
                     )
                     return
+
+                last_reconcile_at = await self._reconcile_if_due(
+                    last_reconcile_at=last_reconcile_at,
+                    now=loop.time(),
+                )
 
                 try:
                     raw_message = await asyncio.wait_for(
@@ -133,11 +149,26 @@ class SyncSupervisor:
                 message_type = message.get("type")
                 if message_type in {"cbt.sync.reconcile", "cbt.sync.change"}:
                     await self._reconcile_once()
+                    last_reconcile_at = loop.time()
                 elif (
                     message_type == "connection.ready"
                     and message.get("reconciliation_required") is True
                 ):
                     await self._reconcile_once()
+                    last_reconcile_at = loop.time()
+
+    async def _reconcile_if_due(
+        self,
+        *,
+        last_reconcile_at: float,
+        now: float,
+    ) -> float:
+        """Run the durable cursor path when the live wake channel has been quiet too long."""
+
+        if now - last_reconcile_at < RECONCILE_FALLBACK_SECONDS:
+            return last_reconcile_at
+        await self._reconcile_once()
+        return now
 
     async def _reconcile_once(self) -> None:
         async with async_session_factory() as db:
