@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Query, Response
 
 from app.core.database import DbSession
 from app.domains.auth.dependencies import CurrentLocalAdmin
@@ -27,7 +27,23 @@ async def reconcile_now(
     db: DbSession,
     _admin: CurrentLocalAdmin,
     response: Response,
+    force_full: bool = Query(
+        default=False,
+        description=(
+            "Reinstall the complete authoritative Weave academic snapshot instead of "
+            "only applying durable changes after the local cursor."
+        ),
+    ),
 ) -> SyncReconcileResponse:
-    """Manually recover bootstrap/deltas using the same path as live sync."""
+    """Manually synchronize the local CBT projection from authoritative Weave APIs.
+
+    The default path is an efficient cursor reconciliation: fetch and apply every
+    durable Weave change after the local committed cursor. ``force_full=true`` is
+    the recovery path for intentionally reinstalling the current complete academic
+    snapshot when an operator needs a full resync.
+    """
+
     response.headers["Cache-Control"] = "no-store"
+    if force_full:
+        return await sync_service.bootstrap(db, force=True)
     return await sync_service.reconcile(db)
