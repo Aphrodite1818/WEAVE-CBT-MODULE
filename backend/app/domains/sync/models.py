@@ -9,6 +9,7 @@ from sqlalchemy import BigInteger, CheckConstraint, DateTime, Integer, String, T
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.integrations.weave.schemas import SYNC_SCHEMA_VERSION
 
 SYNC_SCOPE_MAX_LENGTH = 64
 SYNC_ERROR_MAX_LENGTH = 1024
@@ -20,7 +21,12 @@ class SyncState(Base):
     __tablename__ = "sync_states"
 
     scope: Mapped[str] = mapped_column(String(SYNC_SCOPE_MAX_LENGTH), nullable=False, unique=True)
-    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=2, server_default=text("2"))
+    schema_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=SYNC_SCHEMA_VERSION,
+        server_default=text(str(SYNC_SCHEMA_VERSION)),
+    )
     cursor: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default=text("0"))
     bootstrap_snapshot_id: Mapped[UUID | None] = mapped_column(nullable=True)
     bootstrap_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
