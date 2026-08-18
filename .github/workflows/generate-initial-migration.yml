@@ -10,6 +10,14 @@ on:
       - 'backend/alembic.ini'
       - 'backend/pyproject.toml'
       - '.github/workflows/generate-initial-migration.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'backend/app/**'
+      - 'backend/alembic/**'
+      - 'backend/alembic.ini'
+      - 'backend/pyproject.toml'
+      - '.github/workflows/generate-initial-migration.yml'
 
 permissions:
   contents: write
@@ -58,8 +66,16 @@ jobs:
           exit_code=${PIPESTATUS[0]}
           echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
           exit 0
-      - name: Commit validated initial revision
+      - name: Upload generated revision
         if: steps.alembic.outputs.exit_code == '0'
+        uses: actions/upload-artifact@v7
+        with:
+          name: initial-alembic-revision
+          path: backend/alembic/versions/*.py
+          if-no-files-found: error
+          retention-days: 3
+      - name: Commit validated initial revision on set-up push
+        if: github.event_name == 'push' && steps.alembic.outputs.exit_code == '0'
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
@@ -67,8 +83,8 @@ jobs:
           git add alembic/versions/*.py
           git commit -m "db: add initial CBT schema migration"
           git push origin HEAD:set-up
-      - name: Commit migration generation failure log
-        if: steps.alembic.outputs.exit_code != '0'
+      - name: Commit migration generation failure log on set-up push
+        if: github.event_name == 'push' && steps.alembic.outputs.exit_code != '0'
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
