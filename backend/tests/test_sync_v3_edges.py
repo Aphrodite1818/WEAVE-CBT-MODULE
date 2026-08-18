@@ -39,6 +39,8 @@ class SyncV3EdgeTests(unittest.TestCase):
                 "class_id": str(uuid4()),
                 "curriculum_subject_id": str(uuid4()),
                 "is_active": True,
+                "effective_from": now.date().isoformat(),
+                "effective_to": None,
             },
             occurred_at=now,
         )
