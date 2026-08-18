@@ -217,6 +217,8 @@ class SyncApplyTests(unittest.IsolatedAsyncioTestCase):
                     "class_id": str(class_id),
                     "curriculum_subject_id": str(curriculum_subject_id),
                     "is_active": True,
+                    "effective_from": now.date().isoformat(),
+                    "effective_to": None,
                 },
                 occurred_at=now,
             ),
