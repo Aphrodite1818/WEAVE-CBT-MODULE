@@ -12,7 +12,8 @@ from datetime import UTC, datetime
 from typing import Any, TypeVar
 from uuid import UUID
 
-from sqlalchemy import delete, exists, select, update
+from sqlalchemy import and_, exists, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import Base
@@ -33,7 +34,6 @@ from app.domains.academics.models import (
     Department,
     StudentEnrollment,
     SubjectOffering,
-    SubjectOfferingEligibility,
     TeacherAssignment,
 )
 
@@ -64,7 +64,44 @@ class AcademicRepository:
     """Data-access layer for current and historical Weave projections."""
 
     @staticmethod
+    async def bulk_upsert_projections(
+        db: AsyncSession,
+        model: type[ProjectionT],
+        rows: Sequence[dict[str, Any]],
+        *,
+        synced_at: datetime | None = None,
+    ) -> None:
+        """Upsert one entity type in a single PostgreSQL statement."""
+
+        if not rows:
+            return
+        timestamp = synced_at or datetime.now(UTC)
+        values = [
+            {
+                **row,
+                "synced_at": timestamp,
+                "source_deleted_at": None,
+            }
+            for row in rows
+        ]
+        statement = pg_insert(model).values(values)
+        mutable_columns = {
+            key: getattr(statement.excluded, key)
+            for key in values[0]
+            if key != "id"
+        }
+        if "updated_at" in model.__table__.c:
+            mutable_columns["updated_at"] = func.now()
+        await db.execute(
+            statement.on_conflict_do_update(
+                index_elements=[model.id],
+                set_=mutable_columns,
+            )
+        )
+
+    @classmethod
     async def upsert_projection(
+        cls,
         db: AsyncSession,
         model: type[ProjectionT],
         entity_id: UUID,
@@ -72,38 +109,53 @@ class AcademicRepository:
         *,
         synced_at: datetime | None = None,
     ) -> ProjectionT:
+        await cls.bulk_upsert_projections(
+            db,
+            model,
+            [{"id": entity_id, **values}],
+            synced_at=synced_at,
+        )
         row = await db.get(model, entity_id)
         if row is None:
-            row = model(id=entity_id, **values)
-        else:
-            for key, value in values.items():
-                setattr(row, key, value)
-
-        if hasattr(row, "synced_at"):
-            row.synced_at = synced_at or datetime.now(UTC)
-        if hasattr(row, "source_deleted_at"):
-            row.source_deleted_at = None
-
-        db.add(row)
-        await db.flush()
+            raise RuntimeError(f"Failed to upsert {model.__name__} {entity_id}.")
         return row
 
     @staticmethod
+    async def bulk_tombstone_projections(
+        db: AsyncSession,
+        model: type[ProjectionT],
+        entity_ids: Sequence[UUID],
+        *,
+        deleted_at: datetime | None = None,
+    ) -> None:
+        unique_ids = tuple(dict.fromkeys(entity_ids))
+        if not unique_ids:
+            return
+        await db.execute(
+            update(model)
+            .where(model.id.in_(unique_ids))
+            .values(
+                source_deleted_at=deleted_at or datetime.now(UTC),
+                updated_at=func.now(),
+            )
+        )
+
+    @classmethod
     async def tombstone_projection(
+        cls,
         db: AsyncSession,
         model: type[ProjectionT],
         entity_id: UUID,
         *,
         deleted_at: datetime | None = None,
     ) -> ProjectionT | None:
-        row = await db.get(model, entity_id)
-        if row is None:
-            return None
-        if hasattr(row, "source_deleted_at"):
-            row.source_deleted_at = deleted_at or datetime.now(UTC)
-        db.add(row)
-        await db.flush()
-        return row
+        await cls.bulk_tombstone_projections(
+            db,
+            model,
+            [entity_id],
+            deleted_at=deleted_at,
+        )
+        return await db.get(model, entity_id)
 
     @staticmethod
     async def mark_all_projection_rows_deleted(
@@ -113,9 +165,12 @@ class AcademicRepository:
     ) -> None:
         timestamp = deleted_at or datetime.now(UTC)
         for model in PROJECTION_MODELS:
-            await db.execute(update(model).values(source_deleted_at=timestamp))
-        await db.execute(delete(SubjectOfferingEligibility))
-        await db.flush()
+            await db.execute(
+                update(model).values(
+                    source_deleted_at=timestamp,
+                    updated_at=func.now(),
+                )
+            )
 
     @staticmethod
     async def _get_by_id(
@@ -134,11 +189,15 @@ class AcademicRepository:
         return (await db.execute(query)).scalar_one_or_none()
 
     @classmethod
-    async def get_session_by_id(cls, db: AsyncSession, session_id: UUID, *, lock: bool = False) -> AcademicSession | None:
+    async def get_session_by_id(
+        cls, db: AsyncSession, session_id: UUID, *, lock: bool = False
+    ) -> AcademicSession | None:
         return await cls._get_by_id(db, AcademicSession, session_id, lock=lock)
 
     @staticmethod
-    async def get_current_session(db: AsyncSession, *, lock: bool = False) -> AcademicSession | None:
+    async def get_current_session(
+        db: AsyncSession, *, lock: bool = False
+    ) -> AcademicSession | None:
         query = select(AcademicSession).where(
             AcademicSession.is_current.is_(True),
             AcademicSession.source_deleted_at.is_(None),
@@ -148,11 +207,15 @@ class AcademicRepository:
         return (await db.execute(query)).scalar_one_or_none()
 
     @classmethod
-    async def get_term_by_id(cls, db: AsyncSession, term_id: UUID, *, lock: bool = False) -> AcademicTerm | None:
+    async def get_term_by_id(
+        cls, db: AsyncSession, term_id: UUID, *, lock: bool = False
+    ) -> AcademicTerm | None:
         return await cls._get_by_id(db, AcademicTerm, term_id, lock=lock)
 
     @staticmethod
-    async def get_current_term(db: AsyncSession, *, session_id: UUID | None = None) -> AcademicTerm | None:
+    async def get_current_term(
+        db: AsyncSession, *, session_id: UUID | None = None
+    ) -> AcademicTerm | None:
         query = select(AcademicTerm).where(
             AcademicTerm.is_current.is_(True),
             AcademicTerm.source_deleted_at.is_(None),
@@ -162,7 +225,9 @@ class AcademicRepository:
         return (await db.execute(query)).scalar_one_or_none()
 
     @classmethod
-    async def get_level_by_id(cls, db: AsyncSession, level_id: UUID, *, lock: bool = False) -> AcademicLevel | None:
+    async def get_level_by_id(
+        cls, db: AsyncSession, level_id: UUID, *, lock: bool = False
+    ) -> AcademicLevel | None:
         return await cls._get_by_id(db, AcademicLevel, level_id, lock=lock)
 
     @staticmethod
@@ -170,20 +235,30 @@ class AcademicRepository:
         result = await db.execute(
             select(AcademicLevel)
             .where(AcademicLevel.source_deleted_at.is_(None))
-            .order_by(AcademicLevel.category.asc(), AcademicLevel.position.asc(), AcademicLevel.name.asc())
+            .order_by(
+                AcademicLevel.category.asc(),
+                AcademicLevel.position.asc(),
+                AcademicLevel.name.asc(),
+            )
         )
         return list(result.scalars().all())
 
     @classmethod
-    async def get_arm_label_by_id(cls, db: AsyncSession, arm_label_id: UUID) -> ArmLabel | None:
+    async def get_arm_label_by_id(
+        cls, db: AsyncSession, arm_label_id: UUID
+    ) -> ArmLabel | None:
         return await cls._get_by_id(db, ArmLabel, arm_label_id)
 
     @classmethod
-    async def get_department_by_id(cls, db: AsyncSession, department_id: UUID) -> Department | None:
+    async def get_department_by_id(
+        cls, db: AsyncSession, department_id: UUID
+    ) -> Department | None:
         return await cls._get_by_id(db, Department, department_id)
 
     @classmethod
-    async def get_class_by_id(cls, db: AsyncSession, class_id: UUID, *, lock: bool = False) -> AcademicClass | None:
+    async def get_class_by_id(
+        cls, db: AsyncSession, class_id: UUID, *, lock: bool = False
+    ) -> AcademicClass | None:
         return await cls._get_by_id(db, AcademicClass, class_id, lock=lock)
 
     @staticmethod
@@ -219,15 +294,21 @@ class AcademicRepository:
         ).scalar_one_or_none()
 
     @classmethod
-    async def get_subject_by_id(cls, db: AsyncSession, subject_id: UUID) -> AcademicSubject | None:
+    async def get_subject_by_id(
+        cls, db: AsyncSession, subject_id: UUID
+    ) -> AcademicSubject | None:
         return await cls._get_by_id(db, AcademicSubject, subject_id)
 
     @classmethod
-    async def get_curriculum_by_id(cls, db: AsyncSession, curriculum_id: UUID) -> Curriculum | None:
+    async def get_curriculum_by_id(
+        cls, db: AsyncSession, curriculum_id: UUID
+    ) -> Curriculum | None:
         return await cls._get_by_id(db, Curriculum, curriculum_id)
 
     @staticmethod
-    async def get_curriculum_for_level(db: AsyncSession, academic_level_id: UUID) -> Curriculum | None:
+    async def get_curriculum_for_level(
+        db: AsyncSession, academic_level_id: UUID
+    ) -> Curriculum | None:
         return (
             await db.execute(
                 select(Curriculum).where(
@@ -245,7 +326,9 @@ class AcademicRepository:
         *,
         lock: bool = False,
     ) -> CurriculumSubject | None:
-        return await cls._get_by_id(db, CurriculumSubject, curriculum_subject_id, lock=lock)
+        return await cls._get_by_id(
+            db, CurriculumSubject, curriculum_subject_id, lock=lock
+        )
 
     @staticmethod
     async def list_curriculum_subjects(
@@ -260,10 +343,18 @@ class AcademicRepository:
         )
         if active_only:
             query = query.where(CurriculumSubject.is_active.is_(True))
-        return list((await db.execute(query.order_by(CurriculumSubject.subject_id.asc()))).scalars().all())
+        return list(
+            (
+                await db.execute(
+                    query.order_by(CurriculumSubject.subject_id.asc())
+                )
+            ).scalars().all()
+        )
 
     @classmethod
-    async def get_offering_by_id(cls, db: AsyncSession, offering_id: UUID) -> SubjectOffering | None:
+    async def get_offering_by_id(
+        cls, db: AsyncSession, offering_id: UUID
+    ) -> SubjectOffering | None:
         return await cls._get_by_id(db, SubjectOffering, offering_id)
 
     @staticmethod
@@ -294,7 +385,9 @@ class AcademicRepository:
         curriculum_subject_id: UUID,
         class_id: UUID,
     ) -> SubjectOffering | None:
-        specialization = await cls.get_class_term_department(db, class_id, academic_term_id)
+        specialization = await cls.get_class_term_department(
+            db, class_id, academic_term_id
+        )
         if specialization is not None:
             departmental = await cls.get_offering_for_scope(
                 db,
@@ -312,80 +405,102 @@ class AcademicRepository:
         )
 
     @staticmethod
-    async def replace_offering_eligibility(
-        db: AsyncSession,
-        offering_id: UUID,
-        enrollment_ids: Sequence[UUID],
-    ) -> None:
-        await db.execute(
-            delete(SubjectOfferingEligibility).where(
-                SubjectOfferingEligibility.offering_id == offering_id
+    def _eligible_enrollment_query(offering_id: UUID):
+        departmental_match = exists(
+            select(ClassTermDepartment.id).where(
+                ClassTermDepartment.class_id == StudentEnrollment.class_id,
+                ClassTermDepartment.academic_term_id == SubjectOffering.academic_term_id,
+                ClassTermDepartment.department_id == SubjectOffering.department_id,
+                ClassTermDepartment.source_deleted_at.is_(None),
             )
         )
-        unique_ids = tuple(dict.fromkeys(enrollment_ids))
-        if unique_ids:
-            db.add_all(
-                SubjectOfferingEligibility(offering_id=offering_id, enrollment_id=enrollment_id)
-                for enrollment_id in unique_ids
+        return (
+            select(StudentEnrollment)
+            .select_from(SubjectOffering)
+            .join(
+                CurriculumSubject,
+                CurriculumSubject.id == SubjectOffering.curriculum_subject_id,
             )
-        await db.flush()
+            .join(Curriculum, Curriculum.id == CurriculumSubject.curriculum_id)
+            .join(AcademicTerm, AcademicTerm.id == SubjectOffering.academic_term_id)
+            .join(
+                StudentEnrollment,
+                and_(
+                    StudentEnrollment.academic_level_id == Curriculum.academic_level_id,
+                    StudentEnrollment.academic_session_id == AcademicTerm.academic_session_id,
+                ),
+            )
+            .where(
+                SubjectOffering.id == offering_id,
+                SubjectOffering.source_deleted_at.is_(None),
+                CurriculumSubject.source_deleted_at.is_(None),
+                CurriculumSubject.is_active.is_(True),
+                Curriculum.source_deleted_at.is_(None),
+                AcademicTerm.source_deleted_at.is_(None),
+                StudentEnrollment.source_deleted_at.is_(None),
+                StudentEnrollment.is_current.is_(True),
+                StudentEnrollment.student_status == "active",
+                or_(
+                    SubjectOffering.department_id.is_(None),
+                    departmental_match,
+                ),
+            )
+        )
 
-    @staticmethod
+    @classmethod
     async def enrollment_is_eligible_for_offering(
+        cls,
         db: AsyncSession,
         *,
         offering_id: UUID,
         enrollment_id: UUID,
     ) -> bool:
-        return bool(
-            await db.scalar(
-                select(
-                    exists().where(
-                        SubjectOfferingEligibility.offering_id == offering_id,
-                        SubjectOfferingEligibility.enrollment_id == enrollment_id,
-                    )
-                )
-            )
+        query = cls._eligible_enrollment_query(offering_id).where(
+            StudentEnrollment.id == enrollment_id
         )
+        return (await db.execute(query.limit(1))).scalar_one_or_none() is not None
 
-    @staticmethod
+    @classmethod
     async def list_eligible_enrollments_for_offering(
+        cls,
         db: AsyncSession,
         offering_id: UUID,
         *,
         class_id: UUID | None = None,
     ) -> list[StudentEnrollment]:
-        query = (
-            select(StudentEnrollment)
-            .join(
-                SubjectOfferingEligibility,
-                SubjectOfferingEligibility.enrollment_id == StudentEnrollment.id,
-            )
-            .where(
-                SubjectOfferingEligibility.offering_id == offering_id,
-                StudentEnrollment.source_deleted_at.is_(None),
-                StudentEnrollment.is_current.is_(True),
-                StudentEnrollment.student_status == "active",
-            )
-        )
+        query = cls._eligible_enrollment_query(offering_id)
         if class_id is not None:
             query = query.where(StudentEnrollment.class_id == class_id)
-        return list((await db.execute(query.order_by(StudentEnrollment.admission_number.asc()))).scalars().all())
+        return list(
+            (
+                await db.execute(
+                    query.order_by(StudentEnrollment.admission_number.asc())
+                )
+            ).scalars().all()
+        )
 
     @classmethod
-    async def get_assessment_scheme_by_id(cls, db: AsyncSession, scheme_id: UUID) -> AssessmentScheme | None:
+    async def get_assessment_scheme_by_id(
+        cls, db: AsyncSession, scheme_id: UUID
+    ) -> AssessmentScheme | None:
         return await cls._get_by_id(db, AssessmentScheme, scheme_id)
 
     @classmethod
-    async def get_component_by_id(cls, db: AsyncSession, component_id: UUID) -> AssessmentComponent | None:
+    async def get_component_by_id(
+        cls, db: AsyncSession, component_id: UUID
+    ) -> AssessmentComponent | None:
         return await cls._get_by_id(db, AssessmentComponent, component_id)
 
     @classmethod
-    async def get_admin_by_id(cls, db: AsyncSession, admin_id: UUID) -> AcademicAdmin | None:
+    async def get_admin_by_id(
+        cls, db: AsyncSession, admin_id: UUID
+    ) -> AcademicAdmin | None:
         return await cls._get_by_id(db, AcademicAdmin, admin_id)
 
     @classmethod
-    async def get_teacher_by_id(cls, db: AsyncSession, teacher_id: UUID) -> AcademicTeacher | None:
+    async def get_teacher_by_id(
+        cls, db: AsyncSession, teacher_id: UUID
+    ) -> AcademicTeacher | None:
         return await cls._get_by_id(db, AcademicTeacher, teacher_id)
 
     @classmethod
@@ -395,13 +510,17 @@ class AcademicRepository:
         membership_id: UUID | str,
     ) -> AcademicTeacher | None:
         try:
-            teacher_id = membership_id if isinstance(membership_id, UUID) else UUID(membership_id)
+            teacher_id = (
+                membership_id if isinstance(membership_id, UUID) else UUID(membership_id)
+            )
         except (TypeError, ValueError):
             return None
         return await cls.get_teacher_by_id(db, teacher_id)
 
     @classmethod
-    async def get_assignment_by_id(cls, db: AsyncSession, assignment_id: UUID) -> TeacherAssignment | None:
+    async def get_assignment_by_id(
+        cls, db: AsyncSession, assignment_id: UUID
+    ) -> TeacherAssignment | None:
         return await cls._get_by_id(db, TeacherAssignment, assignment_id)
 
     @staticmethod
@@ -461,7 +580,9 @@ class AcademicRepository:
         )
 
     @classmethod
-    async def get_enrollment_by_id(cls, db: AsyncSession, enrollment_id: UUID) -> StudentEnrollment | None:
+    async def get_enrollment_by_id(
+        cls, db: AsyncSession, enrollment_id: UUID
+    ) -> StudentEnrollment | None:
         return await cls._get_by_id(db, StudentEnrollment, enrollment_id)
 
     @staticmethod
@@ -470,11 +591,13 @@ class AcademicRepository:
         class_id: UUID,
     ) -> list[StudentEnrollment]:
         result = await db.execute(
-            select(StudentEnrollment).where(
+            select(StudentEnrollment)
+            .where(
                 StudentEnrollment.class_id == class_id,
                 StudentEnrollment.is_current.is_(True),
                 StudentEnrollment.student_status == "active",
                 StudentEnrollment.source_deleted_at.is_(None),
-            ).order_by(StudentEnrollment.admission_number.asc())
+            )
+            .order_by(StudentEnrollment.admission_number.asc())
         )
         return list(result.scalars().all())
