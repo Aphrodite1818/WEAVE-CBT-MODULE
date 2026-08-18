@@ -1,8 +1,8 @@
-"""Singleton WebSocket supervisor for live Weave -> CBT synchronization.
+"""Singleton near-real-time supervisor for Weave -> CBT synchronization.
 
-The socket is the low-latency wake path. A slow periodic cursor reconciliation
-runs while the socket is healthy so a missed live frame cannot leave the local
-academic projection stale indefinitely.
+PostgreSQL session advisory leadership guarantees that exactly one local API
+process owns the Cloud socket. The WebSocket is only a low-latency cursor wake
+path; durable HTTP reconciliation remains authoritative.
 """
 
 from __future__ import annotations
@@ -10,14 +10,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import secrets
 
-from redis.exceptions import RedisError
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection
 from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed
 
-from app.core.database import async_session_factory
-from app.core.redis import redis_client
+from app.core.database import async_session_factory, engine
 from app.domains.node.exceptions import (
     NodeIdentityNotFoundError,
     NodeIdentityStorageError,
@@ -28,29 +27,16 @@ from app.integrations.weave.academics import weave_academics_gateway
 
 logger = logging.getLogger(__name__)
 
-SYNC_LEADER_KEY = "weave-cbt:sync:websocket-leader"
-SYNC_LEADER_TTL_SECONDS = 30
-SYNC_LEADER_RENEW_SECONDS = 10
+SYNC_LEADER_LOCK_KEY = 873_421_945
+LEADER_RETRY_SECONDS = 5
+LEADER_HEARTBEAT_SECONDS = 10
 RECONCILE_FALLBACK_SECONDS = 60
 RECONNECT_MIN_SECONDS = 2
 RECONNECT_MAX_SECONDS = 30
 
-_RENEW_LEASE_SCRIPT = """
-if redis.call('get', KEYS[1]) == ARGV[1] then
-  return redis.call('expire', KEYS[1], ARGV[2])
-end
-return 0
-"""
-_RELEASE_LEASE_SCRIPT = """
-if redis.call('get', KEYS[1]) == ARGV[1] then
-  return redis.call('del', KEYS[1])
-end
-return 0
-"""
-
 
 class SyncSupervisor:
-    """Maintain one live Weave socket across multiple local API processes."""
+    """Maintain one Cloud synchronization owner across local API processes."""
 
     def __init__(self) -> None:
         self._stop = asyncio.Event()
@@ -59,35 +45,51 @@ class SyncSupervisor:
         self._stop.set()
 
     async def run(self) -> None:
-        # Lifespan/test reloads may start the same singleton again after a
-        # graceful shutdown. A previous stop must not permanently disable it.
         self._stop.clear()
-        backoff = RECONNECT_MIN_SECONDS
-
         while not self._stop.is_set():
             try:
                 identity = node_identity_store.load()
             except NodeIdentityNotFoundError:
-                # An unpaired installation is a normal startup state.
                 await self._sleep(5)
                 continue
             except NodeIdentityStorageError:
-                # Corrupt/unreadable identity is serious but must not crash the
-                # FastAPI process that still serves the local recovery UI.
                 logger.exception("Unable to load persistent CBT installation identity.")
                 await self._sleep(15)
                 continue
 
-            lease_token = secrets.token_urlsafe(24)
-            if not await self._acquire_lease(lease_token):
-                await self._sleep(5)
-                continue
-
             try:
-                await self._reconcile_once()
+                async with engine.connect() as leader_connection:
+                    if not await self._acquire_leadership(leader_connection):
+                        await self._sleep(LEADER_RETRY_SECONDS)
+                        continue
+                    try:
+                        await self._run_as_leader(
+                            credential=identity.server_credential.get_secret_value(),
+                            leader_connection=leader_connection,
+                        )
+                    finally:
+                        await self._release_leadership(leader_connection)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("CBT sync leadership loop failed.")
+                await self._sleep(LEADER_RETRY_SECONDS)
+
+    async def _run_as_leader(
+        self,
+        *,
+        credential: str,
+        leader_connection: AsyncConnection,
+    ) -> None:
+        backoff = RECONNECT_MIN_SECONDS
+        while not self._stop.is_set():
+            try:
+                await self._check_leadership_connection(leader_connection)
+                current_cursor = await self._reconcile_once()
                 await self._stream(
-                    identity.server_credential.get_secret_value(),
-                    lease_token,
+                    credential=credential,
+                    current_cursor=current_cursor,
+                    leader_connection=leader_connection,
                 )
                 backoff = RECONNECT_MIN_SECONDS
             except asyncio.CancelledError:
@@ -96,14 +98,17 @@ class SyncSupervisor:
                 logger.exception("Weave CBT live synchronization supervisor failed.")
                 await self._sleep(backoff)
                 backoff = min(backoff * 2, RECONNECT_MAX_SECONDS)
-            finally:
-                await self._release_lease(lease_token)
 
-    async def _stream(self, credential: str, lease_token: str) -> None:
+    async def _stream(
+        self,
+        *,
+        credential: str,
+        current_cursor: int,
+        leader_connection: AsyncConnection,
+    ) -> int:
         loop = asyncio.get_running_loop()
-        # run() reconciles immediately before opening the socket, so the fallback
-        # clock starts from a known authoritative cursor check.
         last_reconcile_at = loop.time()
+        last_leader_check_at = loop.time()
 
         async with connect(
             weave_academics_gateway.stream_url(),
@@ -115,26 +120,24 @@ class SyncSupervisor:
             proxy=None,
         ) as websocket:
             while not self._stop.is_set():
-                if not await self._renew_lease(lease_token):
-                    logger.warning(
-                        "CBT sync WebSocket lease was lost; closing local stream."
-                    )
-                    return
+                now = loop.time()
+                if now - last_leader_check_at >= LEADER_HEARTBEAT_SECONDS:
+                    await self._check_leadership_connection(leader_connection)
+                    last_leader_check_at = now
 
-                last_reconcile_at = await self._reconcile_if_due(
-                    last_reconcile_at=last_reconcile_at,
-                    now=loop.time(),
-                )
+                if now - last_reconcile_at >= RECONCILE_FALLBACK_SECONDS:
+                    current_cursor = await self._reconcile_once()
+                    last_reconcile_at = loop.time()
 
                 try:
                     raw_message = await asyncio.wait_for(
                         websocket.recv(),
-                        timeout=SYNC_LEADER_RENEW_SECONDS,
+                        timeout=LEADER_HEARTBEAT_SECONDS,
                     )
                 except TimeoutError:
                     continue
                 except ConnectionClosed:
-                    return
+                    return current_cursor
 
                 if isinstance(raw_message, bytes):
                     raw_message = raw_message.decode("utf-8")
@@ -147,73 +150,54 @@ class SyncSupervisor:
                     continue
 
                 message_type = message.get("type")
-                if message_type in {"cbt.sync.reconcile", "cbt.sync.change"}:
-                    await self._reconcile_once()
+                if message_type in {"connection.ready", "cbt.sync.available"}:
+                    advertised_cursor = message.get("cursor")
+                    if (
+                        isinstance(advertised_cursor, int)
+                        and advertised_cursor > current_cursor
+                    ):
+                        current_cursor = await self._reconcile_once()
+                        last_reconcile_at = loop.time()
+                elif message_type == "cbt.sync.check":
+                    current_cursor = await self._reconcile_once()
                     last_reconcile_at = loop.time()
-                elif (
-                    message_type == "connection.ready"
-                    and message.get("reconciliation_required") is True
-                ):
-                    await self._reconcile_once()
-                    last_reconcile_at = loop.time()
 
-    async def _reconcile_if_due(
-        self,
-        *,
-        last_reconcile_at: float,
-        now: float,
-    ) -> float:
-        """Run the durable cursor path when the live wake channel has been quiet too long."""
-
-        if now - last_reconcile_at < RECONCILE_FALLBACK_SECONDS:
-            return last_reconcile_at
-        await self._reconcile_once()
-        return now
-
-    async def _reconcile_once(self) -> None:
-        async with async_session_factory() as db:
-            await sync_service.reconcile(db)
+        return current_cursor
 
     @staticmethod
-    async def _acquire_lease(token: str) -> bool:
-        try:
-            return bool(
-                await redis_client.set(
-                    SYNC_LEADER_KEY,
-                    token,
-                    nx=True,
-                    ex=SYNC_LEADER_TTL_SECONDS,
-                )
+    async def _acquire_leadership(connection: AsyncConnection) -> bool:
+        acquired = bool(
+            await connection.scalar(
+                text("SELECT pg_try_advisory_lock(:lock_key)"),
+                {"lock_key": SYNC_LEADER_LOCK_KEY},
             )
-        except RedisError:
-            logger.warning("Redis unavailable; live sync leader lease not acquired.")
-            return False
+        )
+        await connection.commit()
+        return acquired
 
     @staticmethod
-    async def _renew_lease(token: str) -> bool:
+    async def _release_leadership(connection: AsyncConnection) -> None:
         try:
-            result = await redis_client.eval(
-                _RENEW_LEASE_SCRIPT,
-                1,
-                SYNC_LEADER_KEY,
-                token,
-                SYNC_LEADER_TTL_SECONDS,
+            await connection.execute(
+                text("SELECT pg_advisory_unlock(:lock_key)"),
+                {"lock_key": SYNC_LEADER_LOCK_KEY},
             )
-            return bool(result)
-        except RedisError:
-            return False
-
-    @staticmethod
-    async def _release_lease(token: str) -> None:
-        try:
-            await redis_client.eval(
-                _RELEASE_LEASE_SCRIPT,
-                1,
-                SYNC_LEADER_KEY,
-                token,
-            )
-        except RedisError:
+            await connection.commit()
+        except Exception:
+            # Closing a broken connection releases its session advisory lock on
+            # PostgreSQL automatically.
             pass
+
+    @staticmethod
+    async def _check_leadership_connection(connection: AsyncConnection) -> None:
+        await connection.execute(text("SELECT 1"))
+        await connection.commit()
+
+    @staticmethod
+    async def _reconcile_once() -> int:
+        async with async_session_factory() as db:
+            result = await sync_service.reconcile(db)
+            return result.cursor
 
     async def _sleep(self, seconds: float) -> None:
         try:
