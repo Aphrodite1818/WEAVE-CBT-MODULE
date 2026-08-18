@@ -8,11 +8,14 @@ live frames.
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.academics.models import (
@@ -63,6 +66,8 @@ from app.integrations.weave.schemas import (
     WeaveTeacherSnapshot,
 )
 
+logger = logging.getLogger(__name__)
+
 SYNC_SCOPE = "academics"
 DEFAULT_PAGE_SIZE = 500
 
@@ -111,6 +116,27 @@ class SyncContractViolation(RuntimeError):
     """Raised when a valid Weave response contradicts local identity/cursor state."""
 
 
+class SyncDependencyMissing(SyncContractViolation):
+    """Raised when a delta references a Weave projection not installed locally."""
+
+    def __init__(
+        self,
+        *,
+        entity_type: str,
+        entity_id: UUID,
+        dependency_type: str,
+        missing_ids: Sequence[UUID],
+    ) -> None:
+        self.entity_type = entity_type
+        self.entity_id = entity_id
+        self.dependency_type = dependency_type
+        self.missing_ids = tuple(missing_ids)
+        super().__init__(
+            f"{entity_type} {entity_id} references {len(self.missing_ids)} "
+            f"{dependency_type} projection(s) missing locally; full bootstrap required."
+        )
+
+
 class SyncService:
     def __init__(self, gateway: WeaveAcademicsGateway = weave_academics_gateway) -> None:
         self.gateway = gateway
@@ -118,6 +144,30 @@ class SyncService:
     @staticmethod
     def _values(snapshot: BaseModel) -> dict[str, Any]:
         return snapshot.model_dump(exclude={"id", "eligible_enrollment_ids"})
+
+    @staticmethod
+    async def _missing_enrollment_ids(
+        db: AsyncSession,
+        enrollment_ids: Sequence[UUID],
+    ) -> tuple[UUID, ...]:
+        unique_ids = tuple(dict.fromkeys(enrollment_ids))
+        if not unique_ids:
+            return ()
+        installed_ids = set(
+            (
+                await db.execute(
+                    select(StudentEnrollment.id).where(
+                        StudentEnrollment.id.in_(unique_ids),
+                        StudentEnrollment.source_deleted_at.is_(None),
+                    )
+                )
+            ).scalars()
+        )
+        return tuple(
+            enrollment_id
+            for enrollment_id in unique_ids
+            if enrollment_id not in installed_ids
+        )
 
     async def _apply_snapshot_entity(
         self,
@@ -137,10 +187,19 @@ class SyncService:
             synced_at=synced_at,
         )
         if entity_type == "subject_offering":
+            enrollment_ids = snapshot.eligible_enrollment_ids  # type: ignore[attr-defined]
+            missing_ids = await self._missing_enrollment_ids(db, enrollment_ids)
+            if missing_ids:
+                raise SyncDependencyMissing(
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    dependency_type="student_enrollment",
+                    missing_ids=missing_ids,
+                )
             await AcademicRepository.replace_offering_eligibility(
                 db,
                 offering_id=entity_id,
-                enrollment_ids=snapshot.eligible_enrollment_ids,  # type: ignore[attr-defined]
+                enrollment_ids=enrollment_ids,
             )
 
     async def _apply_change(self, db: AsyncSession, change: WeaveSyncChange) -> None:
@@ -192,8 +251,19 @@ class SyncService:
     async def get_status(self, db: AsyncSession) -> SyncStatusResponse:
         return await self._status(db)
 
-    async def bootstrap(self, db: AsyncSession) -> SyncReconcileResponse:
-        """Fetch and atomically install one complete current Weave snapshot."""
+    async def bootstrap(
+        self,
+        db: AsyncSession,
+        *,
+        force: bool = False,
+    ) -> SyncReconcileResponse:
+        """Fetch and atomically install one complete current Weave snapshot.
+
+        ``force`` permits reinstalling a snapshot at the same cursor when the
+        incremental stream proves the local projection graph is incomplete.
+        A snapshot older than a concurrently advanced local cursor is never
+        installed.
+        """
         identity = node_identity_store.load()
 
         # Never hold a local PostgreSQL transaction while waiting on Weave.
@@ -218,11 +288,15 @@ class SyncService:
                 )
                 state.last_attempted_at = applied_at
 
-                # Another process may have completed bootstrap while this process
-                # was downloading the same snapshot. Never replace a newer local
-                # cursor with an older/equal bootstrap.
-                if (
-                    state.bootstrap_completed_at is not None
+                # Another process may have completed reconciliation/bootstrap
+                # while this process downloaded its snapshot. Never replace a
+                # newer local cursor with an older bootstrap.
+                if state.cursor > payload.metadata.cursor:
+                    state.last_error = None
+                    await SyncRepository.save_state(db, state)
+                elif (
+                    not force
+                    and state.bootstrap_completed_at is not None
                     and state.cursor >= payload.metadata.cursor
                 ):
                     state.last_error = None
@@ -366,6 +440,17 @@ class SyncService:
                 cursor = delta.next_cursor
                 if not delta.has_more:
                     break
+        except SyncDependencyMissing as exc:
+            # The delta page is already rolled back by the transaction context.
+            # Reinstall the authoritative current snapshot instead of repeatedly
+            # retrying a cursor whose derived payload references missing parents.
+            logger.warning(
+                "Local CBT sync dependency gap detected; forcing full academic "
+                "bootstrap recovery: %s",
+                exc,
+            )
+            await db.rollback()
+            return await self.bootstrap(db, force=True)
         except Exception as exc:
             await self._record_failure(db, str(exc))
             raise

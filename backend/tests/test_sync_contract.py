@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import os
 import unittest
+from datetime import UTC, datetime
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
+
+from pydantic import SecretStr
 
 os.environ.setdefault(
     "DATABASE_URL",
@@ -12,12 +17,38 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
 from app import model_registry  # noqa: E402,F401
 from app.core.database import Base  # noqa: E402
-from app.domains.sync.service import ENTITY_MODELS, ENTITY_SCHEMAS  # noqa: E402
+from app.domains.academics.repository import AcademicRepository  # noqa: E402
+from app.domains.node.identity_store import node_identity_store  # noqa: E402
+from app.domains.sync.repository import SyncRepository  # noqa: E402
+from app.domains.sync.service import (  # noqa: E402
+    ENTITY_MODELS,
+    ENTITY_SCHEMAS,
+    SyncDependencyMissing,
+    SyncService,
+)
 from app.integrations.weave.schemas import (  # noqa: E402
     SYNC_SCHEMA_VERSION,
     WeaveAcademicBootstrap,
+    WeaveSubjectOfferingSnapshot,
     WeaveSyncChange,
+    WeaveSyncDelta,
 )
+
+
+class _AsyncTransaction:
+    async def __aenter__(self) -> None:
+        return None
+
+    async def __aexit__(self, exc_type, exc, traceback) -> bool:
+        return False
+
+
+class _FakeAsyncSession:
+    def __init__(self) -> None:
+        self.rollback = AsyncMock()
+
+    def begin(self) -> _AsyncTransaction:
+        return _AsyncTransaction()
 
 
 class SyncContractTests(unittest.TestCase):
@@ -146,6 +177,138 @@ class SyncContractTests(unittest.TestCase):
             "audit_events",
         }
         self.assertTrue(expected <= tables, expected - tables)
+
+
+class SyncRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_missing_offering_enrollment_is_detected_before_fk_write(self) -> None:
+        service = SyncService()
+        offering_id = uuid4()
+        missing_enrollment_id = uuid4()
+        snapshot = WeaveSubjectOfferingSnapshot(
+            id=offering_id,
+            curriculum_subject_id=uuid4(),
+            academic_term_id=uuid4(),
+            department_id=None,
+            eligible_enrollment_ids=[missing_enrollment_id],
+        )
+
+        with (
+            patch.object(
+                AcademicRepository,
+                "upsert_projection",
+                new=AsyncMock(),
+            ),
+            patch.object(
+                service,
+                "_missing_enrollment_ids",
+                new=AsyncMock(return_value=(missing_enrollment_id,)),
+            ),
+            patch.object(
+                AcademicRepository,
+                "replace_offering_eligibility",
+                new=AsyncMock(),
+            ) as replace_eligibility,
+        ):
+            with self.assertRaises(SyncDependencyMissing) as raised:
+                await service._apply_snapshot_entity(
+                    object(),  # type: ignore[arg-type]
+                    "subject_offering",
+                    snapshot,
+                    synced_at=datetime.now(UTC),
+                )
+
+        self.assertEqual(raised.exception.entity_id, offering_id)
+        self.assertEqual(raised.exception.missing_ids, (missing_enrollment_id,))
+        replace_eligibility.assert_not_awaited()
+
+    async def test_dependency_gap_forces_authoritative_bootstrap_recovery(self) -> None:
+        cursor = 40
+        offering_id = uuid4()
+        missing_enrollment_id = uuid4()
+        delta = WeaveSyncDelta(
+            from_cursor=cursor,
+            next_cursor=cursor + 1,
+            has_more=False,
+            changes=[
+                WeaveSyncChange(
+                    event_id=uuid4(),
+                    cursor=cursor + 1,
+                    entity_type="subject_offering",
+                    entity_id=offering_id,
+                    operation="updated",
+                    schema_version=SYNC_SCHEMA_VERSION,
+                    payload={
+                        "id": str(offering_id),
+                        "curriculum_subject_id": str(uuid4()),
+                        "academic_term_id": str(uuid4()),
+                        "department_id": None,
+                        "eligible_enrollment_ids": [str(missing_enrollment_id)],
+                    },
+                    occurred_at=datetime.now(UTC),
+                )
+            ],
+        )
+        gateway = SimpleNamespace(fetch_changes=AsyncMock(return_value=delta))
+        service = SyncService(gateway=gateway)  # type: ignore[arg-type]
+        db = _FakeAsyncSession()
+        state = SimpleNamespace(
+            cursor=cursor,
+            bootstrap_completed_at=datetime.now(UTC),
+        )
+        locked_state = SimpleNamespace(
+            cursor=cursor,
+            last_attempted_at=None,
+            schema_version=SYNC_SCHEMA_VERSION,
+            last_successful_at=None,
+            last_error=None,
+        )
+        dependency_error = SyncDependencyMissing(
+            entity_type="subject_offering",
+            entity_id=offering_id,
+            dependency_type="student_enrollment",
+            missing_ids=[missing_enrollment_id],
+        )
+        recovered = object()
+
+        with (
+            patch.object(
+                node_identity_store,
+                "load",
+                return_value=SimpleNamespace(
+                    server_credential=SecretStr("server-credential")
+                ),
+            ),
+            patch.object(
+                SyncRepository,
+                "get_state",
+                new=AsyncMock(return_value=state),
+            ),
+            patch.object(
+                SyncRepository,
+                "acquire_apply_lock",
+                new=AsyncMock(),
+            ),
+            patch.object(
+                SyncRepository,
+                "get_or_create_state",
+                new=AsyncMock(return_value=locked_state),
+            ),
+            patch.object(
+                service,
+                "_apply_change",
+                new=AsyncMock(side_effect=dependency_error),
+            ),
+            patch.object(
+                service,
+                "bootstrap",
+                new=AsyncMock(return_value=recovered),
+            ) as bootstrap,
+        ):
+            result = await service.reconcile(db)  # type: ignore[arg-type]
+
+        self.assertIs(result, recovered)
+        bootstrap.assert_awaited_once_with(db, force=True)
+        self.assertGreaterEqual(db.rollback.await_count, 2)
 
 
 if __name__ == "__main__":
