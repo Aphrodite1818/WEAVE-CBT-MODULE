@@ -1,8 +1,9 @@
-"""Local academic projections synchronized from Weave Cloud v2.
+"""Local academic projections synchronized from Weave Cloud v3.
 
 These rows are read-only projections from Weave. Their primary keys are the
 Weave UUIDs supplied by the synchronization contract. Local CBT-owned domains
-reference them, but CBT never mutates the academic meaning of these records.
+may reference them, so disappearing Cloud rows are tombstoned rather than
+physically deleted.
 """
 
 from __future__ import annotations
@@ -20,7 +21,6 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
-    UniqueConstraint,
     func,
     text,
 )
@@ -55,8 +55,6 @@ class WeaveProjectionMixin:
 
 
 class SchoolProfile(WeaveProjectionMixin, Base):
-    """Paired school identity/context projected from the bootstrap envelope."""
-
     __tablename__ = "school_profiles"
 
     name: Mapped[str] = mapped_column(String(NAME_MAX_LENGTH), nullable=False)
@@ -370,8 +368,21 @@ class TeacherAssignment(WeaveProjectionMixin, Base):
                 "is_active = true AND source_deleted_at IS NULL"
             ),
         ),
-        Index("ix_teacher_assignments_teacher_active", "teacher_membership_id", "is_active"),
-        Index("ix_teacher_assignments_class_subject_active", "class_id", "curriculum_subject_id", "is_active"),
+        Index(
+            "ix_teacher_assignments_live_teacher",
+            "teacher_membership_id",
+            postgresql_where=text(
+                "is_active = true AND source_deleted_at IS NULL"
+            ),
+        ),
+        Index(
+            "ix_teacher_assignments_live_class_subject",
+            "class_id",
+            "curriculum_subject_id",
+            postgresql_where=text(
+                "is_active = true AND source_deleted_at IS NULL"
+            ),
+        ),
     )
 
 
@@ -379,7 +390,9 @@ class StudentEnrollment(WeaveProjectionMixin, Base):
     __tablename__ = "student_enrollments"
 
     student_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
-    admission_number: Mapped[str] = mapped_column(String(ADMISSION_NUMBER_MAX_LENGTH), nullable=False, index=True)
+    admission_number: Mapped[str] = mapped_column(
+        String(ADMISSION_NUMBER_MAX_LENGTH), nullable=False, index=True
+    )
     first_name: Mapped[str | None] = mapped_column(String(NAME_MAX_LENGTH), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(NAME_MAX_LENGTH), nullable=True)
     academic_level_id: Mapped[UUID] = mapped_column(
@@ -394,7 +407,9 @@ class StudentEnrollment(WeaveProjectionMixin, Base):
     is_current: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true"), index=True
     )
-    student_status: Mapped[str] = mapped_column(String(STATUS_MAX_LENGTH), nullable=False, index=True)
+    student_status: Mapped[str] = mapped_column(
+        String(STATUS_MAX_LENGTH), nullable=False, index=True
+    )
 
     __table_args__ = (
         Index(
@@ -403,24 +418,14 @@ class StudentEnrollment(WeaveProjectionMixin, Base):
             unique=True,
             postgresql_where=text("is_current = true AND source_deleted_at IS NULL"),
         ),
-        Index("ix_student_enrollments_class_current", "class_id", "is_current"),
-        Index("ix_student_enrollments_session_current", "academic_session_id", "is_current"),
-    )
-
-
-class SubjectOfferingEligibility(Base):
-    """Normalized candidate eligibility projected from an offering payload."""
-
-    __tablename__ = "subject_offering_eligibilities"
-
-    offering_id: Mapped[UUID] = mapped_column(
-        ForeignKey("subject_offerings.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    enrollment_id: Mapped[UUID] = mapped_column(
-        ForeignKey("student_enrollments.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-
-    __table_args__ = (
-        UniqueConstraint("offering_id", "enrollment_id", name="uq_subject_offering_eligibility"),
-        Index("ix_subject_offering_eligibilities_enrollment", "enrollment_id", "offering_id"),
+        Index(
+            "ix_student_enrollments_live_class",
+            "class_id",
+            postgresql_where=text("is_current = true AND source_deleted_at IS NULL"),
+        ),
+        Index(
+            "ix_student_enrollments_live_session",
+            "academic_session_id",
+            postgresql_where=text("is_current = true AND source_deleted_at IS NULL"),
+        ),
     )
