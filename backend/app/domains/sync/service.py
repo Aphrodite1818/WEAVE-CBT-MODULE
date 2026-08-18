@@ -30,6 +30,7 @@ from app.domains.academics.models import (
     Curriculum,
     CurriculumSubject,
     Department,
+    SchoolProfile,
     StudentEnrollment,
     SubjectOffering,
     TeacherAssignment,
@@ -107,7 +108,7 @@ ENTITY_MODELS = {
 
 
 class SyncContractViolation(RuntimeError):
-    """Raised when a validly encoded Weave response contradicts local identity/cursor state."""
+    """Raised when a valid Weave response contradicts local identity/cursor state."""
 
 
 class SyncService:
@@ -116,8 +117,7 @@ class SyncService:
 
     @staticmethod
     def _values(snapshot: BaseModel) -> dict[str, Any]:
-        values = snapshot.model_dump(exclude={"id", "eligible_enrollment_ids"})
-        return values
+        return snapshot.model_dump(exclude={"id", "eligible_enrollment_ids"})
 
     async def _apply_snapshot_entity(
         self,
@@ -137,11 +137,10 @@ class SyncService:
             synced_at=synced_at,
         )
         if entity_type == "subject_offering":
-            offering = snapshot
             await AcademicRepository.replace_offering_eligibility(
                 db,
                 offering_id=entity_id,
-                enrollment_ids=offering.eligible_enrollment_ids,  # type: ignore[attr-defined]
+                enrollment_ids=snapshot.eligible_enrollment_ids,  # type: ignore[attr-defined]
             )
 
     async def _apply_change(self, db: AsyncSession, change: WeaveSyncChange) -> None:
@@ -183,7 +182,11 @@ class SyncService:
     async def _status(db: AsyncSession) -> SyncStatusResponse:
         state = await SyncRepository.get_state(db, SYNC_SCOPE)
         if state is None:
-            return SyncStatusResponse(scope=SYNC_SCOPE, schema_version=SYNC_SCHEMA_VERSION, cursor=0)
+            return SyncStatusResponse(
+                scope=SYNC_SCOPE,
+                schema_version=SYNC_SCHEMA_VERSION,
+                cursor=0,
+            )
         return SyncStatusResponse.model_validate(state, from_attributes=True)
 
     async def get_status(self, db: AsyncSession) -> SyncStatusResponse:
@@ -193,7 +196,7 @@ class SyncService:
         """Fetch and atomically install one complete current Weave snapshot."""
         identity = node_identity_store.load()
 
-        # Network call occurs before opening the local write transaction.
+        # Never hold a local PostgreSQL transaction while waiting on Weave.
         payload = await self.gateway.fetch_bootstrap(
             server_credential=identity.server_credential,
         )
@@ -204,52 +207,76 @@ class SyncService:
         await db.rollback()
 
         applied_at = datetime.now(UTC)
+        installed_snapshot = False
         try:
             async with db.begin():
-                state = await SyncRepository.get_or_create_state(db, SYNC_SCOPE, lock=True)
+                await SyncRepository.acquire_apply_lock(db)
+                state = await SyncRepository.get_or_create_state(
+                    db,
+                    SYNC_SCOPE,
+                    lock=True,
+                )
                 state.last_attempted_at = applied_at
 
-                await AcademicRepository.mark_all_projection_rows_deleted(
-                    db,
-                    deleted_at=applied_at,
-                )
+                # Another process may have completed bootstrap while this process
+                # was downloading the same snapshot. Never replace a newer local
+                # cursor with an older/equal bootstrap.
+                if (
+                    state.bootstrap_completed_at is not None
+                    and state.cursor >= payload.metadata.cursor
+                ):
+                    state.last_error = None
+                    await SyncRepository.save_state(db, state)
+                else:
+                    await AcademicRepository.upsert_projection(
+                        db,
+                        SchoolProfile,
+                        payload.school.id,
+                        self._values(payload.school),
+                        synced_at=payload.metadata.generated_at,
+                    )
+                    await AcademicRepository.mark_all_projection_rows_deleted(
+                        db,
+                        deleted_at=applied_at,
+                    )
 
-                ordered_sections: tuple[tuple[str, list[BaseModel]], ...] = (
-                    ("academic_session", list(payload.sessions)),
-                    ("academic_term", list(payload.terms)),
-                    ("academic_level", list(payload.levels)),
-                    ("arm_label", list(payload.arm_labels)),
-                    ("department", list(payload.departments)),
-                    ("class", list(payload.classes)),
-                    ("class_term_department", list(payload.class_term_departments)),
-                    ("subject", list(payload.subjects)),
-                    ("curriculum", list(payload.curricula)),
-                    ("curriculum_subject", list(payload.curriculum_subjects)),
-                    ("assessment_scheme", list(payload.assessment_schemes)),
-                    ("assessment_component", list(payload.assessment_components)),
-                    ("admin", list(payload.admins)),
-                    ("teacher", list(payload.teachers)),
-                    ("teacher_assignment", list(payload.teacher_assignments)),
-                    ("student_enrollment", list(payload.student_enrollments)),
-                    # Offerings are last because eligibility references enrollments.
-                    ("subject_offering", list(payload.offerings)),
-                )
-                for entity_type, snapshots in ordered_sections:
-                    for snapshot in snapshots:
-                        await self._apply_snapshot_entity(
-                            db,
-                            entity_type,
-                            snapshot,
-                            synced_at=payload.metadata.generated_at,
-                        )
+                    ordered_sections: tuple[tuple[str, list[BaseModel]], ...] = (
+                        ("academic_session", list(payload.sessions)),
+                        ("academic_term", list(payload.terms)),
+                        ("academic_level", list(payload.levels)),
+                        ("arm_label", list(payload.arm_labels)),
+                        ("department", list(payload.departments)),
+                        ("class", list(payload.classes)),
+                        ("class_term_department", list(payload.class_term_departments)),
+                        ("subject", list(payload.subjects)),
+                        ("curriculum", list(payload.curricula)),
+                        ("curriculum_subject", list(payload.curriculum_subjects)),
+                        ("assessment_scheme", list(payload.assessment_schemes)),
+                        ("assessment_component", list(payload.assessment_components)),
+                        ("admin", list(payload.admins)),
+                        ("teacher", list(payload.teachers)),
+                        ("teacher_assignment", list(payload.teacher_assignments)),
+                        ("student_enrollment", list(payload.student_enrollments)),
+                        # Eligibility FKs reference synchronized enrollments.
+                        ("subject_offering", list(payload.offerings)),
+                    )
+                    for entity_type, snapshots in ordered_sections:
+                        for snapshot in snapshots:
+                            await self._apply_snapshot_entity(
+                                db,
+                                entity_type,
+                                snapshot,
+                                synced_at=payload.metadata.generated_at,
+                            )
 
-                state.schema_version = payload.metadata.schema_version
-                state.cursor = payload.metadata.cursor
-                state.bootstrap_snapshot_id = payload.metadata.snapshot_id
-                state.bootstrap_completed_at = applied_at
-                state.last_successful_at = applied_at
-                state.last_error = None
-                await SyncRepository.save_state(db, state)
+                    state.schema_version = payload.metadata.schema_version
+                    state.cursor = payload.metadata.cursor
+                    state.bootstrap_snapshot_id = payload.metadata.snapshot_id
+                    state.bootstrap_completed_at = applied_at
+                    state.last_successful_at = applied_at
+                    state.last_error = None
+                    await SyncRepository.save_state(db, state)
+                    installed_snapshot = True
         except Exception as exc:
             await self._record_failure(db, str(exc))
             raise
@@ -259,7 +286,7 @@ class SyncService:
             **status.model_dump(),
             previous_cursor=previous_cursor,
             changes_applied=0,
-            bootstrapped=True,
+            bootstrapped=installed_snapshot,
         )
 
     async def reconcile(self, db: AsyncSession) -> SyncReconcileResponse:
@@ -277,6 +304,7 @@ class SyncService:
 
         try:
             while True:
+                # Network recovery happens without a database transaction/lock.
                 delta = await self.gateway.fetch_changes(
                     server_credential=identity.server_credential,
                     after_cursor=cursor,
@@ -290,38 +318,50 @@ class SyncService:
                     raise SyncContractViolation("Weave synchronization cursor moved backwards.")
 
                 attempted_at = datetime.now(UTC)
+                cursor_was_advanced_elsewhere = False
                 async with db.begin():
+                    await SyncRepository.acquire_apply_lock(db)
                     locked_state = await SyncRepository.get_or_create_state(
                         db,
                         SYNC_SCOPE,
                         lock=True,
                     )
+
+                    if locked_state.cursor < cursor:
+                        raise SyncContractViolation(
+                            "Local synchronization cursor moved backwards."
+                        )
                     if locked_state.cursor != cursor:
-                        raise SyncContractViolation(
-                            "Local synchronization cursor changed during reconciliation."
-                        )
-                    locked_state.last_attempted_at = attempted_at
+                        # A concurrent manual/live reconciliation already
+                        # committed progress. Exit this transaction and refetch
+                        # from the newer durable cursor instead of returning 500.
+                        cursor = locked_state.cursor
+                        cursor_was_advanced_elsewhere = True
+                    else:
+                        locked_state.last_attempted_at = attempted_at
+                        last_change_cursor = cursor
+                        for change in delta.changes:
+                            if change.cursor <= last_change_cursor:
+                                raise SyncContractViolation(
+                                    "Weave returned non-increasing synchronization changes."
+                                )
+                            await self._apply_change(db, change)
+                            last_change_cursor = change.cursor
+                            changes_applied += 1
 
-                    last_change_cursor = cursor
-                    for change in delta.changes:
-                        if change.cursor <= last_change_cursor:
+                        if delta.changes and delta.next_cursor != last_change_cursor:
                             raise SyncContractViolation(
-                                "Weave returned non-increasing synchronization changes."
+                                "Weave delta next_cursor does not match the last returned change."
                             )
-                        await self._apply_change(db, change)
-                        last_change_cursor = change.cursor
-                        changes_applied += 1
 
-                    if delta.changes and delta.next_cursor != last_change_cursor:
-                        raise SyncContractViolation(
-                            "Weave delta next_cursor does not match the last returned change."
-                        )
+                        locked_state.cursor = delta.next_cursor
+                        locked_state.schema_version = SYNC_SCHEMA_VERSION
+                        locked_state.last_successful_at = attempted_at
+                        locked_state.last_error = None
+                        await SyncRepository.save_state(db, locked_state)
 
-                    locked_state.cursor = delta.next_cursor
-                    locked_state.schema_version = SYNC_SCHEMA_VERSION
-                    locked_state.last_successful_at = attempted_at
-                    locked_state.last_error = None
-                    await SyncRepository.save_state(db, locked_state)
+                if cursor_was_advanced_elsewhere:
+                    continue
 
                 cursor = delta.next_cursor
                 if not delta.has_more:
@@ -353,7 +393,12 @@ class SyncService:
     async def _record_failure(db: AsyncSession, message: str) -> None:
         await db.rollback()
         async with db.begin():
-            state = await SyncRepository.get_or_create_state(db, SYNC_SCOPE, lock=True)
+            await SyncRepository.acquire_apply_lock(db)
+            state = await SyncRepository.get_or_create_state(
+                db,
+                SYNC_SCOPE,
+                lock=True,
+            )
             state.last_attempted_at = datetime.now(UTC)
             state.last_error = message[:1024]
             await SyncRepository.save_state(db, state)
