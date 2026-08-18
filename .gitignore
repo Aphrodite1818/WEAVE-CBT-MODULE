@@ -54,6 +54,7 @@ test-results/
 *.sqlite3
 dump.rdb
 appendonlydir/
+.weave-cbt/
 
 # Logs
 logs/
