@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
@@ -191,6 +191,8 @@ class WeaveTeacherAssignmentSnapshot(SyncContractBase):
     class_id: UUID
     curriculum_subject_id: UUID
     is_active: bool
+    effective_from: date
+    effective_to: date | None = None
 
 
 class WeaveStudentEnrollmentSnapshot(SyncContractBase):
