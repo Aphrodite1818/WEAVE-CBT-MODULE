@@ -8,7 +8,7 @@ domain; exam/question authorization belongs to their respective services.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any, TypeVar
 from uuid import UUID
 
@@ -71,8 +71,6 @@ class AcademicRepository:
         *,
         synced_at: datetime | None = None,
     ) -> None:
-        """Upsert one entity type in a single PostgreSQL statement."""
-
         if not rows:
             return
         timestamp = synced_at or datetime.now(UTC)
@@ -510,9 +508,7 @@ class AcademicRepository:
         membership_id: UUID | str,
     ) -> AcademicTeacher | None:
         try:
-            teacher_id = (
-                membership_id if isinstance(membership_id, UUID) else UUID(membership_id)
-            )
+            teacher_id = membership_id if isinstance(membership_id, UUID) else UUID(membership_id)
         except (TypeError, ValueError):
             return None
         return await cls.get_teacher_by_id(db, teacher_id)
@@ -522,6 +518,17 @@ class AcademicRepository:
         cls, db: AsyncSession, assignment_id: UUID
     ) -> TeacherAssignment | None:
         return await cls._get_by_id(db, TeacherAssignment, assignment_id)
+
+    @staticmethod
+    def _effective_assignment_predicates() -> tuple[Any, Any]:
+        today = date.today()
+        return (
+            TeacherAssignment.effective_from <= today,
+            or_(
+                TeacherAssignment.effective_to.is_(None),
+                TeacherAssignment.effective_to >= today,
+            ),
+        )
 
     @staticmethod
     async def get_active_assignment_for_scope(
@@ -539,6 +546,7 @@ class AcademicRepository:
                     TeacherAssignment.curriculum_subject_id == curriculum_subject_id,
                     TeacherAssignment.is_active.is_(True),
                     TeacherAssignment.source_deleted_at.is_(None),
+                    *AcademicRepository._effective_assignment_predicates(),
                 )
             )
         ).scalar_one_or_none()
@@ -556,6 +564,7 @@ class AcademicRepository:
                     TeacherAssignment.curriculum_subject_id == curriculum_subject_id,
                     TeacherAssignment.is_active.is_(True),
                     TeacherAssignment.source_deleted_at.is_(None),
+                    *AcademicRepository._effective_assignment_predicates(),
                 )
             )
         ).scalar_one_or_none()
@@ -574,6 +583,7 @@ class AcademicRepository:
                         TeacherAssignment.curriculum_subject_id == curriculum_subject_id,
                         TeacherAssignment.is_active.is_(True),
                         TeacherAssignment.source_deleted_at.is_(None),
+                        *AcademicRepository._effective_assignment_predicates(),
                     )
                 )
             )
