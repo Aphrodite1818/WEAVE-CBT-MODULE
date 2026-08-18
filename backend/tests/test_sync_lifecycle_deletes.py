@@ -14,7 +14,7 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
 from app.domains.academics.repository import AcademicRepository  # noqa: E402
 from app.domains.sync.service import ENTITY_MODELS, SyncService  # noqa: E402
-from app.integrations.weave.schemas import WeaveSyncChange  # noqa: E402
+from app.integrations.weave.schemas import SYNC_SCHEMA_VERSION, WeaveSyncChange  # noqa: E402
 
 
 class SyncLifecycleDeleteTests(unittest.IsolatedAsyncioTestCase):
@@ -31,23 +31,32 @@ class SyncLifecycleDeleteTests(unittest.IsolatedAsyncioTestCase):
                     entity_type=entity_type,
                     entity_id=entity_id,
                     operation="deleted",
-                    schema_version=2,
+                    schema_version=SYNC_SCHEMA_VERSION,
                     payload=None,
                     occurred_at=occurred_at,
                 )
-                db = object()
 
-                with patch.object(
-                    AcademicRepository,
-                    "tombstone_projection",
-                    new=AsyncMock(),
-                ) as tombstone_projection:
-                    await service._apply_change(db, change)  # type: ignore[arg-type]
+                with (
+                    patch.object(
+                        AcademicRepository,
+                        "bulk_tombstone_projections",
+                        new=AsyncMock(),
+                    ) as tombstone_projection,
+                    patch.object(
+                        AcademicRepository,
+                        "bulk_upsert_projections",
+                        new=AsyncMock(),
+                    ),
+                ):
+                    await service._apply_delta_page(  # type: ignore[arg-type]
+                        object(),
+                        [change],
+                    )
 
                 tombstone_projection.assert_awaited_once_with(
-                    db,
+                    unittest.mock.ANY,
                     ENTITY_MODELS[entity_type],
-                    entity_id,
+                    [entity_id],
                     deleted_at=occurred_at,
                 )
 
