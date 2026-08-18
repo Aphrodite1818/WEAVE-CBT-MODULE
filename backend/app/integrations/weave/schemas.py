@@ -9,7 +9,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, model_validator
 
-SYNC_SCHEMA_VERSION = 2
+SYNC_SCHEMA_VERSION = 3
 
 
 class WeavePairingRequest(BaseModel):
@@ -152,7 +152,6 @@ class WeaveSubjectOfferingSnapshot(SyncContractBase):
     curriculum_subject_id: UUID
     academic_term_id: UUID
     department_id: UUID | None = None
-    eligible_enrollment_ids: list[UUID] = Field(default_factory=list)
 
 
 class WeaveAssessmentSchemeSnapshot(SyncContractBase):
