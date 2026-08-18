@@ -1,7 +1,8 @@
-"""Low-level HTTP transport for communication with Weave Cloud."""
+"""Low-level pooled HTTP transport for communication with Weave Cloud."""
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
@@ -17,10 +18,41 @@ from app.integrations.weave.exceptions import (
 
 
 class WeaveClient:
-    """Own transport mechanics only; domain-specific contracts live elsewhere."""
+    """Own transport mechanics and reuse one keep-alive connection pool per process."""
 
     def __init__(self, base_url: str | None = None) -> None:
         self.base_url = (base_url or str(settings.WEAVE_API_BASE_URL)).rstrip("/")
+        self._client: httpx.AsyncClient | None = None
+        self._client_lock = asyncio.Lock()
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        client = self._client
+        if client is not None and not client.is_closed:
+            return client
+        async with self._client_lock:
+            client = self._client
+            if client is None or client.is_closed:
+                timeout = httpx.Timeout(
+                    timeout=settings.WEAVE_REQUEST_TIMEOUT_SECONDS,
+                    connect=settings.WEAVE_CONNECT_TIMEOUT_SECONDS,
+                )
+                self._client = httpx.AsyncClient(
+                    timeout=timeout,
+                    limits=httpx.Limits(
+                        max_connections=50,
+                        max_keepalive_connections=20,
+                        keepalive_expiry=30.0,
+                    ),
+                    headers={"Accept": "application/json"},
+                )
+            return self._client
+
+    async def close(self) -> None:
+        async with self._client_lock:
+            client = self._client
+            self._client = None
+        if client is not None and not client.is_closed:
+            await client.aclose()
 
     async def _request(
         self,
@@ -32,23 +64,15 @@ class WeaveClient:
         headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         url = self._build_url_path(path)
-        timeout = httpx.Timeout(
-            timeout=settings.WEAVE_REQUEST_TIMEOUT_SECONDS,
-            connect=settings.WEAVE_CONNECT_TIMEOUT_SECONDS,
-        )
-        request_headers = {"Accept": "application/json"}
-        if headers:
-            request_headers.update(headers)
-
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.request(
-                    method=method,
-                    url=url,
-                    json=json,
-                    params=params,
-                    headers=request_headers,
-                )
+            client = await self._get_client()
+            response = await client.request(
+                method=method,
+                url=url,
+                json=json,
+                params=params,
+                headers=headers,
+            )
         except httpx.TimeoutException as exc:
             raise WeaveUnavailableError("Weave Cloud did not respond in time") from exc
         except httpx.RequestError as exc:
@@ -93,7 +117,6 @@ class WeaveClient:
         return f"{self.base_url}/" + path.lstrip("/")
 
     def build_websocket_url(self, path: str) -> str:
-        """Build the authenticated Weave WebSocket endpoint from the HTTP base URL."""
         parsed = urlsplit(self._build_url_path(path))
         if parsed.scheme == "https":
             scheme = "wss"
