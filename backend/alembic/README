@@ -1,1 +1,19 @@
-Generic single-database configuration.
+# Weave CBT Alembic
+
+Alembic owns the PostgreSQL schema for the local CBT runtime.
+
+`env.py` imports `app.model_registry` before reading `Base.metadata`, so every durable SQLAlchemy model must be imported by `app/model_registry.py`. Autogenerate and `alembic check` therefore see academics, auth, questions, exams, candidates, attempts, results, audit, and sync tables.
+
+The first revision, `0001_initial_schema`, creates the complete schema from the frozen model sources in `alembic/schema_v1/`. Do not update that snapshot after a later revision exists. Any future model change must be represented by a new Alembic revision.
+
+Run Alembic from `backend/`:
+
+```bash
+alembic upgrade head
+alembic revision --autogenerate -m "describe schema change"
+alembic check
+alembic current
+alembic history
+```
+
+The database URL comes from application settings (`DATABASE_URL`). `alembic.ini` intentionally contains only a placeholder URL; `env.py` replaces it at runtime.
