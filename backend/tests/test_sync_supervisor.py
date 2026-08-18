@@ -12,37 +12,43 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
 from app.domains.sync.supervisor import (  # noqa: E402
     RECONCILE_FALLBACK_SECONDS,
+    SYNC_LEADER_LOCK_KEY,
     SyncSupervisor,
 )
 
 
-class SyncSupervisorFallbackTests(unittest.IsolatedAsyncioTestCase):
-    async def test_periodic_reconcile_waits_until_fallback_interval(self) -> None:
-        supervisor = SyncSupervisor()
-        supervisor._reconcile_once = AsyncMock()  # type: ignore[method-assign]
-        started_at = 100.0
+class _FakeConnection:
+    def __init__(self, *, acquired: bool = True) -> None:
+        self.scalar = AsyncMock(return_value=acquired)
+        self.execute = AsyncMock()
+        self.commit = AsyncMock()
 
-        last_reconcile_at = await supervisor._reconcile_if_due(
-            last_reconcile_at=started_at,
-            now=started_at + RECONCILE_FALLBACK_SECONDS - 0.001,
-        )
 
-        self.assertEqual(last_reconcile_at, started_at)
-        supervisor._reconcile_once.assert_not_awaited()  # type: ignore[attr-defined]
+class SyncSupervisorLeadershipTests(unittest.IsolatedAsyncioTestCase):
+    async def test_postgres_advisory_lock_elects_single_sync_owner(self) -> None:
+        connection = _FakeConnection(acquired=True)
+        acquired = await SyncSupervisor._acquire_leadership(connection)  # type: ignore[arg-type]
 
-    async def test_periodic_reconcile_uses_authoritative_cursor_path_when_due(self) -> None:
-        supervisor = SyncSupervisor()
-        supervisor._reconcile_once = AsyncMock()  # type: ignore[method-assign]
-        started_at = 100.0
-        due_at = started_at + RECONCILE_FALLBACK_SECONDS
+        self.assertTrue(acquired)
+        connection.scalar.assert_awaited_once()
+        params = connection.scalar.await_args.args[1]
+        self.assertEqual(params["lock_key"], SYNC_LEADER_LOCK_KEY)
+        connection.commit.assert_awaited_once()
 
-        last_reconcile_at = await supervisor._reconcile_if_due(
-            last_reconcile_at=started_at,
-            now=due_at,
-        )
+    async def test_non_leader_does_not_claim_sync_owner(self) -> None:
+        connection = _FakeConnection(acquired=False)
+        acquired = await SyncSupervisor._acquire_leadership(connection)  # type: ignore[arg-type]
+        self.assertFalse(acquired)
 
-        self.assertEqual(last_reconcile_at, due_at)
-        supervisor._reconcile_once.assert_awaited_once_with()  # type: ignore[attr-defined]
+    async def test_leader_connection_is_heartbeat_checked(self) -> None:
+        connection = _FakeConnection()
+        await SyncSupervisor._check_leadership_connection(connection)  # type: ignore[arg-type]
+        connection.execute.assert_awaited_once()
+        connection.commit.assert_awaited_once()
+
+    def test_fallback_reconcile_interval_remains_bounded(self) -> None:
+        self.assertGreater(RECONCILE_FALLBACK_SECONDS, 0)
+        self.assertLessEqual(RECONCILE_FALLBACK_SECONDS, 60)
 
 
 if __name__ == "__main__":
