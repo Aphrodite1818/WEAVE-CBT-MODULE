@@ -12,7 +12,7 @@ on:
       - '.github/workflows/generate-initial-migration.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate:
@@ -47,23 +47,35 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - name: Install backend dependencies
         run: python -m pip install --requirement requirements.txt
-      - name: Generate initial revision
+      - name: Generate and validate initial revision
+        id: alembic
+        shell: bash
         run: |
           mkdir -p alembic/versions
           rm -f alembic/versions/*.py
-          alembic revision --autogenerate -m "initial schema"
-      - name: Inspect generated migration
+          set +e
+          bash -o pipefail -c 'set -e; alembic revision --autogenerate -m "initial schema"; test "$(find alembic/versions -maxdepth 1 -name "*.py" | wc -l)" -eq 1; alembic upgrade head; alembic check' 2>&1 | tee alembic/migration-generation.log
+          exit_code=${PIPESTATUS[0]}
+          echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Commit validated initial revision
+        if: steps.alembic.outputs.exit_code == '0'
+        shell: bash
         run: |
-          test "$(find alembic/versions -maxdepth 1 -name '*.py' | wc -l)" -eq 1
-          cat alembic/versions/*.py
-      - name: Apply initial migration
-        run: alembic upgrade head
-      - name: Verify model/migration parity
-        run: alembic check
-      - name: Upload generated revision
-        uses: actions/upload-artifact@v7
-        with:
-          name: initial-alembic-revision
-          path: backend/alembic/versions/*.py
-          if-no-files-found: error
-          retention-days: 3
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add alembic/versions/*.py
+          git commit -m "db: add initial CBT schema migration"
+          git push origin HEAD:set-up
+      - name: Commit migration generation failure log
+        if: steps.alembic.outputs.exit_code != '0'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f alembic/migration-generation.log
+          git commit -m "ci: capture initial migration generation failure"
+          git push origin HEAD:set-up
+      - name: Fail generation job when Alembic validation failed
+        if: steps.alembic.outputs.exit_code != '0'
+        run: exit 1
