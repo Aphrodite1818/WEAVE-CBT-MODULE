@@ -18,6 +18,40 @@ def upgrade() -> None:
     # instead of materialized from giant offering payloads.
     op.drop_table("subject_offering_eligibilities")
 
+    # Effective dates must live locally because the wall clock changes without a
+    # Cloud database mutation. CBT can therefore enforce a future/end date without
+    # waiting for another synchronization event.
+    op.add_column(
+        "teacher_assignments",
+        sa.Column(
+            "effective_from",
+            sa.Date(),
+            nullable=False,
+            server_default=sa.text("CURRENT_DATE"),
+        ),
+    )
+    op.add_column(
+        "teacher_assignments",
+        sa.Column("effective_to", sa.Date(), nullable=True),
+    )
+    op.create_check_constraint(
+        "ck_teacher_assignments_effective_range",
+        "teacher_assignments",
+        "effective_to IS NULL OR effective_to >= effective_from",
+    )
+    op.create_index(
+        "ix_teacher_assignments_effective_from",
+        "teacher_assignments",
+        ["effective_from"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_teacher_assignments_effective_to",
+        "teacher_assignments",
+        ["effective_to"],
+        unique=False,
+    )
+
     # Replace generic boolean composites with smaller partial indexes matching the
     # actual live-row predicates used by CBT execution queries.
     op.drop_index("ix_teacher_assignments_teacher_active", table_name="teacher_assignments")
