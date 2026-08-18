@@ -51,10 +51,26 @@ async def get_current_local_actor(
 async def get_current_local_admin(
     actor: Annotated[LocalActor, Depends(get_current_local_actor)],
 ) -> LocalActor:
+    """authorize local admin actors"""
     if actor.role not in {"admin", "tenant_admin"}:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="School administrator access required.")
     return actor
 
 
+async def get_current_local_teacher(
+    actor : Annotated[LocalActor , Depends(get_current_local_actor)]
+) -> LocalActor:
+    """authorize local teacher actors """
+    if actor.role !="teacher":
+        raise HTTPException(
+            status_code = 403,
+            detail = "Teacher access required"
+        )
+
+    return actor
+
+
+
 CurrentLocalActor = Annotated[LocalActor, Depends(get_current_local_actor)]
 CurrentLocalAdmin = Annotated[LocalActor, Depends(get_current_local_admin)]
+CurrentLocalTeacher = Annotated[LocalActor , Depends(get_current_local_teacher)]
