@@ -1,7 +1,3 @@
-# ========================== #
-# app.main
-# ========================== #
-
 from __future__ import annotations
 
 import asyncio
@@ -16,6 +12,7 @@ from app.domains.auth.router import router as auth_router
 from app.domains.node.router import router as node_router
 from app.domains.sync.router import router as sync_router
 from app.domains.sync.supervisor import sync_supervisor
+from app.integrations.weave.client import weave_client
 
 
 @asynccontextmanager
@@ -30,6 +27,7 @@ async def lifespan(_app: FastAPI):
         sync_task.cancel()
         with suppress(asyncio.CancelledError):
             await sync_task
+        await weave_client.close()
         await close_redis_client()
         await dispose_database_engine()
 
