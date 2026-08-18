@@ -38,6 +38,7 @@ from app.domains.academics.models import (
 )
 
 ProjectionT = TypeVar("ProjectionT", bound=Base)
+PROJECTION_WRITE_BATCH_SIZE = 1000
 
 PROJECTION_MODELS: tuple[type[Base], ...] = (
     AcademicSession,
@@ -71,31 +72,40 @@ class AcademicRepository:
         *,
         synced_at: datetime | None = None,
     ) -> None:
+        """Upsert projection rows in bounded PostgreSQL batches.
+
+        Chunking avoids PostgreSQL/asyncpg parameter-count ceilings for large
+        schools while still reducing thousands of row-at-a-time flushes to a
+        handful of set-based statements.
+        """
+
         if not rows:
             return
         timestamp = synced_at or datetime.now(UTC)
-        values = [
-            {
-                **row,
-                "synced_at": timestamp,
-                "source_deleted_at": None,
+        for start in range(0, len(rows), PROJECTION_WRITE_BATCH_SIZE):
+            chunk = rows[start : start + PROJECTION_WRITE_BATCH_SIZE]
+            values = [
+                {
+                    **row,
+                    "synced_at": timestamp,
+                    "source_deleted_at": None,
+                }
+                for row in chunk
+            ]
+            statement = pg_insert(model).values(values)
+            mutable_columns = {
+                key: getattr(statement.excluded, key)
+                for key in values[0]
+                if key != "id"
             }
-            for row in rows
-        ]
-        statement = pg_insert(model).values(values)
-        mutable_columns = {
-            key: getattr(statement.excluded, key)
-            for key in values[0]
-            if key != "id"
-        }
-        if "updated_at" in model.__table__.c:
-            mutable_columns["updated_at"] = func.now()
-        await db.execute(
-            statement.on_conflict_do_update(
-                index_elements=[model.id],
-                set_=mutable_columns,
+            if "updated_at" in model.__table__.c:
+                mutable_columns["updated_at"] = func.now()
+            await db.execute(
+                statement.on_conflict_do_update(
+                    index_elements=[model.id],
+                    set_=mutable_columns,
+                )
             )
-        )
 
     @classmethod
     async def upsert_projection(
@@ -129,14 +139,17 @@ class AcademicRepository:
         unique_ids = tuple(dict.fromkeys(entity_ids))
         if not unique_ids:
             return
-        await db.execute(
-            update(model)
-            .where(model.id.in_(unique_ids))
-            .values(
-                source_deleted_at=deleted_at or datetime.now(UTC),
-                updated_at=func.now(),
+        timestamp = deleted_at or datetime.now(UTC)
+        for start in range(0, len(unique_ids), PROJECTION_WRITE_BATCH_SIZE):
+            chunk = unique_ids[start : start + PROJECTION_WRITE_BATCH_SIZE]
+            await db.execute(
+                update(model)
+                .where(model.id.in_(chunk))
+                .values(
+                    source_deleted_at=timestamp,
+                    updated_at=func.now(),
+                )
             )
-        )
 
     @classmethod
     async def tombstone_projection(
