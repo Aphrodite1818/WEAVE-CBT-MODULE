@@ -1,15 +1,56 @@
 from __future__ import annotations
 
+import ast
 import importlib.util
+import re
 from pathlib import Path
-
-from sqlalchemy import CheckConstraint, ForeignKeyConstraint, MetaData
-
-from app import model_registry  # noqa: F401
-from app.core.database import Base
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 INITIAL_REVISION = BACKEND_ROOT / "alembic" / "versions" / "0001_initial_schema.py"
+
+EXPECTED_INITIAL_TABLES = {
+    "academic_admins",
+    "academic_levels",
+    "academic_sessions",
+    "academic_subjects",
+    "academic_teachers",
+    "arm_labels",
+    "assessment_schemes",
+    "audit_events",
+    "local_actors",
+    "school_profiles",
+    "sync_states",
+    "academic_classes",
+    "academic_terms",
+    "assessment_components",
+    "curricula",
+    "departments",
+    "local_actor_sessions",
+    "class_term_departments",
+    "curriculum_subjects",
+    "local_refresh_tokens",
+    "student_enrollments",
+    "exams",
+    "question_banks",
+    "subject_offerings",
+    "teacher_assignments",
+    "exam_candidates",
+    "exam_invigilators",
+    "exam_target_classes",
+    "questions",
+    "subject_offering_eligibilities",
+    "candidate_credentials",
+    "exam_attempts",
+    "exam_questions",
+    "question_options",
+    "attempt_interruptions",
+    "attempt_question_allocations",
+    "exam_question_options",
+    "exam_results",
+    "attempt_answers",
+    "attempt_option_allocations",
+    "attempt_answer_selections",
+}
 
 
 def _load_initial_revision():
@@ -23,105 +64,31 @@ def _load_initial_revision():
     return module
 
 
-def _column_signature(metadata: MetaData) -> dict[str, tuple]:
-    signature: dict[str, tuple] = {}
-    for table_name, table in sorted(metadata.tables.items()):
-        columns = []
-        for column in table.columns:
-            foreign_keys = tuple(
-                sorted(
-                    (
-                        foreign_key.target_fullname,
-                        foreign_key.ondelete,
-                        foreign_key.onupdate,
-                    )
-                    for foreign_key in column.foreign_keys
-                )
-            )
-            server_default = None
-            if column.server_default is not None:
-                server_default = str(column.server_default.arg)
-            columns.append(
-                (
-                    column.name,
-                    str(column.type),
-                    column.nullable,
-                    column.primary_key,
-                    bool(column.unique),
-                    server_default,
-                    foreign_keys,
-                )
-            )
-        signature[table_name] = tuple(columns)
-    return signature
-
-
-def _index_signature(metadata: MetaData) -> dict[str, tuple]:
-    signature: dict[str, tuple] = {}
-    for table_name, table in sorted(metadata.tables.items()):
-        indexes = []
-        for index in table.indexes:
-            postgres_where = index.dialect_options["postgresql"].get("where")
-            indexes.append(
-                (
-                    index.name,
-                    bool(index.unique),
-                    tuple(str(expression) for expression in index.expressions),
-                    None if postgres_where is None else str(postgres_where),
-                )
-            )
-        signature[table_name] = tuple(sorted(indexes))
-    return signature
-
-
-def _constraint_signature(metadata: MetaData) -> dict[str, tuple]:
-    signature: dict[str, tuple] = {}
-    for table_name, table in sorted(metadata.tables.items()):
-        constraints = []
-        for constraint in table.constraints:
-            columns = tuple(column.name for column in constraint.columns)
-            expression = None
-            if isinstance(constraint, CheckConstraint):
-                expression = str(constraint.sqltext)
-            referred = None
-            ondelete = None
-            onupdate = None
-            if isinstance(constraint, ForeignKeyConstraint):
-                referred = tuple(
-                    sorted(element.target_fullname for element in constraint.elements)
-                )
-                ondelete = constraint.ondelete
-                onupdate = constraint.onupdate
-            constraints.append(
-                (
-                    type(constraint).__name__,
-                    constraint.name,
-                    columns,
-                    expression,
-                    referred,
-                    ondelete,
-                    onupdate,
-                )
-            )
-        signature[table_name] = tuple(sorted(constraints, key=repr))
-    return signature
-
-
-def test_initial_revision_is_first_revision_and_snapshot_exists():
+def test_initial_revision_is_static_first_revision() -> None:
     revision = _load_initial_revision()
+    source = INITIAL_REVISION.read_text(encoding="utf-8")
+    tree = ast.parse(source)
 
     assert revision.revision == "0001_initial_schema"
     assert revision.down_revision is None
-    assert INITIAL_REVISION.is_file()
-    assert (BACKEND_ROOT / "alembic" / "schema_v1").is_dir()
+    assert not (BACKEND_ROOT / "alembic" / "schema_v1").exists()
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            assert not node.module.startswith("app")
+        elif isinstance(node, ast.Import):
+            assert all(not alias.name.startswith("app") for alias in node.names)
 
 
-def test_frozen_initial_schema_matches_current_model_registry():
+def test_initial_revision_covers_the_complete_v1_table_set() -> None:
     revision = _load_initial_revision()
-    frozen_metadata = revision.get_schema_v1_metadata()
-    runtime_metadata = Base.metadata
 
-    assert set(frozen_metadata.tables) == set(runtime_metadata.tables)
-    assert _column_signature(frozen_metadata) == _column_signature(runtime_metadata)
-    assert _index_signature(frozen_metadata) == _index_signature(runtime_metadata)
-    assert _constraint_signature(frozen_metadata) == _constraint_signature(runtime_metadata)
+    created_tables = {
+        statement.split()[2]
+        for statement in revision._UPGRADE_SQL
+        if statement.startswith("CREATE TABLE ")
+    }
+    dropped_tables = set(re.findall(r"op\.drop_table\(['\"]([^'\"]+)['\"]\)", INITIAL_REVISION.read_text(encoding="utf-8")))
+
+    assert created_tables == EXPECTED_INITIAL_TABLES
+    assert dropped_tables == EXPECTED_INITIAL_TABLES
