@@ -31,7 +31,7 @@ pydantic-core==2.46.4
 pydantic-settings==2.15.0
 python-dotenv==1.2.2
 python-jose==3.5.0
-python-multipart==0.0.20
+python-multipart==0.0.32
 pyyaml==6.0.3
 redis==8.1.0
 rsa==4.9.1
