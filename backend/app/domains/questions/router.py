@@ -393,10 +393,12 @@ async def get_question_image(
         asset_id=question.image_asset_id,
     )
 
+    # This URL identifies the mutable source question rather than the immutable
+    # asset. Do not cache it across edits or a replaced image can look stale.
     return Response(
         content=content.data,
         media_type=content.mime_type,
-        headers={"Cache-Control": "private, max-age=3600"},
+        headers={"Cache-Control": "no-store"},
     )
 
 
