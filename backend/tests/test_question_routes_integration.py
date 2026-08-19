@@ -116,6 +116,39 @@ class QuestionRouteIntegrationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         create_bank.assert_not_awaited()
 
+    def test_admin_can_discover_archived_banks_for_reactivation(self) -> None:
+        subject_id = uuid4()
+        archived_bank = QuestionBank(
+            id=uuid4(),
+            curriculum_subject_id=subject_id,
+            name="REVISION",
+            description=None,
+            created_by_actor_id=self.current_actor.id,
+            is_active=False,
+        )
+
+        with patch.object(
+            QuestionService,
+            "list_admin_question_banks",
+            new=AsyncMock(return_value=[archived_bank]),
+        ) as list_banks:
+            response = self.client.get(
+                "/api/v1/questions/banks",
+                params={
+                    "curriculum_subject_id": str(subject_id),
+                    "include_archived": "true",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()[0]["is_active"])
+        list_banks.assert_awaited_once_with(
+            self.db,
+            actor=self.current_actor,
+            curriculum_subject_id=subject_id,
+            include_archived=True,
+        )
+
     def test_create_single_choice_returns_question_with_options(self) -> None:
         bank_id = uuid4()
         question_id = uuid4()
