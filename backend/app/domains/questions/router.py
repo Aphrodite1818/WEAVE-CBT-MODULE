@@ -371,10 +371,7 @@ async def get_question_image(
     return Response(
         content=content.data,
         media_type=content.mime_type,
-        headers={
-            "Cache-Control": "private, max-age=3600",
-            "Content-Disposition": f'inline; filename="{content.original_filename}"',
-        },
+        headers={"Cache-Control": "private, max-age=3600"},
     )
 
 
