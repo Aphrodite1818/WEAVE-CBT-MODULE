@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import func, select, delete
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.questions.models import (
@@ -25,7 +25,10 @@ class QuestionRepository:
 
     @staticmethod
     async def get_bank_by_id(
-        db: AsyncSession, bank_id: UUID, *, lock: bool = False
+        db: AsyncSession,
+        bank_id: UUID,
+        *,
+        lock: bool = False,
     ) -> QuestionBank | None:
         query = select(QuestionBank).where(QuestionBank.id == bank_id)
         if lock:
@@ -76,26 +79,20 @@ class QuestionRepository:
         *,
         curriculum_subject_ids: Sequence[UUID],
         active_only: bool = True,
-    ):  # -> list[Any] | list[QuestionBank]:
+    ) -> list[QuestionBank]:
         subject_ids = list(dict.fromkeys(curriculum_subject_ids))
-
         if not subject_ids:
             return []
 
         query = select(QuestionBank).where(
             QuestionBank.curriculum_subject_id.in_(subject_ids)
         )
-
         if active_only:
             query = query.where(QuestionBank.is_active.is_(True))
 
         result = await db.execute(
-            query.order_by(
-                QuestionBank.name.asc(),
-                QuestionBank.id.asc(),
-            )
+            query.order_by(QuestionBank.name.asc(), QuestionBank.id.asc())
         )
-
         return list(result.scalars().all())
 
     @staticmethod
@@ -105,6 +102,11 @@ class QuestionRepository:
         return bank
 
     @staticmethod
+    async def delete_bank(db: AsyncSession, bank: QuestionBank) -> None:
+        await db.delete(bank)
+        await db.flush()
+
+    @staticmethod
     async def add_question(db: AsyncSession, question: Question) -> Question:
         db.add(question)
         await db.flush()
@@ -112,7 +114,8 @@ class QuestionRepository:
 
     @staticmethod
     async def add_questions(
-        db: AsyncSession, questions: Sequence[Question]
+        db: AsyncSession,
+        questions: Sequence[Question],
     ) -> list[Question]:
         rows = list(questions)
         if not rows:
@@ -123,33 +126,15 @@ class QuestionRepository:
 
     @staticmethod
     async def get_question_by_id(
-        db: AsyncSession, question_id: UUID, *, lock: bool = False
+        db: AsyncSession,
+        question_id: UUID,
+        *,
+        lock: bool = False,
     ) -> Question | None:
         query = select(Question).where(Question.id == question_id)
         if lock:
             query = query.with_for_update(of=Question)
         return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def remove_options_for_question(
-        db: AsyncSession,
-        question_id: UUID,
-    ) -> None:
-
-        await db.execute(
-            delete(QuestionOption).where(QuestionOption.question_id == question_id)
-        )
-
-        await db.flush()
-
-    @staticmethod
-    async def delete_question(
-        db: AsyncSession,
-        question: Question,
-    ) -> None:
-
-        await db.delete(question)
-        await db.flush()
 
     @staticmethod
     async def list_questions_for_bank(
@@ -192,7 +177,10 @@ class QuestionRepository:
 
     @staticmethod
     async def count_questions_for_bank(
-        db: AsyncSession, bank_id: UUID, *, active_only: bool = False
+        db: AsyncSession,
+        bank_id: UUID,
+        *,
+        active_only: bool = False,
     ) -> int:
         query = (
             select(func.count())
@@ -210,15 +198,9 @@ class QuestionRepository:
         return question
 
     @staticmethod
-    async def save_questions(
-        db: AsyncSession, questions: Sequence[Question]
-    ) -> list[Question]:
-        rows = list(questions)
-        if not rows:
-            return []
-        db.add_all(rows)
+    async def delete_question(db: AsyncSession, question: Question) -> None:
+        await db.delete(question)
         await db.flush()
-        return rows
 
     @staticmethod
     async def add_option(db: AsyncSession, option: QuestionOption) -> QuestionOption:
@@ -228,7 +210,8 @@ class QuestionRepository:
 
     @staticmethod
     async def add_options(
-        db: AsyncSession, options: Sequence[QuestionOption]
+        db: AsyncSession,
+        options: Sequence[QuestionOption],
     ) -> list[QuestionOption]:
         rows = list(options)
         if not rows:
@@ -238,24 +221,9 @@ class QuestionRepository:
         return rows
 
     @staticmethod
-    async def get_option_by_id(
+    async def list_options_for_question(
         db: AsyncSession,
         question_id: UUID,
-        option_id: UUID,
-        *,
-        lock: bool = False,
-    ) -> QuestionOption | None:
-        query = select(QuestionOption).where(
-            QuestionOption.question_id == question_id,
-            QuestionOption.id == option_id,
-        )
-        if lock:
-            query = query.with_for_update(of=QuestionOption)
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def list_options_for_question(
-        db: AsyncSession, question_id: UUID
     ) -> list[QuestionOption]:
         result = await db.execute(
             select(QuestionOption)
@@ -266,7 +234,8 @@ class QuestionRepository:
 
     @staticmethod
     async def list_options_for_questions(
-        db: AsyncSession, question_ids: Sequence[UUID]
+        db: AsyncSession,
+        question_ids: Sequence[UUID],
     ) -> list[QuestionOption]:
         if not question_ids:
             return []
@@ -278,23 +247,11 @@ class QuestionRepository:
         return list(result.scalars().all())
 
     @staticmethod
-    async def save_option(db: AsyncSession, option: QuestionOption) -> QuestionOption:
-        db.add(option)
-        await db.flush()
-        return option
-
-    @staticmethod
-    async def save_options(
-        db: AsyncSession, options: Sequence[QuestionOption]
-    ) -> list[QuestionOption]:
-        rows = list(options)
-        if not rows:
-            return []
-        db.add_all(rows)
-        await db.flush()
-        return rows
-
-    @staticmethod
-    async def remove_option(db: AsyncSession, option: QuestionOption) -> None:
-        await db.delete(option)
+    async def remove_options_for_question(
+        db: AsyncSession,
+        question_id: UUID,
+    ) -> None:
+        await db.execute(
+            delete(QuestionOption).where(QuestionOption.question_id == question_id)
+        )
         await db.flush()
