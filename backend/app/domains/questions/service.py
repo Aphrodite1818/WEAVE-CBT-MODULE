@@ -115,7 +115,13 @@ async def _resolve_new_question_image(
     actor: LocalActor,
     image_asset_id: UUID,
 ) -> UUID:
-    asset = await MediaRepository.get_asset_by_id(db, image_asset_id)
+    # Lock the immutable asset so cleanup cannot delete it between validation
+    # and the Question FK write in this transaction.
+    asset = await MediaRepository.get_asset_by_id(
+        db,
+        image_asset_id,
+        lock=True,
+    )
     if asset is None:
         raise ValueError("Question image does not exist")
     if asset.created_by_actor_id != actor.id:
@@ -223,6 +229,23 @@ class QuestionService:
             db,
             curriculum_subject_ids=[subject.id for subject in subjects],
             active_only=True,
+        )
+
+    @staticmethod
+    async def list_admin_question_banks(
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        curriculum_subject_id: UUID | None = None,
+        include_archived: bool = False,
+    ) -> list[QuestionBank]:
+        """Return banks for admin management, optionally including archived rows."""
+
+        _require_admin(actor)
+        return await QuestionRepository.list_banks(
+            db,
+            curriculum_subject_id=curriculum_subject_id,
+            active_only=not include_archived,
         )
 
     @staticmethod
