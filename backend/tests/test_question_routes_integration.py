@@ -291,10 +291,7 @@ class QuestionRouteIntegrationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"normalized-webp")
         self.assertEqual(response.headers["content-type"], "image/webp")
-        self.assertEqual(
-            response.headers["cache-control"],
-            "private, max-age=3600",
-        )
+        self.assertEqual(response.headers["cache-control"], "no-store")
 
     def test_used_question_delete_conflict_maps_to_409(self) -> None:
         question_id = uuid4()
