@@ -122,7 +122,7 @@ class Base(
 
 engine: AsyncEngine = create_async_engine(
     settings.DATABASE_URL,
-    echo=  (True if settings.ENVIRONMENT == "dev" else False),  # noqa: SIM210
+    echo=(True if settings.ENVIRONMENT == "dev" else False),  # noqa: SIM210
     pool_size=settings.DATABASE_POOL_SIZE,
     max_overflow=settings.DATABASE_MAX_OVERFLOW,
     pool_timeout=settings.DATABASE_POOL_TIMEOUT_SECONDS,

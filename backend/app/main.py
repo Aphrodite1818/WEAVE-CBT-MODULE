@@ -19,7 +19,9 @@ from app.integrations.weave.client import weave_client
 async def lifespan(_app: FastAPI):
     """Start local infrastructure and the non-blocking Cloud sync supervisor."""
     await check_database_connection()
-    sync_task = asyncio.create_task(sync_supervisor.run(), name="weave-cbt-sync-supervisor")
+    sync_task = asyncio.create_task(
+        sync_supervisor.run(), name="weave-cbt-sync-supervisor"
+    )
     try:
         yield
     finally:

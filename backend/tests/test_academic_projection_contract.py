@@ -43,7 +43,8 @@ class AcademicProjectionContractTests(unittest.TestCase):
     def test_class_uses_level_and_arm_label(self) -> None:
         columns = set(AcademicClass.__table__.c.keys())
         self.assertTrue(
-            {"academic_level_id", "arm_label_id", "display_name", "is_active"} <= columns
+            {"academic_level_id", "arm_label_id", "display_name", "is_active"}
+            <= columns
         )
         self.assertNotIn("arm", columns)
         self.assertNotIn("department_id", columns)
@@ -72,7 +73,9 @@ class AcademicProjectionContractTests(unittest.TestCase):
             callable(AcademicRepository.list_eligible_enrollments_for_offering)
         )
 
-    def test_teacher_assignment_is_time_safe_and_curriculum_subject_scoped(self) -> None:
+    def test_teacher_assignment_is_time_safe_and_curriculum_subject_scoped(
+        self,
+    ) -> None:
         columns = set(TeacherAssignment.__table__.c.keys())
         self.assertTrue(
             {
@@ -120,7 +123,9 @@ class AcademicProjectionContractTests(unittest.TestCase):
         columns = set(QuestionBank.__table__.c.keys())
         self.assertIn("curriculum_subject_id", columns)
         self.assertNotIn("level_subject_id", columns)
-        params = inspect.signature(QuestionRepository.get_bank_by_scope_and_name).parameters
+        params = inspect.signature(
+            QuestionRepository.get_bank_by_scope_and_name
+        ).parameters
         self.assertIn("curriculum_subject_id", params)
 
     def test_exam_and_targets_freeze_v3_academic_provenance(self) -> None:

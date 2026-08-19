@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr , field_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
 
 class StoredNodeIdentity(BaseModel):
@@ -68,9 +68,6 @@ class InstallationStatus(BaseModel):
     tenant_name: str | None = None
 
     paired_at: datetime | None = None
-
-
-
 
 
 class PairInstallationRequest(BaseModel):

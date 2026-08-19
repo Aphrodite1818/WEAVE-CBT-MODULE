@@ -150,6 +150,12 @@ class Settings(BaseSettings):
     # Do NOT put the installation credential itself into Settings.
     IDENTITY_STORAGE_PATH: Path = Path("/var/lib/weave-cbt/identity")
 
+    # ==========================#
+    # LOCAL MEDIA STORAGE
+    # ==========================#
+    MEDIA_STORAGE_PATH: Path = Path("/var/lib/weave-cbt/media")
+    MEDIA_MAX_IMAGE_SIZE_BYTES: int = Field(default=5 * 1024 * 1024, ge=1)
+
     # ========================== #
     # LOCAL STAFF AUTHENTICATION
     # ========================== #

@@ -49,9 +49,7 @@ async def pair_installation(
     """
 
     try:
-        return await node_service.pair_installation(
-            request
-        )
+        return await node_service.pair_installation(request)
 
     except InstallationAlreadyPairedError as exc:
         raise HTTPException(
@@ -64,17 +62,13 @@ async def pair_installation(
         # Retry-After.
         if exc.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
             if exc.retry_after is not None:
-                response.headers["Retry-After"] = str(
-                    exc.retry_after
-                )
+                response.headers["Retry-After"] = str(exc.retry_after)
 
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=exc.detail,
                 headers=(
-                    {
-                        "Retry-After": str(exc.retry_after)
-                    }
+                    {"Retry-After": str(exc.retry_after)}
                     if exc.retry_after is not None
                     else None
                 ),
@@ -103,16 +97,13 @@ async def pair_installation(
     except WeaveContractError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=(
-                "Weave Cloud returned an unexpected pairing response."
-            ),
+            detail=("Weave Cloud returned an unexpected pairing response."),
         ) from exc
 
     except NodeIdentityStorageError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=(
-                "The CBT installation could not securely persist "
-                "its local identity."
+                "The CBT installation could not securely persist its local identity."
             ),
         ) from exc

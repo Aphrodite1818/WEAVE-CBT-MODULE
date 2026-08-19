@@ -50,9 +50,7 @@ class WeaveAuthGateway:
         )
 
         try:
-            return WeaveStaffAuthResult.model_validate(
-                response
-            )
+            return WeaveStaffAuthResult.model_validate(response)
 
         except ValidationError as exc:
             raise WeaveContractError(

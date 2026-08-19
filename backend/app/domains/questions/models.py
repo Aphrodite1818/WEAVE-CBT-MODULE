@@ -36,9 +36,13 @@ class QuestionBank(Base):
     __tablename__ = "question_banks"
 
     curriculum_subject_id: Mapped[UUID] = mapped_column(
-        ForeignKey("curriculum_subjects.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("curriculum_subjects.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
-    name: Mapped[str] = mapped_column(String(QUESTION_BANK_NAME_MAX_LENGTH), nullable=False)
+    name: Mapped[str] = mapped_column(
+        String(QUESTION_BANK_NAME_MAX_LENGTH), nullable=False
+    )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by_actor_id: Mapped[UUID] = mapped_column(
         ForeignKey("local_actors.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -49,7 +53,9 @@ class QuestionBank(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "curriculum_subject_id", "name", name="uq_question_banks_curriculum_subject_name"
+            "curriculum_subject_id",
+            "name",
+            name="uq_question_banks_curriculum_subject_name",
         ),
         Index(
             "ix_question_banks_curriculum_subject_active",
@@ -80,7 +86,9 @@ class Question(Base):
     )
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
     instruction: Mapped[str | None] = mapped_column(Text, nullable=True)
-    image_url: Mapped[str | None] = mapped_column(String(QUESTION_IMAGE_URL_MAX_LENGTH), nullable=True)
+    image_asset_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("media_assets.id", ondelete="RESTRICT"), nullable=True
+    )
     version: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -119,7 +127,9 @@ class QuestionOption(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("question_id", "position", name="uq_question_options_question_position"),
+        UniqueConstraint(
+            "question_id", "position", name="uq_question_options_question_position"
+        ),
         CheckConstraint("position >= 1", name="ck_question_options_position_positive"),
         Index("ix_question_options_question_position", "question_id", "position"),
     )

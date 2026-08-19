@@ -1,6 +1,6 @@
-#============================================#
-#backend.app.integrations.weave.installation
-#============================================#
+# ============================================#
+# backend.app.integrations.weave.installation
+# ============================================#
 
 
 from pydantic import ValidationError
@@ -57,9 +57,7 @@ class WeaveInstallationGateway:
         )
 
         try:
-            return WeavePairingResult.model_validate(
-                response_payload
-            )
+            return WeavePairingResult.model_validate(response_payload)
 
         except ValidationError as exc:
             raise WeaveContractError(

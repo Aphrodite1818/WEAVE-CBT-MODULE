@@ -69,7 +69,9 @@ class AcademicSession(WeaveProjectionMixin, Base):
     __tablename__ = "academic_sessions"
 
     name: Mapped[str] = mapped_column(String(NAME_MAX_LENGTH), nullable=False)
-    status: Mapped[str] = mapped_column(String(STATUS_MAX_LENGTH), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(STATUS_MAX_LENGTH), nullable=False, index=True
+    )
     is_current: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false"), index=True
     )
@@ -83,10 +85,14 @@ class AcademicTerm(WeaveProjectionMixin, Base):
     __tablename__ = "academic_terms"
 
     academic_session_id: Mapped[UUID] = mapped_column(
-        ForeignKey("academic_sessions.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("academic_sessions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     name: Mapped[str] = mapped_column(String(NAME_MAX_LENGTH), nullable=False)
-    status: Mapped[str] = mapped_column(String(STATUS_MAX_LENGTH), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(STATUS_MAX_LENGTH), nullable=False, index=True
+    )
     is_current: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false"), index=True
     )
@@ -100,11 +106,15 @@ class AcademicLevel(WeaveProjectionMixin, Base):
     __tablename__ = "academic_levels"
 
     name: Mapped[str] = mapped_column(String(NAME_MAX_LENGTH), nullable=False)
-    category: Mapped[str] = mapped_column(String(CATEGORY_MAX_LENGTH), nullable=False, index=True)
+    category: Mapped[str] = mapped_column(
+        String(CATEGORY_MAX_LENGTH), nullable=False, index=True
+    )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
 
     __table_args__ = (
-        CheckConstraint("position >= 0", name="ck_academic_levels_position_nonnegative"),
+        CheckConstraint(
+            "position >= 0", name="ck_academic_levels_position_nonnegative"
+        ),
         Index("ix_academic_levels_category_position", "category", "position"),
     )
 
@@ -128,7 +138,9 @@ class Department(WeaveProjectionMixin, Base):
     __tablename__ = "departments"
 
     academic_level_id: Mapped[UUID] = mapped_column(
-        ForeignKey("academic_levels.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("academic_levels.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     name: Mapped[str] = mapped_column(String(NAME_MAX_LENGTH), nullable=False)
 
@@ -148,7 +160,9 @@ class AcademicClass(WeaveProjectionMixin, Base):
     __tablename__ = "academic_classes"
 
     academic_level_id: Mapped[UUID] = mapped_column(
-        ForeignKey("academic_levels.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("academic_levels.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     arm_label_id: Mapped[UUID] = mapped_column(
         ForeignKey("arm_labels.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -174,7 +188,9 @@ class ClassTermDepartment(WeaveProjectionMixin, Base):
     __tablename__ = "class_term_departments"
 
     class_id: Mapped[UUID] = mapped_column(
-        ForeignKey("academic_classes.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("academic_classes.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     academic_term_id: Mapped[UUID] = mapped_column(
         ForeignKey("academic_terms.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -191,7 +207,11 @@ class ClassTermDepartment(WeaveProjectionMixin, Base):
             unique=True,
             postgresql_where=text("source_deleted_at IS NULL"),
         ),
-        Index("ix_class_term_departments_term_department", "academic_term_id", "department_id"),
+        Index(
+            "ix_class_term_departments_term_department",
+            "academic_term_id",
+            "department_id",
+        ),
     )
 
 
@@ -209,7 +229,9 @@ class Curriculum(WeaveProjectionMixin, Base):
     __tablename__ = "curricula"
 
     academic_level_id: Mapped[UUID] = mapped_column(
-        ForeignKey("academic_levels.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("academic_levels.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
 
     __table_args__ = (
@@ -229,7 +251,9 @@ class CurriculumSubject(WeaveProjectionMixin, Base):
         ForeignKey("curricula.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     subject_id: Mapped[UUID] = mapped_column(
-        ForeignKey("academic_subjects.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("academic_subjects.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     is_elective: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false"), index=True
@@ -254,7 +278,9 @@ class SubjectOffering(WeaveProjectionMixin, Base):
     __tablename__ = "subject_offerings"
 
     curriculum_subject_id: Mapped[UUID] = mapped_column(
-        ForeignKey("curriculum_subjects.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("curriculum_subjects.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     academic_term_id: Mapped[UUID] = mapped_column(
         ForeignKey("academic_terms.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -283,7 +309,11 @@ class SubjectOffering(WeaveProjectionMixin, Base):
                 "department_id IS NOT NULL AND source_deleted_at IS NULL"
             ),
         ),
-        Index("ix_subject_offerings_term_subject", "academic_term_id", "curriculum_subject_id"),
+        Index(
+            "ix_subject_offerings_term_subject",
+            "academic_term_id",
+            "curriculum_subject_id",
+        ),
     )
 
 
@@ -291,14 +321,18 @@ class AssessmentScheme(WeaveProjectionMixin, Base):
     __tablename__ = "assessment_schemes"
 
     name: Mapped[str] = mapped_column(String(NAME_MAX_LENGTH), nullable=False)
-    status: Mapped[str] = mapped_column(String(STATUS_MAX_LENGTH), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(STATUS_MAX_LENGTH), nullable=False, index=True
+    )
 
 
 class AssessmentComponent(WeaveProjectionMixin, Base):
     __tablename__ = "assessment_components"
 
     assessment_scheme_id: Mapped[UUID] = mapped_column(
-        ForeignKey("assessment_schemes.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("assessment_schemes.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     name: Mapped[str] = mapped_column(String(NAME_MAX_LENGTH), nullable=False)
     code: Mapped[str | None] = mapped_column(String(CODE_MAX_LENGTH), nullable=True)
@@ -316,27 +350,47 @@ class AssessmentComponent(WeaveProjectionMixin, Base):
             unique=True,
             postgresql_where=text("source_deleted_at IS NULL"),
         ),
-        CheckConstraint("maximum_score > 0", name="ck_assessment_components_maximum_positive"),
-        CheckConstraint("position >= 0", name="ck_assessment_components_position_nonnegative"),
-        Index("ix_assessment_components_scheme_active", "assessment_scheme_id", "is_active"),
+        CheckConstraint(
+            "maximum_score > 0", name="ck_assessment_components_maximum_positive"
+        ),
+        CheckConstraint(
+            "position >= 0", name="ck_assessment_components_position_nonnegative"
+        ),
+        Index(
+            "ix_assessment_components_scheme_active",
+            "assessment_scheme_id",
+            "is_active",
+        ),
     )
 
 
 class AcademicAdmin(WeaveProjectionMixin, Base):
     __tablename__ = "academic_admins"
 
-    email: Mapped[str] = mapped_column(String(EMAIL_MAX_LENGTH), nullable=False, index=True)
-    status: Mapped[str] = mapped_column(String(STATUS_MAX_LENGTH), nullable=False, index=True)
+    email: Mapped[str] = mapped_column(
+        String(EMAIL_MAX_LENGTH), nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(STATUS_MAX_LENGTH), nullable=False, index=True
+    )
 
 
 class AcademicTeacher(WeaveProjectionMixin, Base):
     __tablename__ = "academic_teachers"
 
     teacher_account_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
-    first_name: Mapped[str | None] = mapped_column(String(NAME_MAX_LENGTH), nullable=True)
-    last_name: Mapped[str | None] = mapped_column(String(NAME_MAX_LENGTH), nullable=True)
-    staff_id: Mapped[str | None] = mapped_column(String(STAFF_ID_MAX_LENGTH), nullable=True, index=True)
-    status: Mapped[str] = mapped_column(String(STATUS_MAX_LENGTH), nullable=False, index=True)
+    first_name: Mapped[str | None] = mapped_column(
+        String(NAME_MAX_LENGTH), nullable=True
+    )
+    last_name: Mapped[str | None] = mapped_column(
+        String(NAME_MAX_LENGTH), nullable=True
+    )
+    staff_id: Mapped[str | None] = mapped_column(
+        String(STAFF_ID_MAX_LENGTH), nullable=True, index=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(STATUS_MAX_LENGTH), nullable=False, index=True
+    )
 
     __table_args__ = (
         Index("ix_academic_teachers_status_name", "status", "last_name", "first_name"),
@@ -347,13 +401,19 @@ class TeacherAssignment(WeaveProjectionMixin, Base):
     __tablename__ = "teacher_assignments"
 
     teacher_membership_id: Mapped[UUID] = mapped_column(
-        ForeignKey("academic_teachers.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("academic_teachers.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     class_id: Mapped[UUID] = mapped_column(
-        ForeignKey("academic_classes.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("academic_classes.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     curriculum_subject_id: Mapped[UUID] = mapped_column(
-        ForeignKey("curriculum_subjects.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("curriculum_subjects.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true"), index=True
@@ -367,24 +427,18 @@ class TeacherAssignment(WeaveProjectionMixin, Base):
             "class_id",
             "curriculum_subject_id",
             unique=True,
-            postgresql_where=text(
-                "is_active = true AND source_deleted_at IS NULL"
-            ),
+            postgresql_where=text("is_active = true AND source_deleted_at IS NULL"),
         ),
         Index(
             "ix_teacher_assignments_live_teacher",
             "teacher_membership_id",
-            postgresql_where=text(
-                "is_active = true AND source_deleted_at IS NULL"
-            ),
+            postgresql_where=text("is_active = true AND source_deleted_at IS NULL"),
         ),
         Index(
             "ix_teacher_assignments_live_class_subject",
             "class_id",
             "curriculum_subject_id",
-            postgresql_where=text(
-                "is_active = true AND source_deleted_at IS NULL"
-            ),
+            postgresql_where=text("is_active = true AND source_deleted_at IS NULL"),
         ),
         CheckConstraint(
             "effective_to IS NULL OR effective_to >= effective_from",
@@ -400,16 +454,26 @@ class StudentEnrollment(WeaveProjectionMixin, Base):
     admission_number: Mapped[str] = mapped_column(
         String(ADMISSION_NUMBER_MAX_LENGTH), nullable=False, index=True
     )
-    first_name: Mapped[str | None] = mapped_column(String(NAME_MAX_LENGTH), nullable=True)
-    last_name: Mapped[str | None] = mapped_column(String(NAME_MAX_LENGTH), nullable=True)
+    first_name: Mapped[str | None] = mapped_column(
+        String(NAME_MAX_LENGTH), nullable=True
+    )
+    last_name: Mapped[str | None] = mapped_column(
+        String(NAME_MAX_LENGTH), nullable=True
+    )
     academic_level_id: Mapped[UUID] = mapped_column(
-        ForeignKey("academic_levels.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("academic_levels.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     class_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("academic_classes.id", ondelete="RESTRICT"), nullable=True, index=True
+        ForeignKey("academic_classes.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
     )
     academic_session_id: Mapped[UUID] = mapped_column(
-        ForeignKey("academic_sessions.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("academic_sessions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     is_current: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true"), index=True

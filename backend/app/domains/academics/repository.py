@@ -355,11 +355,9 @@ class AcademicRepository:
         if active_only:
             query = query.where(CurriculumSubject.is_active.is_(True))
         return list(
-            (
-                await db.execute(
-                    query.order_by(CurriculumSubject.subject_id.asc())
-                )
-            ).scalars().all()
+            (await db.execute(query.order_by(CurriculumSubject.subject_id.asc())))
+            .scalars()
+            .all()
         )
 
     @classmethod
@@ -420,7 +418,8 @@ class AcademicRepository:
         departmental_match = exists(
             select(ClassTermDepartment.id).where(
                 ClassTermDepartment.class_id == StudentEnrollment.class_id,
-                ClassTermDepartment.academic_term_id == SubjectOffering.academic_term_id,
+                ClassTermDepartment.academic_term_id
+                == SubjectOffering.academic_term_id,
                 ClassTermDepartment.department_id == SubjectOffering.department_id,
                 ClassTermDepartment.source_deleted_at.is_(None),
             )
@@ -438,7 +437,8 @@ class AcademicRepository:
                 StudentEnrollment,
                 and_(
                     StudentEnrollment.academic_level_id == Curriculum.academic_level_id,
-                    StudentEnrollment.academic_session_id == AcademicTerm.academic_session_id,
+                    StudentEnrollment.academic_session_id
+                    == AcademicTerm.academic_session_id,
                 ),
             )
             .where(
@@ -483,11 +483,9 @@ class AcademicRepository:
         if class_id is not None:
             query = query.where(StudentEnrollment.class_id == class_id)
         return list(
-            (
-                await db.execute(
-                    query.order_by(StudentEnrollment.admission_number.asc())
-                )
-            ).scalars().all()
+            (await db.execute(query.order_by(StudentEnrollment.admission_number.asc())))
+            .scalars()
+            .all()
         )
 
     @classmethod
@@ -521,7 +519,11 @@ class AcademicRepository:
         membership_id: UUID | str,
     ) -> AcademicTeacher | None:
         try:
-            teacher_id = membership_id if isinstance(membership_id, UUID) else UUID(membership_id)
+            teacher_id = (
+                membership_id
+                if isinstance(membership_id, UUID)
+                else UUID(membership_id)
+            )
         except (TypeError, ValueError):
             return None
         return await cls.get_teacher_by_id(db, teacher_id)
@@ -592,8 +594,10 @@ class AcademicRepository:
             await db.scalar(
                 select(
                     exists().where(
-                        TeacherAssignment.teacher_membership_id == teacher_membership_id,
-                        TeacherAssignment.curriculum_subject_id == curriculum_subject_id,
+                        TeacherAssignment.teacher_membership_id
+                        == teacher_membership_id,
+                        TeacherAssignment.curriculum_subject_id
+                        == curriculum_subject_id,
                         TeacherAssignment.is_active.is_(True),
                         TeacherAssignment.source_deleted_at.is_(None),
                         *AcademicRepository._effective_assignment_predicates(),
@@ -623,4 +627,127 @@ class AcademicRepository:
             )
             .order_by(StudentEnrollment.admission_number.asc())
         )
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_all_active_curriculum_subjects(
+        db: AsyncSession,
+    ) -> list[CurriculumSubject]:
+        """
+        Return all live active CurriculumSubjects available to CBT.
+        """
+
+        result = await db.execute(
+            select(CurriculumSubject)
+            .where(
+                CurriculumSubject.is_active.is_(True),
+                CurriculumSubject.source_deleted_at.is_(None),
+            )
+            .order_by(CurriculumSubject.subject_id.asc())
+        )
+
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_authorable_curriculum_subjects_for_teacher(
+        db: AsyncSession,
+        *,
+        teacher_membership_id: UUID,
+    ) -> list[CurriculumSubject]:
+        """
+        Return every distinct live CurriculumSubject the teacher
+        currently has an effective assignment for.
+        """
+
+        query = (
+            select(CurriculumSubject)
+            .join(
+                TeacherAssignment,
+                TeacherAssignment.curriculum_subject_id == CurriculumSubject.id,
+            )
+            .where(
+                TeacherAssignment.teacher_membership_id == teacher_membership_id,
+                TeacherAssignment.is_active.is_(True),
+                TeacherAssignment.source_deleted_at.is_(None),
+                CurriculumSubject.is_active.is_(True),
+                CurriculumSubject.source_deleted_at.is_(None),
+                *AcademicRepository._effective_assignment_predicates(),
+            )
+            .distinct()
+            .order_by(CurriculumSubject.subject_id.asc())
+        )
+
+        result = await db.execute(query)
+
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_teacher_classes_for_curriculum_subject(
+        db: AsyncSession,
+        *,
+        teacher_membership_id: UUID,
+        curriculum_subject_id: UUID,
+    ) -> list[AcademicClass]:
+        """
+        Return the live classes for which the teacher currently has
+        an effective assignment to the given CurriculumSubject.
+        """
+
+        query = (
+            select(AcademicClass)
+            .join(
+                TeacherAssignment,
+                TeacherAssignment.class_id == AcademicClass.id,
+            )
+            .where(
+                TeacherAssignment.teacher_membership_id == teacher_membership_id,
+                TeacherAssignment.curriculum_subject_id == curriculum_subject_id,
+                TeacherAssignment.is_active.is_(True),
+                TeacherAssignment.source_deleted_at.is_(None),
+                AcademicClass.is_active.is_(True),
+                AcademicClass.source_deleted_at.is_(None),
+                *AcademicRepository._effective_assignment_predicates(),
+            )
+            .distinct()
+            .order_by(AcademicClass.display_name.asc())
+        )
+
+        result = await db.execute(query)
+
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_classes_for_curriculum_subject(
+        db: AsyncSession,
+        *,
+        curriculum_subject_id: UUID,
+    ) -> list[AcademicClass]:
+        """
+        Return all live active classes belonging to the academic level
+        represented by the given CurriculumSubject.
+        """
+
+        query = (
+            select(AcademicClass)
+            .join(
+                Curriculum,
+                Curriculum.academic_level_id == AcademicClass.academic_level_id,
+            )
+            .join(
+                CurriculumSubject,
+                CurriculumSubject.curriculum_id == Curriculum.id,
+            )
+            .where(
+                CurriculumSubject.id == curriculum_subject_id,
+                CurriculumSubject.is_active.is_(True),
+                CurriculumSubject.source_deleted_at.is_(None),
+                Curriculum.source_deleted_at.is_(None),
+                AcademicClass.is_active.is_(True),
+                AcademicClass.source_deleted_at.is_(None),
+            )
+            .order_by(AcademicClass.display_name.asc())
+        )
+
+        result = await db.execute(query)
+
         return list(result.scalars().all())

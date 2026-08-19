@@ -49,19 +49,27 @@ class Exam(Base):
     __tablename__ = "exams"
 
     session_id: Mapped[UUID] = mapped_column(
-        ForeignKey("academic_sessions.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("academic_sessions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     term_id: Mapped[UUID] = mapped_column(
         ForeignKey("academic_terms.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     curriculum_subject_id: Mapped[UUID] = mapped_column(
-        ForeignKey("curriculum_subjects.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("curriculum_subjects.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     assessment_scheme_id: Mapped[UUID] = mapped_column(
-        ForeignKey("assessment_schemes.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("assessment_schemes.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     assessment_component_id: Mapped[UUID] = mapped_column(
-        ForeignKey("assessment_components.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("assessment_components.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     title: Mapped[str] = mapped_column(String(EXAM_TITLE_MAX_LENGTH), nullable=False)
     instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -81,8 +89,12 @@ class Exam(Base):
     )
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     maximum_score: Mapped[Decimal] = mapped_column(Numeric(8, 2), nullable=False)
-    opens_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    closes_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    opens_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    closes_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     shuffle_questions: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
@@ -101,11 +113,21 @@ class Exam(Base):
     submitted_by_actor_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("local_actors.id", ondelete="RESTRICT"), nullable=True, index=True
     )
-    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    sealed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    submitted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    sealed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    activated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    closed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    cancelled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     source_assessment_scheme_id: Mapped[UUID | None] = mapped_column(nullable=True)
     source_assessment_component_id: Mapped[UUID | None] = mapped_column(nullable=True)
@@ -122,7 +144,9 @@ class Exam(Base):
     weave_calendar_event_id: Mapped[str | None] = mapped_column(
         String(WEAVE_ID_MAX_LENGTH), nullable=True, unique=True, index=True
     )
-    calendar_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    calendar_synced_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     __table_args__ = (
         Index(
@@ -166,17 +190,25 @@ class ExamTargetClass(Base):
         ForeignKey("exams.id", ondelete="CASCADE"), nullable=False, index=True
     )
     class_id: Mapped[UUID] = mapped_column(
-        ForeignKey("academic_classes.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("academic_classes.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     subject_offering_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("subject_offerings.id", ondelete="RESTRICT"), nullable=True, index=True
+        ForeignKey("subject_offerings.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
     )
     teacher_assignment_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("teacher_assignments.id", ondelete="RESTRICT"), nullable=True, index=True
+        ForeignKey("teacher_assignments.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
     )
 
     __table_args__ = (
-        UniqueConstraint("exam_id", "class_id", name="uq_exam_target_classes_exam_class"),
+        UniqueConstraint(
+            "exam_id", "class_id", name="uq_exam_target_classes_exam_class"
+        ),
         Index("ix_exam_target_classes_class_exam", "class_id", "exam_id"),
         Index("ix_exam_target_classes_offering", "subject_offering_id"),
         Index("ix_exam_target_classes_assignment", "teacher_assignment_id"),
@@ -190,11 +222,15 @@ class ExamInvigilator(Base):
         ForeignKey("exams.id", ondelete="CASCADE"), nullable=False, index=True
     )
     teacher_id: Mapped[UUID] = mapped_column(
-        ForeignKey("academic_teachers.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("academic_teachers.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
 
     __table_args__ = (
-        UniqueConstraint("exam_id", "teacher_id", name="uq_exam_invigilators_exam_teacher"),
+        UniqueConstraint(
+            "exam_id", "teacher_id", name="uq_exam_invigilators_exam_teacher"
+        ),
         Index("ix_exam_invigilators_teacher_exam", "teacher_id", "exam_id"),
     )
 
@@ -223,13 +259,22 @@ class ExamQuestion(Base):
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
     instruction: Mapped[str | None] = mapped_column(Text, nullable=True)
-    image_url: Mapped[str | None] = mapped_column(String(EXAM_IMAGE_URL_MAX_LENGTH), nullable=True)
+    image_asset_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("media_assets.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     points: Mapped[Decimal] = mapped_column(Numeric(8, 2), nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("exam_id", "source_question_id", name="uq_exam_questions_exam_source_question"),
+        UniqueConstraint(
+            "exam_id",
+            "source_question_id",
+            name="uq_exam_questions_exam_source_question",
+        ),
         UniqueConstraint("exam_id", "position", name="uq_exam_questions_exam_position"),
-        CheckConstraint("source_question_version >= 1", name="ck_exam_questions_source_version_positive"),
+        CheckConstraint(
+            "source_question_version >= 1",
+            name="ck_exam_questions_source_version_positive",
+        ),
         CheckConstraint("position >= 1", name="ck_exam_questions_position_positive"),
         CheckConstraint("points > 0", name="ck_exam_questions_points_positive"),
         Index("ix_exam_questions_exam_position", "exam_id", "position"),
@@ -257,6 +302,10 @@ class ExamQuestionOption(Base):
             "position",
             name="uq_exam_question_options_question_position",
         ),
-        CheckConstraint("position >= 1", name="ck_exam_question_options_position_positive"),
-        Index("ix_exam_question_options_question_position", "exam_question_id", "position"),
+        CheckConstraint(
+            "position >= 1", name="ck_exam_question_options_position_positive"
+        ),
+        Index(
+            "ix_exam_question_options_question_position", "exam_question_id", "position"
+        ),
     )

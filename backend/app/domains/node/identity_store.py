@@ -304,9 +304,7 @@ class NodeIdentityStore:
         file_descriptor: int | None = None
 
         try:
-            file_descriptor = await asyncio.to_thread(
-                self._acquire_pairing_lock
-            )
+            file_descriptor = await asyncio.to_thread(self._acquire_pairing_lock)
 
             yield
 

@@ -41,17 +41,11 @@ async def login_staff(
         httponly=True,
         secure=False,
         samesite="strict",
-        max_age=(
-            settings.LOCAL_REFRESH_TOKEN_EXPIRE_HOURS
-            * 60
-            * 60
-        ),
+        max_age=(settings.LOCAL_REFRESH_TOKEN_EXPIRE_HOURS * 60 * 60),
         path="/api/v1/auth",
     )
 
     return StaffLoginResponse(
         access_token=result.access_token,
-        actor=LocalActorResponse.model_validate(
-            result.actor
-        ),
+        actor=LocalActorResponse.model_validate(result.actor),
     )

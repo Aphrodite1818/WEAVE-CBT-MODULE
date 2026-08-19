@@ -11,6 +11,7 @@ from app.domains.audit import models as audit_models  # noqa: F401
 from app.domains.auth import models as auth_models  # noqa: F401
 from app.domains.candidates import models as candidates_models  # noqa: F401
 from app.domains.exams import models as exams_models  # noqa: F401
+from app.domains.media import models as media_models  # noqa: F401
 from app.domains.questions import models as questions_models  # noqa: F401
 from app.domains.results import models as results_models  # noqa: F401
 from app.domains.sync import models as sync_models  # noqa: F401

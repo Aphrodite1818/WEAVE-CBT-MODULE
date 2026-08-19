@@ -54,7 +54,9 @@ def upgrade() -> None:
 
     # Replace generic boolean composites with smaller partial indexes matching the
     # actual live-row predicates used by CBT execution queries.
-    op.drop_index("ix_teacher_assignments_teacher_active", table_name="teacher_assignments")
+    op.drop_index(
+        "ix_teacher_assignments_teacher_active", table_name="teacher_assignments"
+    )
     op.drop_index(
         "ix_teacher_assignments_class_subject_active",
         table_name="teacher_assignments",
@@ -75,8 +77,12 @@ def upgrade() -> None:
         postgresql_where=live_assignment,
     )
 
-    op.drop_index("ix_student_enrollments_class_current", table_name="student_enrollments")
-    op.drop_index("ix_student_enrollments_session_current", table_name="student_enrollments")
+    op.drop_index(
+        "ix_student_enrollments_class_current", table_name="student_enrollments"
+    )
+    op.drop_index(
+        "ix_student_enrollments_session_current", table_name="student_enrollments"
+    )
     live_enrollment = sa.text("is_current = true AND source_deleted_at IS NULL")
     op.create_index(
         "ix_student_enrollments_live_class",

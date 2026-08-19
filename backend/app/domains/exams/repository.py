@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.academics.models import Curriculum, CurriculumSubject
@@ -28,7 +28,9 @@ class ExamRepository:
         return exam
 
     @staticmethod
-    async def get_exam_by_id(db: AsyncSession, exam_id: UUID, *, lock: bool = False) -> Exam | None:
+    async def get_exam_by_id(
+        db: AsyncSession, exam_id: UUID, *, lock: bool = False
+    ) -> Exam | None:
         query = select(Exam).where(Exam.id == exam_id)
         if lock:
             query = query.with_for_update(of=Exam)
@@ -59,10 +61,26 @@ class ExamRepository:
         *,
         lock: bool = False,
     ) -> Exam | None:
-        query = select(Exam).where(Exam.weave_calendar_event_id == weave_calendar_event_id)
+        query = select(Exam).where(
+            Exam.weave_calendar_event_id == weave_calendar_event_id
+        )
         if lock:
             query = query.with_for_update(of=Exam)
         return (await db.execute(query)).scalar_one_or_none()
+
+    from sqlalchemy import exists, select
+
+    @staticmethod
+    async def is_source_question_referenced(
+        db: AsyncSession,
+        question_id: UUID,
+    ) -> bool:
+
+        result = await db.execute(
+            select(exists().where(ExamQuestion.source_question_id == question_id))
+        )
+
+        return bool(result.scalar())
 
     @staticmethod
     def _apply_exam_filters(
@@ -86,19 +104,19 @@ class ExamRepository:
                 CurriculumSubject.id == Exam.curriculum_subject_id,
             )
         if level_id is not None:
-            query = query.join(Curriculum, Curriculum.id == CurriculumSubject.curriculum_id).where(
-                Curriculum.academic_level_id == level_id
-            )
+            query = query.join(
+                Curriculum, Curriculum.id == CurriculumSubject.curriculum_id
+            ).where(Curriculum.academic_level_id == level_id)
         if subject_id is not None:
             query = query.where(CurriculumSubject.subject_id == subject_id)
         if target_class_id is not None:
-            query = query.join(ExamTargetClass, ExamTargetClass.exam_id == Exam.id).where(
-                ExamTargetClass.class_id == target_class_id
-            )
+            query = query.join(
+                ExamTargetClass, ExamTargetClass.exam_id == Exam.id
+            ).where(ExamTargetClass.class_id == target_class_id)
         if invigilator_teacher_id is not None:
-            query = query.join(ExamInvigilator, ExamInvigilator.exam_id == Exam.id).where(
-                ExamInvigilator.teacher_id == invigilator_teacher_id
-            )
+            query = query.join(
+                ExamInvigilator, ExamInvigilator.exam_id == Exam.id
+            ).where(ExamInvigilator.teacher_id == invigilator_teacher_id)
         if session_id is not None:
             query = query.where(Exam.session_id == session_id)
         if term_id is not None:
@@ -149,7 +167,10 @@ class ExamRepository:
             status=status,
         )
         result = await db.execute(
-            query.distinct().order_by(Exam.created_at.desc(), Exam.id.desc()).offset(offset).limit(limit)
+            query.distinct()
+            .order_by(Exam.created_at.desc(), Exam.id.desc())
+            .offset(offset)
+            .limit(limit)
         )
         return list(result.scalars().all())
 
@@ -178,14 +199,18 @@ class ExamRepository:
         return await cls.list_exams(db, invigilator_teacher_id=teacher_id, **filters)
 
     @classmethod
-    async def list_exams_for_class(cls, db: AsyncSession, class_id: UUID, **filters) -> list[Exam]:
+    async def list_exams_for_class(
+        cls, db: AsyncSession, class_id: UUID, **filters
+    ) -> list[Exam]:
         return await cls.list_exams(db, target_class_id=class_id, **filters)
 
     @classmethod
     async def list_exams_for_curriculum_subject(
         cls, db: AsyncSession, curriculum_subject_id: UUID, **filters
     ) -> list[Exam]:
-        return await cls.list_exams(db, curriculum_subject_id=curriculum_subject_id, **filters)
+        return await cls.list_exams(
+            db, curriculum_subject_id=curriculum_subject_id, **filters
+        )
 
     @classmethod
     async def list_exams_for_component(
@@ -212,13 +237,17 @@ class ExamRepository:
         return exam
 
     @staticmethod
-    async def add_target_class(db: AsyncSession, target_class: ExamTargetClass) -> ExamTargetClass:
+    async def add_target_class(
+        db: AsyncSession, target_class: ExamTargetClass
+    ) -> ExamTargetClass:
         db.add(target_class)
         await db.flush()
         return target_class
 
     @staticmethod
-    async def add_target_classes(db: AsyncSession, target_classes: Sequence[ExamTargetClass]) -> list[ExamTargetClass]:
+    async def add_target_classes(
+        db: AsyncSession, target_classes: Sequence[ExamTargetClass]
+    ) -> list[ExamTargetClass]:
         rows = list(target_classes)
         if rows:
             db.add_all(rows)
@@ -238,31 +267,43 @@ class ExamRepository:
         return (await db.execute(query)).scalar_one_or_none()
 
     @staticmethod
-    async def list_target_classes_for_exam(db: AsyncSession, exam_id: UUID) -> list[ExamTargetClass]:
+    async def list_target_classes_for_exam(
+        db: AsyncSession, exam_id: UUID
+    ) -> list[ExamTargetClass]:
         result = await db.execute(
-            select(ExamTargetClass).where(ExamTargetClass.exam_id == exam_id).order_by(ExamTargetClass.class_id.asc())
+            select(ExamTargetClass)
+            .where(ExamTargetClass.exam_id == exam_id)
+            .order_by(ExamTargetClass.class_id.asc())
         )
         return list(result.scalars().all())
 
     @staticmethod
-    async def save_target_class(db: AsyncSession, target_class: ExamTargetClass) -> ExamTargetClass:
+    async def save_target_class(
+        db: AsyncSession, target_class: ExamTargetClass
+    ) -> ExamTargetClass:
         db.add(target_class)
         await db.flush()
         return target_class
 
     @staticmethod
-    async def remove_target_class(db: AsyncSession, target_class: ExamTargetClass) -> None:
+    async def remove_target_class(
+        db: AsyncSession, target_class: ExamTargetClass
+    ) -> None:
         await db.delete(target_class)
         await db.flush()
 
     @staticmethod
-    async def add_invigilator(db: AsyncSession, invigilator: ExamInvigilator) -> ExamInvigilator:
+    async def add_invigilator(
+        db: AsyncSession, invigilator: ExamInvigilator
+    ) -> ExamInvigilator:
         db.add(invigilator)
         await db.flush()
         return invigilator
 
     @staticmethod
-    async def add_invigilators(db: AsyncSession, invigilators: Sequence[ExamInvigilator]) -> list[ExamInvigilator]:
+    async def add_invigilators(
+        db: AsyncSession, invigilators: Sequence[ExamInvigilator]
+    ) -> list[ExamInvigilator]:
         rows = list(invigilators)
         if rows:
             db.add_all(rows)
@@ -282,26 +323,54 @@ class ExamRepository:
         return (await db.execute(query)).scalar_one_or_none()
 
     @staticmethod
-    async def list_invigilators_for_exam(db: AsyncSession, exam_id: UUID) -> list[ExamInvigilator]:
-        return list((await db.execute(select(ExamInvigilator).where(ExamInvigilator.exam_id == exam_id))).scalars().all())
+    async def list_invigilators_for_exam(
+        db: AsyncSession, exam_id: UUID
+    ) -> list[ExamInvigilator]:
+        return list(
+            (
+                await db.execute(
+                    select(ExamInvigilator).where(ExamInvigilator.exam_id == exam_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
 
     @staticmethod
-    async def list_invigilations_for_teacher(db: AsyncSession, teacher_id: UUID) -> list[ExamInvigilator]:
-        return list((await db.execute(select(ExamInvigilator).where(ExamInvigilator.teacher_id == teacher_id))).scalars().all())
+    async def list_invigilations_for_teacher(
+        db: AsyncSession, teacher_id: UUID
+    ) -> list[ExamInvigilator]:
+        return list(
+            (
+                await db.execute(
+                    select(ExamInvigilator).where(
+                        ExamInvigilator.teacher_id == teacher_id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
 
     @staticmethod
-    async def remove_invigilator(db: AsyncSession, invigilator: ExamInvigilator) -> None:
+    async def remove_invigilator(
+        db: AsyncSession, invigilator: ExamInvigilator
+    ) -> None:
         await db.delete(invigilator)
         await db.flush()
 
     @staticmethod
-    async def add_exam_question(db: AsyncSession, question: ExamQuestion) -> ExamQuestion:
+    async def add_exam_question(
+        db: AsyncSession, question: ExamQuestion
+    ) -> ExamQuestion:
         db.add(question)
         await db.flush()
         return question
 
     @staticmethod
-    async def add_exam_questions(db: AsyncSession, questions: Sequence[ExamQuestion]) -> list[ExamQuestion]:
+    async def add_exam_questions(
+        db: AsyncSession, questions: Sequence[ExamQuestion]
+    ) -> list[ExamQuestion]:
         rows = list(questions)
         if rows:
             db.add_all(rows)
@@ -309,7 +378,9 @@ class ExamRepository:
         return rows
 
     @staticmethod
-    async def get_exam_question_by_id(db: AsyncSession, question_id: UUID, *, lock: bool = False) -> ExamQuestion | None:
+    async def get_exam_question_by_id(
+        db: AsyncSession, question_id: UUID, *, lock: bool = False
+    ) -> ExamQuestion | None:
         query = select(ExamQuestion).where(ExamQuestion.id == question_id)
         if lock:
             query = query.with_for_update(of=ExamQuestion)
@@ -329,19 +400,29 @@ class ExamRepository:
         ).scalar_one_or_none()
 
     @staticmethod
-    async def list_exam_questions(db: AsyncSession, exam_id: UUID) -> list[ExamQuestion]:
+    async def list_exam_questions(
+        db: AsyncSession, exam_id: UUID
+    ) -> list[ExamQuestion]:
         result = await db.execute(
-            select(ExamQuestion).where(ExamQuestion.exam_id == exam_id).order_by(ExamQuestion.position.asc())
+            select(ExamQuestion)
+            .where(ExamQuestion.exam_id == exam_id)
+            .order_by(ExamQuestion.position.asc())
         )
         return list(result.scalars().all())
 
     @staticmethod
     async def get_exam_question_point_total(db: AsyncSession, exam_id: UUID) -> Decimal:
-        value = await db.scalar(select(func.coalesce(func.sum(ExamQuestion.points), 0)).where(ExamQuestion.exam_id == exam_id))
+        value = await db.scalar(
+            select(func.coalesce(func.sum(ExamQuestion.points), 0)).where(
+                ExamQuestion.exam_id == exam_id
+            )
+        )
         return Decimal(value or 0)
 
     @staticmethod
-    async def save_exam_question(db: AsyncSession, question: ExamQuestion) -> ExamQuestion:
+    async def save_exam_question(
+        db: AsyncSession, question: ExamQuestion
+    ) -> ExamQuestion:
         db.add(question)
         await db.flush()
         return question
@@ -352,7 +433,9 @@ class ExamRepository:
         await db.flush()
 
     @staticmethod
-    async def add_exam_question_option(db: AsyncSession, option: ExamQuestionOption) -> ExamQuestionOption:
+    async def add_exam_question_option(
+        db: AsyncSession, option: ExamQuestionOption
+    ) -> ExamQuestionOption:
         db.add(option)
         await db.flush()
         return option
@@ -368,7 +451,9 @@ class ExamRepository:
         return rows
 
     @staticmethod
-    async def list_exam_question_options(db: AsyncSession, exam_question_id: UUID) -> list[ExamQuestionOption]:
+    async def list_exam_question_options(
+        db: AsyncSession, exam_question_id: UUID
+    ) -> list[ExamQuestionOption]:
         result = await db.execute(
             select(ExamQuestionOption)
             .where(ExamQuestionOption.exam_question_id == exam_question_id)
@@ -377,6 +462,8 @@ class ExamRepository:
         return list(result.scalars().all())
 
     @staticmethod
-    async def remove_exam_question_option(db: AsyncSession, option: ExamQuestionOption) -> None:
+    async def remove_exam_question_option(
+        db: AsyncSession, option: ExamQuestionOption
+    ) -> None:
         await db.delete(option)
         await db.flush()

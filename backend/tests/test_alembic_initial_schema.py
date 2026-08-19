@@ -88,7 +88,12 @@ def test_initial_revision_covers_the_complete_v1_table_set() -> None:
         for statement in revision._UPGRADE_SQL
         if statement.startswith("CREATE TABLE ")
     }
-    dropped_tables = set(re.findall(r"op\.drop_table\(['\"]([^'\"]+)['\"]\)", INITIAL_REVISION.read_text(encoding="utf-8")))
+    dropped_tables = set(
+        re.findall(
+            r"op\.drop_table\(['\"]([^'\"]+)['\"]\)",
+            INITIAL_REVISION.read_text(encoding="utf-8"),
+        )
+    )
 
     assert created_tables == EXPECTED_INITIAL_TABLES
     assert dropped_tables == EXPECTED_INITIAL_TABLES

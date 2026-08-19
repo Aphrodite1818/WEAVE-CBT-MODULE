@@ -108,9 +108,7 @@ class WeaveClient:
             path,
             json=json,
             params=params,
-            headers={
-                "Authorization": f"Bearer {server_credential.get_secret_value()}"
-            },
+            headers={"Authorization": f"Bearer {server_credential.get_secret_value()}"},
         )
 
     def _build_url_path(self, path: str) -> str:
@@ -124,14 +122,18 @@ class WeaveClient:
             scheme = "ws"
         else:
             raise WeaveContractError("WEAVE_API_BASE_URL must use http or https.")
-        return urlunsplit((scheme, parsed.netloc, parsed.path, parsed.query, parsed.fragment))
+        return urlunsplit(
+            (scheme, parsed.netloc, parsed.path, parsed.query, parsed.fragment)
+        )
 
     @staticmethod
     def _parse_json_object(response: httpx.Response) -> dict[str, Any]:
         try:
             payload = response.json()
         except ValueError as exc:
-            raise WeaveContractError("Weave returned an invalid JSON response.") from exc
+            raise WeaveContractError(
+                "Weave returned an invalid JSON response."
+            ) from exc
         if not isinstance(payload, dict):
             raise WeaveContractError("Weave returned an unexpected response structure.")
         return payload

@@ -246,7 +246,9 @@ class SyncApplyTests(unittest.IsolatedAsyncioTestCase):
         ):
             await service._apply_delta_page(object(), changes)  # type: ignore[arg-type]
 
-        first_upsert = next(index for index, call in enumerate(calls) if call[0] == "upsert")
+        first_upsert = next(
+            index for index, call in enumerate(calls) if call[0] == "upsert"
+        )
         self.assertTrue(all(call[0] == "tombstone" for call in calls[:first_upsert]))
         self.assertIn(("tombstone", "teacher_assignments"), calls)
         self.assertIn(("tombstone", "student_enrollments"), calls)

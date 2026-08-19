@@ -79,7 +79,6 @@ class NodeService:
         """
 
         async with self.identity_store.pairing_lock():
-
             # Re-check INSIDE the lock.
             #
             # Another FastAPI process may have completed pairing while
@@ -91,17 +90,13 @@ class NodeService:
 
             # Verify local persistent storage before consuming the
             # one-time Weave pairing code.
-            await asyncio.to_thread(
-                self.identity_store.ensure_storage_ready
-            )
+            await asyncio.to_thread(self.identity_store.ensure_storage_ready)
 
             # Initialize this installation's local JWT signing secret.
             #
             # This secret is generated locally and is completely
             # independent from the Weave-issued machine credential.
-            await asyncio.to_thread(
-                ensure_local_signing_secret
-            )
+            await asyncio.to_thread(ensure_local_signing_secret)
 
             weave_request = WeavePairingRequest(
                 pairing_code=request.pairing_code,
@@ -109,9 +104,7 @@ class NodeService:
                 client_version=settings.APP_VERSION,
             )
 
-            weave_result = await self.installation_gateway.pair(
-                weave_request
-            )
+            weave_result = await self.installation_gateway.pair(weave_request)
 
             identity = StoredNodeIdentity(
                 server_id=weave_result.server_id,

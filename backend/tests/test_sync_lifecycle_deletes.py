@@ -18,7 +18,9 @@ from app.integrations.weave.schemas import SYNC_SCHEMA_VERSION, WeaveSyncChange 
 
 
 class SyncLifecycleDeleteTests(unittest.IsolatedAsyncioTestCase):
-    async def test_revoked_academic_entities_tombstone_existing_local_projection(self) -> None:
+    async def test_revoked_academic_entities_tombstone_existing_local_projection(
+        self,
+    ) -> None:
         service = SyncService()
         occurred_at = datetime.now(UTC)
 

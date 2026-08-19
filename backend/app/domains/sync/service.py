@@ -42,7 +42,10 @@ from app.domains.academics.repository import AcademicRepository
 from app.domains.node.identity_store import node_identity_store
 from app.domains.sync.repository import SyncRepository
 from app.domains.sync.schemas import SyncReconcileResponse, SyncStatusResponse
-from app.integrations.weave.academics import WeaveAcademicsGateway, weave_academics_gateway
+from app.integrations.weave.academics import (
+    WeaveAcademicsGateway,
+    weave_academics_gateway,
+)
 from app.integrations.weave.exceptions import WeaveRequestRejectedError
 from app.integrations.weave.schemas import (
     SYNC_SCHEMA_VERSION,
@@ -139,7 +142,9 @@ class SyncContractViolation(RuntimeError):
 
 
 class SyncService:
-    def __init__(self, gateway: WeaveAcademicsGateway = weave_academics_gateway) -> None:
+    def __init__(
+        self, gateway: WeaveAcademicsGateway = weave_academics_gateway
+    ) -> None:
         self.gateway = gateway
 
     @staticmethod
@@ -256,7 +261,9 @@ class SyncService:
         )
 
     @staticmethod
-    def _validate_delta(cursor: int, changes: list[WeaveSyncChange], next_cursor: int) -> None:
+    def _validate_delta(
+        cursor: int, changes: list[WeaveSyncChange], next_cursor: int
+    ) -> None:
         previous = cursor
         for change in changes:
             if change.cursor <= previous:
