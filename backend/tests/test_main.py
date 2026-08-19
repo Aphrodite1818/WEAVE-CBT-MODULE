@@ -20,6 +20,12 @@ class MainTests(unittest.TestCase):
         self.assertIn("/api/v1/auth/login", paths)
         self.assertIn("/api/v1/sync/status", paths)
         self.assertIn("/api/v1/sync/reconcile", paths)
+        self.assertIn("/api/v1/media/question-images", paths)
+        self.assertIn("/api/v1/questions/banks/{curriculum_subject_id}", paths)
+        self.assertIn("/api/v1/questions/banks/authorable", paths)
+        self.assertIn("/api/v1/questions/banks/{bank_id}/single-choice", paths)
+        self.assertIn("/api/v1/questions/banks/{bank_id}/multiple-choice", paths)
+        self.assertIn("/api/v1/questions/{question_id}/image", paths)
 
 
 if __name__ == "__main__":
