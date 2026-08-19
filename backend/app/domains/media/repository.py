@@ -1,6 +1,4 @@
-# =====================================#
-# backend.app.domains.media.repository
-# ====================================#
+"""Persistence operations for immutable locally stored media assets."""
 
 from __future__ import annotations
 
@@ -20,28 +18,24 @@ class MediaRepository:
         db: AsyncSession,
         asset: MediaAsset,
     ) -> MediaAsset:
-        """
-        Persist MediaAsset metadata.
-
-        Does not commit.
-        Transaction boundaries belong to the service layer.
-        """
+        """Persist MediaAsset metadata without committing."""
 
         db.add(asset)
-
         await db.flush()
         await db.refresh(asset)
-
         return asset
 
     @staticmethod
     async def get_asset_by_id(
         db: AsyncSession,
         asset_id: UUID,
+        *,
+        lock: bool = False,
     ) -> MediaAsset | None:
-        result = await db.execute(select(MediaAsset).where(MediaAsset.id == asset_id))
-
-        return result.scalar_one_or_none()
+        query = select(MediaAsset).where(MediaAsset.id == asset_id)
+        if lock:
+            query = query.with_for_update(of=MediaAsset)
+        return (await db.execute(query)).scalar_one_or_none()
 
     @staticmethod
     async def get_asset_by_storage_key(
@@ -51,7 +45,6 @@ class MediaRepository:
         result = await db.execute(
             select(MediaAsset).where(MediaAsset.storage_key == storage_key)
         )
-
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -59,15 +52,9 @@ class MediaRepository:
         db: AsyncSession,
         asset_id: UUID,
     ) -> bool:
-        """
-        Return True when a source Question currently references
-        this media asset.
-        """
-
         result = await db.execute(
             select(exists().where(Question.image_asset_id == asset_id))
         )
-
         return bool(result.scalar())
 
     @staticmethod
@@ -75,15 +62,9 @@ class MediaRepository:
         db: AsyncSession,
         asset_id: UUID,
     ) -> bool:
-        """
-        Return True when a historical/sealed ExamQuestion
-        references this media asset.
-        """
-
         result = await db.execute(
             select(exists().where(ExamQuestion.image_asset_id == asset_id))
         )
-
         return bool(result.scalar())
 
     @staticmethod
@@ -91,33 +72,16 @@ class MediaRepository:
         db: AsyncSession,
         asset_id: UUID,
     ) -> bool:
-        """
-        Return True if either a Question or ExamQuestion still
-        needs this media asset.
-        """
-
-        if await MediaRepository.is_referenced_by_question(
-            db,
-            asset_id,
-        ):
+        if await MediaRepository.is_referenced_by_question(db, asset_id):
             return True
-
-        return await MediaRepository.is_referenced_by_exam_question(
-            db,
-            asset_id,
-        )
+        return await MediaRepository.is_referenced_by_exam_question(db, asset_id)
 
     @staticmethod
     async def delete_asset(
         db: AsyncSession,
         asset: MediaAsset,
     ) -> None:
-        """
-        Delete MediaAsset metadata.
-
-        The service must verify references and handle physical-file
-        deletion before/after calling this method.
-        """
+        """Delete metadata after the service has established reference safety."""
 
         await db.delete(asset)
         await db.flush()
