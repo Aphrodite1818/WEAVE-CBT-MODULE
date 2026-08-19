@@ -8,53 +8,29 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.auth.models import LocalActor
-from app.domains.media.models import (
-    MEDIA_FILENAME_MAX_LENGTH,
-    MediaAsset,
-)
+from app.domains.media.models import MEDIA_FILENAME_MAX_LENGTH, MediaAsset
 from app.domains.media.repository import MediaRepository
 from app.domains.media.storage import local_media_storage
-
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class MediaContent:
-    """
-    Physical media content returned by the storage layer.
-
-    This is useful later when an authorized route needs to
-    deliver an image to the frontend.
-    """
+    """Physical media content returned after caller authorization."""
 
     data: bytes
     mime_type: str
     original_filename: str
 
 
-def _normalize_original_filename(
-    filename: str | None,
-) -> str:
-    """
-    Keep the original filename only as harmless metadata.
-
-    The original filename is NEVER used as the actual
-    filesystem path.
-    """
+def _normalize_original_filename(filename: str | None) -> str:
+    """Keep the browser filename only as bounded metadata, never as a disk path."""
 
     if filename is None:
         return "image"
 
-    filename = filename.strip()
-
-    # Browsers may sometimes submit things resembling:
-    #
-    # C:\\fakepath\\diagram.png
-    #
-    # Normalize both slash styles.
-    filename = filename.replace("\\", "/").rsplit("/", 1)[-1].strip()
-
+    filename = filename.strip().replace("\\", "/").rsplit("/", 1)[-1].strip()
     if not filename:
         return "image"
 
@@ -70,48 +46,16 @@ class MediaService:
         original_filename: str | None,
         data: bytes,
     ) -> MediaAsset:
-        """
-        Validate, normalize, store and register one question image.
-
-        This operation creates an independent MediaAsset.
-
-        The QuestionService will later decide whether the actor is
-        academically authorized to attach this asset to a particular
-        question.
-        """
-
-        # -----------------------------------------------------
-        # 1. Basic staff authorization.
-        # -----------------------------------------------------
+        """Normalize, persist and register one immutable local question image."""
 
         if not actor.is_active:
             raise ValueError("Active local actor is required")
 
-        if actor.role not in {
-            "admin",
-            "teacher",
-        }:
+        if actor.role not in {"admin", "teacher"}:
             raise ValueError("Only school staff may upload question media")
 
         filename = _normalize_original_filename(original_filename)
-
-        # -----------------------------------------------------
-        # 2. Store the physical image first.
-        #
-        # storage.py:
-        # - validates the image
-        # - fixes orientation
-        # - preserves aspect ratio
-        # - normalizes to the standard canvas
-        # - converts to immutable WebP
-        # - calculates SHA-256
-        # -----------------------------------------------------
-
         stored = await local_media_storage.save_question_image(data)
-
-        # -----------------------------------------------------
-        # 3. Create corresponding database metadata.
-        # -----------------------------------------------------
 
         asset = MediaAsset(
             storage_key=stored.storage_key,
@@ -123,26 +67,16 @@ class MediaService:
         )
 
         try:
-            asset = await MediaRepository.add_asset(
-                db,
-                asset,
-            )
-
+            asset = await MediaRepository.add_asset(db, asset)
             await db.commit()
-
         except Exception:
             await db.rollback()
 
-            # The physical file was already created.
-            # If PostgreSQL rejects the MediaAsset row, remove
-            # that newly-created file immediately.
             try:
                 await local_media_storage.delete(stored.storage_key)
-
             except Exception:
                 logger.exception(
-                    "Failed to remove orphaned media file %s "
-                    "after database persistence failure",
+                    "Failed to remove orphaned media file %s after database persistence failure",
                     stored.storage_key,
                 )
 
@@ -156,22 +90,11 @@ class MediaService:
         *,
         asset_id: UUID,
     ) -> MediaAsset:
-        """
-        Resolve MediaAsset metadata.
+        """Resolve metadata only; the caller owns question/exam authorization."""
 
-        This method does NOT decide whether a student or teacher
-        is authorized to view the image. That authorization belongs
-        to the Question/Exam domain using the asset.
-        """
-
-        asset = await MediaRepository.get_asset_by_id(
-            db,
-            asset_id,
-        )
-
+        asset = await MediaRepository.get_asset_by_id(db, asset_id)
         if asset is None:
             raise ValueError("Media asset does not exist")
-
         return asset
 
     @staticmethod
@@ -180,21 +103,12 @@ class MediaService:
         *,
         asset_id: UUID,
     ) -> MediaContent:
-        """
-        Load the physical bytes for an already-authorized asset.
+        """Load bytes for an asset whose domain-level access was already authorized."""
 
-        Callers must perform question/exam authorization before
-        using this method for HTTP delivery.
-        """
-
-        asset = await MediaService.get_asset(
-            db,
-            asset_id=asset_id,
-        )
+        asset = await MediaService.get_asset(db, asset_id=asset_id)
 
         try:
             data = await local_media_storage.read(asset.storage_key)
-
         except FileNotFoundError as exc:
             raise RuntimeError(
                 "Media asset exists in the database but its physical file is missing"
@@ -212,74 +126,42 @@ class MediaService:
         *,
         asset_id: UUID,
     ) -> bool:
-        """
-        Delete a MediaAsset only when neither Question nor
-        ExamQuestion still references it.
+        """Delete metadata and bytes only when no source or exam question references it.
 
-        Returns:
-            True:
-                asset existed and was deleted.
-
-            False:
-                asset no longer existed.
+        The MediaAsset row is locked before reference checks. This serializes cleanup
+        against a concurrent question attachment that takes the same row lock.
         """
 
         asset = await MediaRepository.get_asset_by_id(
             db,
             asset_id,
+            lock=True,
         )
 
         if asset is None:
             return False
 
-        is_referenced = await MediaRepository.is_referenced(
-            db,
-            asset.id,
-        )
-
-        if is_referenced:
+        if await MediaRepository.is_referenced(db, asset.id):
             raise ValueError("Media asset is still referenced and cannot be deleted")
 
         storage_key = asset.storage_key
 
-        # -----------------------------------------------------
-        # Delete DB metadata FIRST.
-        #
-        # PostgreSQL's FK RESTRICT constraints provide another
-        # safety layer if something concurrently references it.
-        # -----------------------------------------------------
-
         try:
-            await MediaRepository.delete_asset(
-                db,
-                asset,
-            )
-
+            await MediaRepository.delete_asset(db, asset)
             await db.commit()
-
         except IntegrityError as exc:
             await db.rollback()
-
             raise ValueError(
                 "Media asset became referenced and cannot be deleted"
             ) from exc
-
         except Exception:
             await db.rollback()
             raise
 
-        # -----------------------------------------------------
-        # Now remove the physical file.
-        #
-        # If this fails, we have an orphan FILE rather than a
-        # broken Question/ExamQuestion pointing to a missing file.
-        #
-        # That is the safer failure direction.
-        # -----------------------------------------------------
-
+        # DB metadata is removed first. If disk deletion fails, the safe failure mode
+        # is an orphaned file rather than a Question/ExamQuestion with missing bytes.
         try:
             await local_media_storage.delete(storage_key)
-
         except Exception:
             logger.exception(
                 "Media metadata was deleted but physical file %s could not be removed",
