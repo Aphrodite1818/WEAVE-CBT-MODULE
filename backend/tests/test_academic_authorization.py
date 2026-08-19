@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 from uuid import uuid4
 
 os.environ.setdefault(
@@ -72,7 +72,7 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
             )
 
         has_assignment.assert_awaited_once_with(
-            unittest.mock.ANY,
+            ANY,
             membership_id,
             subject_id,
         )
