@@ -22,7 +22,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
 QUESTION_BANK_NAME_MAX_LENGTH = 255
-QUESTION_IMAGE_URL_MAX_LENGTH = 2048
 
 
 class QuestionType(str, PyEnum):
@@ -87,7 +86,7 @@ class Question(Base):
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
     instruction: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_asset_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("media_assets.id", ondelete="RESTRICT"), nullable=True
+        ForeignKey("media_assets.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     version: Mapped[int] = mapped_column(
         Integer,
