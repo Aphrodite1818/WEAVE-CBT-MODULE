@@ -233,6 +233,64 @@ class QuestionServiceTests(unittest.IsolatedAsyncioTestCase):
         cleanup.assert_not_awaited()
         db.commit.assert_awaited_once()
 
+    async def test_explicit_same_existing_image_does_not_require_editor_ownership(self) -> None:
+        db = AsyncMock()
+        admin = actor(role="admin")
+        teacher_owner_id = uuid4()
+        current_bank = bank()
+        image_id = uuid4()
+        current_question = question(
+            owner_id=teacher_owner_id,
+            bank_id=current_bank.id,
+            image_asset_id=image_id,
+        )
+
+        with (
+            patch.object(
+                QuestionRepository,
+                "get_question_by_id",
+                new=AsyncMock(return_value=current_question),
+            ),
+            patch.object(
+                QuestionRepository,
+                "get_bank_by_id",
+                new=AsyncMock(return_value=current_bank),
+            ),
+            patch.object(
+                AcademicAuthorizationService,
+                "require_can_author_curriculum_subject",
+                new=AsyncMock(),
+            ),
+            patch.object(
+                QuestionRepository,
+                "save_question",
+                new=AsyncMock(side_effect=lambda _db, row: row),
+            ),
+            patch(
+                "app.domains.questions.service._resolve_new_question_image",
+                new=AsyncMock(),
+            ) as resolve_new_image,
+            patch.object(
+                MediaService,
+                "delete_unreferenced_asset",
+                new=AsyncMock(),
+            ) as cleanup,
+        ):
+            result = await QuestionService.update_question(
+                db,
+                actor=admin,  # type: ignore[arg-type]
+                question_id=current_question.id,
+                payload=QuestionUpdate(
+                    prompt="Admin edit",
+                    image_asset_id=image_id,
+                ),
+            )
+
+        self.assertEqual(result.image_asset_id, image_id)
+        self.assertEqual(result.version, 2)
+        resolve_new_image.assert_not_awaited()
+        cleanup.assert_not_awaited()
+
     async def test_update_explicit_null_removes_image_and_cleans_old_asset(self) -> None:
         db = AsyncMock()
         current_actor = actor()
