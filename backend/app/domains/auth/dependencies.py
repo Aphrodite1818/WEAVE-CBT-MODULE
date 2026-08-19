@@ -25,7 +25,8 @@ async def get_current_local_actor(
 ) -> LocalActor:
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required."
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required.",
         )
 
     try:
@@ -66,6 +67,7 @@ async def get_current_local_actor(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Local actor is not active.",
         )
+
     if actor.weave_actor_id != str(payload.get("sub")) or actor.role != payload.get(
         "role"
     ):
@@ -73,27 +75,34 @@ async def get_current_local_actor(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Access token identity mismatch.",
         )
+
     return actor
 
 
 async def get_current_local_admin(
     actor: Annotated[LocalActor, Depends(get_current_local_actor)],
 ) -> LocalActor:
-    """authorize local admin actors"""
-    if actor.role not in {"admin", "tenant_admin"}:
+    """Authorize the canonical local school-administrator role."""
+
+    if actor.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="School administrator access required.",
         )
+
     return actor
 
 
 async def get_current_local_teacher(
     actor: Annotated[LocalActor, Depends(get_current_local_actor)],
 ) -> LocalActor:
-    """authorize local teacher actors"""
+    """Authorize local teacher actors."""
+
     if actor.role != "teacher":
-        raise HTTPException(status_code=403, detail="Teacher access required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Teacher access required.",
+        )
 
     return actor
 
