@@ -125,6 +125,33 @@ async def _resolve_new_question_image(
     return asset.id
 
 
+async def _resolve_updated_question_image(
+    db: AsyncSession,
+    *,
+    actor: LocalActor,
+    question: Question,
+    requested_image_asset_id: UUID | None,
+) -> UUID | None:
+    """Resolve PATCH image semantics without re-owning an unchanged asset.
+
+    - None explicitly removes the image.
+    - The current image ID is accepted unchanged regardless of who uploaded it.
+    - A different image ID is a replacement and must have been uploaded by the editor.
+    """
+
+    if requested_image_asset_id is None:
+        return None
+
+    if requested_image_asset_id == question.image_asset_id:
+        return question.image_asset_id
+
+    return await _resolve_new_question_image(
+        db,
+        actor=actor,
+        image_asset_id=requested_image_asset_id,
+    )
+
+
 class QuestionService:
     @staticmethod
     async def create_question_bank(
@@ -552,13 +579,12 @@ class QuestionService:
                 changed = True
 
         if "image_asset_id" in fields:
-            next_image_id: UUID | None = None
-            if payload.image_asset_id is not None:
-                next_image_id = await _resolve_new_question_image(
-                    db,
-                    actor=actor,
-                    image_asset_id=payload.image_asset_id,
-                )
+            next_image_id = await _resolve_updated_question_image(
+                db,
+                actor=actor,
+                question=question,
+                requested_image_asset_id=payload.image_asset_id,
+            )
             if next_image_id != question.image_asset_id:
                 question.image_asset_id = next_image_id
                 changed = True
