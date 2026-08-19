@@ -164,6 +164,31 @@ async def list_authorable_question_banks(
     return [QuestionBankResponse.model_validate(bank) for bank in banks]
 
 
+@router.get(
+    "/banks",
+    response_model=list[QuestionBankResponse],
+)
+async def list_admin_question_banks(
+    db: DbSession,
+    actor: CurrentLocalAdmin,
+    curriculum_subject_id: UUID | None = Query(default=None),
+    include_archived: bool = Query(default=False),
+) -> list[QuestionBankResponse]:
+    """Admin management list; archived banks remain discoverable for reactivation."""
+
+    try:
+        banks = await QuestionService.list_admin_question_banks(
+            db,
+            actor=actor,
+            curriculum_subject_id=curriculum_subject_id,
+            include_archived=include_archived,
+        )
+    except (AcademicAuthorizationError, AcademicScopeError, ValueError) as exc:
+        raise _domain_http_error(exc) from exc
+
+    return [QuestionBankResponse.model_validate(bank) for bank in banks]
+
+
 @router.patch(
     "/banks/{bank_id}",
     response_model=QuestionBankResponse,
