@@ -1,13 +1,18 @@
-"""align exam authoring and scoring schema
+"""align exam authoring, scoring and runtime schema
 
 Revision ID: 7dfe6fd9894b
 Revises: b91d2c4e7a10
 Create Date: 2026-08-21 15:28:56.607864
 
+This is a pre-launch development cutover. Existing examination execution data
+is intentionally not transformed because the old and new scoring/authoring
+contracts are not semantically equivalent.
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
@@ -18,9 +23,27 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
-def upgrade() -> None:
-    """Upgrade schema."""
-    op.add_column("exams", sa.Column("question_bank_id", sa.Uuid(), nullable=True))
+def _require_empty_exam_domain() -> None:
+    """Refuse to invent historical data during the pre-launch schema cutover."""
+    bind = op.get_bind()
+    has_exam_data = bind.execute(
+        sa.text("SELECT EXISTS (SELECT 1 FROM exams LIMIT 1)")
+    ).scalar_one()
+
+    if has_exam_data:
+        raise RuntimeError(
+            "Migration 7dfe6fd9894b changes the examination authoring and "
+            "scoring contract and requires an empty pre-launch exam dataset. "
+            "Reset the development database (or remove disposable exam data) "
+            "before upgrading."
+        )
+
+
+def _upgrade_exams() -> None:
+    op.add_column(
+        "exams",
+        sa.Column("question_bank_id", sa.Uuid(), nullable=False),
+    )
     op.add_column(
         "exams",
         sa.Column(
@@ -36,9 +59,13 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.add_column("exams", sa.Column("question_count", sa.Integer(), nullable=True))
     op.add_column(
-        "exams", sa.Column("scheduled_start_at", sa.DateTime(timezone=True), nullable=True)
+        "exams",
+        sa.Column("question_count", sa.Integer(), nullable=False),
+    )
+    op.add_column(
+        "exams",
+        sa.Column("scheduled_start_at", sa.DateTime(timezone=True), nullable=True),
     )
     op.add_column(
         "exams",
@@ -65,7 +92,12 @@ def upgrade() -> None:
     )
     op.add_column(
         "exams",
-        sa.Column("roster_version", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column(
+            "roster_version",
+            sa.Integer(),
+            server_default=sa.text("0"),
+            nullable=False,
+        ),
     )
     op.add_column(
         "exams",
@@ -77,77 +109,46 @@ def upgrade() -> None:
         ),
     )
     op.add_column(
-        "exams", sa.Column("roster_prepared_at", sa.DateTime(timezone=True), nullable=True)
+        "exams",
+        sa.Column("roster_prepared_at", sa.DateTime(timezone=True), nullable=True),
     )
     op.add_column("exams", sa.Column("roster_error", sa.Text(), nullable=True))
     op.add_column(
         "exams",
-        sa.Column("revision_number", sa.Integer(), server_default=sa.text("1"), nullable=False),
+        sa.Column(
+            "revision_number",
+            sa.Integer(),
+            server_default=sa.text("1"),
+            nullable=False,
+        ),
     )
-    op.add_column("exams", sa.Column("revision_of_exam_id", sa.Uuid(), nullable=True))
-    op.add_column("exams", sa.Column("sealed_by_actor_id", sa.Uuid(), nullable=True))
-    op.add_column("exams", sa.Column("activated_by_actor_id", sa.Uuid(), nullable=True))
-    op.add_column("exams", sa.Column("closed_by_actor_id", sa.Uuid(), nullable=True))
-    op.add_column("exams", sa.Column("cancelled_by_actor_id", sa.Uuid(), nullable=True))
-    op.add_column("exams", sa.Column("cancellation_reason", sa.Text(), nullable=True))
+    op.add_column(
+        "exams",
+        sa.Column("revision_of_exam_id", sa.Uuid(), nullable=True),
+    )
+    op.add_column(
+        "exams",
+        sa.Column("sealed_by_actor_id", sa.Uuid(), nullable=True),
+    )
+    op.add_column(
+        "exams",
+        sa.Column("activated_by_actor_id", sa.Uuid(), nullable=True),
+    )
+    op.add_column(
+        "exams",
+        sa.Column("closed_by_actor_id", sa.Uuid(), nullable=True),
+    )
+    op.add_column(
+        "exams",
+        sa.Column("cancelled_by_actor_id", sa.Uuid(), nullable=True),
+    )
+    op.add_column(
+        "exams",
+        sa.Column("cancellation_reason", sa.Text(), nullable=True),
+    )
     op.add_column(
         "exams",
         sa.Column("component_maximum_score", sa.Numeric(8, 2), nullable=True),
-    )
-
-    op.execute("UPDATE exams SET scheduled_start_at = opens_at")
-    op.execute(
-        """
-        UPDATE exams
-        SET component_maximum_score = COALESCE(
-            source_assessment_component_maximum_score,
-            maximum_score
-        )
-        """
-    )
-    op.execute(
-        """
-        UPDATE exams
-        SET question_count = COALESCE(
-            NULLIF((
-                SELECT COUNT(eq.id)::integer
-                FROM exam_questions eq
-                WHERE eq.exam_id = exams.id
-            ), 0),
-            maximum_score::integer
-        )
-        """
-    )
-    op.execute(
-        """
-        UPDATE exams
-        SET question_bank_id = inferred.bank_id
-        FROM (
-            SELECT DISTINCT ON (eq.exam_id)
-                eq.exam_id,
-                q.bank_id
-            FROM exam_questions eq
-            JOIN questions q ON q.id = eq.source_question_id
-            ORDER BY eq.exam_id, eq.position
-        ) AS inferred
-        WHERE inferred.exam_id = exams.id
-        """
-    )
-    op.execute(
-        """
-        DO $$
-        BEGIN
-            IF EXISTS (
-                SELECT 1
-                FROM exams
-                WHERE question_bank_id IS NULL
-            ) THEN
-                RAISE EXCEPTION
-                    'Cannot infer question_bank_id for one or more existing exams';
-            END IF;
-        END
-        $$;
-        """
     )
 
     op.create_foreign_key(
@@ -199,23 +200,31 @@ def upgrade() -> None:
         ondelete="RESTRICT",
     )
 
-    op.alter_column("exams", "question_bank_id", nullable=False)
-    op.alter_column("exams", "question_count", nullable=False)
-    op.create_index(op.f("ix_exams_question_bank_id"), "exams", ["question_bank_id"])
+    op.create_index(
+        op.f("ix_exams_question_bank_id"),
+        "exams",
+        ["question_bank_id"],
+    )
     op.create_index(
         op.f("ix_exams_question_selection_mode"),
         "exams",
         ["question_selection_mode"],
     )
     op.create_index(
-        op.f("ix_exams_scheduled_start_at"), "exams", ["scheduled_start_at"]
+        op.f("ix_exams_scheduled_start_at"),
+        "exams",
+        ["scheduled_start_at"],
     )
     op.create_index(
         op.f("ix_exams_latest_normal_start_at"),
         "exams",
         ["latest_normal_start_at"],
     )
-    op.create_index(op.f("ix_exams_roster_status"), "exams", ["roster_status"])
+    op.create_index(
+        op.f("ix_exams_roster_status"),
+        "exams",
+        ["roster_status"],
+    )
     op.create_index(
         op.f("ix_exams_revision_of_exam_id"),
         "exams",
@@ -223,16 +232,24 @@ def upgrade() -> None:
         unique=True,
     )
     op.create_index(
-        op.f("ix_exams_sealed_by_actor_id"), "exams", ["sealed_by_actor_id"]
+        op.f("ix_exams_sealed_by_actor_id"),
+        "exams",
+        ["sealed_by_actor_id"],
     )
     op.create_index(
-        op.f("ix_exams_activated_by_actor_id"), "exams", ["activated_by_actor_id"]
+        op.f("ix_exams_activated_by_actor_id"),
+        "exams",
+        ["activated_by_actor_id"],
     )
     op.create_index(
-        op.f("ix_exams_closed_by_actor_id"), "exams", ["closed_by_actor_id"]
+        op.f("ix_exams_closed_by_actor_id"),
+        "exams",
+        ["closed_by_actor_id"],
     )
     op.create_index(
-        op.f("ix_exams_cancelled_by_actor_id"), "exams", ["cancelled_by_actor_id"]
+        op.f("ix_exams_cancelled_by_actor_id"),
+        "exams",
+        ["cancelled_by_actor_id"],
     )
 
     op.drop_index(
@@ -269,11 +286,22 @@ def upgrade() -> None:
         "status IN ('draft', 'submitted', 'sealed', 'active', 'suspended', "
         "'closed', 'cancelled')",
     )
-    op.drop_constraint("ck_exams_maximum_score_positive", "exams", type_="check")
     op.drop_constraint(
-        "ck_exams_source_component_maximum_positive", "exams", type_="check"
+        "ck_exams_maximum_score_positive",
+        "exams",
+        type_="check",
     )
-    op.drop_constraint("ck_exams_valid_schedule", "exams", type_="check")
+    op.drop_constraint(
+        "ck_exams_source_component_maximum_positive",
+        "exams",
+        type_="check",
+    )
+    op.drop_constraint(
+        "ck_exams_valid_schedule",
+        "exams",
+        type_="check",
+    )
+
     op.create_check_constraint(
         "ck_exams_question_count_positive",
         "exams",
@@ -346,6 +374,8 @@ def upgrade() -> None:
     op.drop_column("exams", "source_assessment_component_code")
     op.drop_column("exams", "source_assessment_component_maximum_score")
 
+
+def _upgrade_question_authoring() -> None:
     op.create_table(
         "exam_question_selections",
         sa.Column("exam_id", sa.Uuid(), nullable=False),
@@ -380,7 +410,10 @@ def upgrade() -> None:
             name=op.f("fk_exam_question_selections_question_id_questions"),
             ondelete="RESTRICT",
         ),
-        sa.PrimaryKeyConstraint("id", name=op.f("pk_exam_question_selections")),
+        sa.PrimaryKeyConstraint(
+            "id",
+            name=op.f("pk_exam_question_selections"),
+        ),
         sa.UniqueConstraint(
             "exam_id",
             "question_id",
@@ -415,6 +448,8 @@ def upgrade() -> None:
     )
     op.drop_column("exam_questions", "points")
 
+
+def _upgrade_exam_suspensions() -> None:
     op.create_table(
         "exam_suspensions",
         sa.Column("exam_id", sa.Uuid(), nullable=False),
@@ -478,9 +513,16 @@ def upgrade() -> None:
             name=op.f("fk_exam_suspensions_resumed_by_actor_id_local_actors"),
             ondelete="RESTRICT",
         ),
-        sa.PrimaryKeyConstraint("id", name=op.f("pk_exam_suspensions")),
+        sa.PrimaryKeyConstraint(
+            "id",
+            name=op.f("pk_exam_suspensions"),
+        ),
     )
-    op.create_index(op.f("ix_exam_suspensions_exam_id"), "exam_suspensions", ["exam_id"])
+    op.create_index(
+        op.f("ix_exam_suspensions_exam_id"),
+        "exam_suspensions",
+        ["exam_id"],
+    )
     op.create_index(
         "ix_exam_suspensions_exam_suspended_at",
         "exam_suspensions",
@@ -497,41 +539,53 @@ def upgrade() -> None:
         ["resumed_by_actor_id"],
     )
 
-    op.add_column("exam_results", sa.Column("raw_score", sa.Integer(), nullable=True))
-    op.add_column("exam_results", sa.Column("raw_max_score", sa.Integer(), nullable=True))
+
+def _upgrade_results() -> None:
     op.add_column(
-        "exam_results", sa.Column("percentage", sa.Numeric(5, 2), nullable=True)
-    )
-    op.add_column(
-        "exam_results", sa.Column("component_score", sa.Numeric(8, 2), nullable=True)
+        "exam_results",
+        sa.Column("raw_score", sa.Integer(), nullable=False),
     )
     op.add_column(
         "exam_results",
-        sa.Column("component_maximum_score", sa.Numeric(8, 2), nullable=True),
+        sa.Column("raw_max_score", sa.Integer(), nullable=False),
     )
-    op.execute(
-        """
-        UPDATE exam_results
-        SET
-            raw_score = score::integer,
-            raw_max_score = maximum_score::integer,
-            percentage = ROUND((score / maximum_score) * 100, 2),
-            component_score = score,
-            component_maximum_score = maximum_score
-        """
+    op.add_column(
+        "exam_results",
+        sa.Column("percentage", sa.Numeric(5, 2), nullable=False),
     )
-    op.alter_column("exam_results", "raw_score", nullable=False)
-    op.alter_column("exam_results", "raw_max_score", nullable=False)
-    op.alter_column("exam_results", "percentage", nullable=False)
-    op.alter_column("exam_results", "component_score", nullable=False)
-    op.alter_column("exam_results", "component_maximum_score", nullable=False)
-    op.drop_constraint("ck_exam_results_score_nonnegative", "exam_results", type_="check")
+    op.add_column(
+        "exam_results",
+        sa.Column("component_score", sa.Numeric(8, 2), nullable=False),
+    )
+    op.add_column(
+        "exam_results",
+        sa.Column("component_maximum_score", sa.Numeric(8, 2), nullable=False),
+    )
+
+    op.alter_column(
+        "exam_results",
+        "calculated_at",
+        existing_type=sa.DateTime(timezone=True),
+        existing_nullable=False,
+        server_default=sa.text("now()"),
+    )
+
     op.drop_constraint(
-        "ck_exam_results_maximum_score_positive", "exam_results", type_="check"
+        "ck_exam_results_score_nonnegative",
+        "exam_results",
+        type_="check",
     )
     op.drop_constraint(
-        "ck_exam_results_score_within_maximum", "exam_results", type_="check"
+        "ck_exam_results_maximum_score_positive",
+        "exam_results",
+        type_="check",
     )
+    op.drop_constraint(
+        "ck_exam_results_score_within_maximum",
+        "exam_results",
+        type_="check",
+    )
+
     op.create_check_constraint(
         "ck_exam_results_raw_score_nonnegative",
         "exam_results",
@@ -582,12 +636,289 @@ def upgrade() -> None:
         "exam_results",
         ["sync_status", "last_sync_attempt_at"],
     )
+
     op.drop_column("exam_results", "score")
     op.drop_column("exam_results", "maximum_score")
 
 
-def downgrade() -> None:
-    """Downgrade schema."""
+def _upgrade_runtime() -> None:
+    op.create_table(
+        "cbt_runtime_states",
+        sa.Column("runtime_id", sa.Uuid(), nullable=False),
+        sa.Column(
+            "started_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "last_heartbeat_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column("stopped_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("shutdown_reason", sa.String(length=500), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.CheckConstraint(
+            "last_heartbeat_at >= started_at",
+            name="ck_cbt_runtime_states_heartbeat_after_start",
+        ),
+        sa.CheckConstraint(
+            "stopped_at IS NULL OR stopped_at >= started_at",
+            name="ck_cbt_runtime_states_stop_after_start",
+        ),
+        sa.CheckConstraint(
+            "stopped_at IS NULL OR stopped_at >= last_heartbeat_at",
+            name="ck_cbt_runtime_states_stop_after_heartbeat",
+        ),
+        sa.CheckConstraint(
+            "stopped_at IS NOT NULL OR shutdown_reason IS NULL",
+            name="ck_cbt_runtime_states_shutdown_reason_requires_stop",
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_cbt_runtime_states")),
+    )
+    op.create_index(
+        op.f("ix_cbt_runtime_states_runtime_id"),
+        "cbt_runtime_states",
+        ["runtime_id"],
+        unique=True,
+    )
+    op.create_index(
+        op.f("ix_cbt_runtime_states_started_at"),
+        "cbt_runtime_states",
+        ["started_at"],
+    )
+    op.create_index(
+        op.f("ix_cbt_runtime_states_last_heartbeat_at"),
+        "cbt_runtime_states",
+        ["last_heartbeat_at"],
+    )
+    op.create_index(
+        "ix_cbt_runtime_states_started_heartbeat",
+        "cbt_runtime_states",
+        ["started_at", "last_heartbeat_at"],
+    )
+
+    op.create_table(
+        "realtime_outbox_events",
+        sa.Column("aggregate_type", sa.String(length=64), nullable=False),
+        sa.Column("aggregate_id", sa.Uuid(), nullable=False),
+        sa.Column("event_type", sa.String(length=128), nullable=False),
+        sa.Column(
+            "payload",
+            postgresql.JSONB(astext_type=sa.Text()),
+            server_default=sa.text("'{}'::jsonb"),
+            nullable=False,
+        ),
+        sa.Column(
+            "status",
+            sa.Enum(
+                "pending",
+                "publishing",
+                "published",
+                "failed",
+                name="outbox_event_status",
+                native_enum=False,
+                create_constraint=True,
+            ),
+            server_default="pending",
+            nullable=False,
+        ),
+        sa.Column(
+            "available_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "publish_attempts",
+            sa.Integer(),
+            server_default=sa.text("0"),
+            nullable=False,
+        ),
+        sa.Column(
+            "last_publish_attempt_at",
+            sa.DateTime(timezone=True),
+            nullable=True,
+        ),
+        sa.Column("claim_token", sa.Uuid(), nullable=True),
+        sa.Column("claimed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("last_error", sa.Text(), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.CheckConstraint(
+            "publish_attempts >= 0",
+            name="ck_realtime_outbox_publish_attempts_nonnegative",
+        ),
+        sa.CheckConstraint(
+            "last_error IS NULL OR char_length(last_error) <= 2048",
+            name="ck_realtime_outbox_error_length",
+        ),
+        sa.CheckConstraint(
+            "(status = 'publishing' AND claim_token IS NOT NULL "
+            "AND claimed_at IS NOT NULL) OR status <> 'publishing'",
+            name="ck_realtime_outbox_publishing_requires_claim",
+        ),
+        sa.CheckConstraint(
+            "published_at IS NULL OR status = 'published'",
+            name="ck_realtime_outbox_published_at_matches_status",
+        ),
+        sa.CheckConstraint(
+            "status <> 'published' OR published_at IS NOT NULL",
+            name="ck_realtime_outbox_published_requires_timestamp",
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_realtime_outbox_events")),
+    )
+    op.create_index(
+        op.f("ix_realtime_outbox_events_aggregate_type"),
+        "realtime_outbox_events",
+        ["aggregate_type"],
+    )
+    op.create_index(
+        op.f("ix_realtime_outbox_events_aggregate_id"),
+        "realtime_outbox_events",
+        ["aggregate_id"],
+    )
+    op.create_index(
+        op.f("ix_realtime_outbox_events_event_type"),
+        "realtime_outbox_events",
+        ["event_type"],
+    )
+    op.create_index(
+        op.f("ix_realtime_outbox_events_status"),
+        "realtime_outbox_events",
+        ["status"],
+    )
+    op.create_index(
+        op.f("ix_realtime_outbox_events_available_at"),
+        "realtime_outbox_events",
+        ["available_at"],
+    )
+    op.create_index(
+        op.f("ix_realtime_outbox_events_claim_token"),
+        "realtime_outbox_events",
+        ["claim_token"],
+    )
+    op.create_index(
+        op.f("ix_realtime_outbox_events_claimed_at"),
+        "realtime_outbox_events",
+        ["claimed_at"],
+    )
+    op.create_index(
+        "ix_realtime_outbox_dispatch",
+        "realtime_outbox_events",
+        ["status", "available_at"],
+    )
+    op.create_index(
+        "ix_realtime_outbox_aggregate",
+        "realtime_outbox_events",
+        ["aggregate_type", "aggregate_id"],
+    )
+    op.create_index(
+        "ix_realtime_outbox_stale_claim",
+        "realtime_outbox_events",
+        ["status", "claimed_at"],
+    )
+
+
+def upgrade() -> None:
+    """Upgrade schema to the current pre-launch examination/runtime contract."""
+    _require_empty_exam_domain()
+    _upgrade_exams()
+    _upgrade_question_authoring()
+    _upgrade_exam_suspensions()
+    _upgrade_results()
+    _upgrade_runtime()
+
+
+def _downgrade_runtime() -> None:
+    op.drop_index(
+        "ix_realtime_outbox_stale_claim",
+        table_name="realtime_outbox_events",
+    )
+    op.drop_index(
+        "ix_realtime_outbox_aggregate",
+        table_name="realtime_outbox_events",
+    )
+    op.drop_index(
+        "ix_realtime_outbox_dispatch",
+        table_name="realtime_outbox_events",
+    )
+    op.drop_index(
+        op.f("ix_realtime_outbox_events_claimed_at"),
+        table_name="realtime_outbox_events",
+    )
+    op.drop_index(
+        op.f("ix_realtime_outbox_events_claim_token"),
+        table_name="realtime_outbox_events",
+    )
+    op.drop_index(
+        op.f("ix_realtime_outbox_events_available_at"),
+        table_name="realtime_outbox_events",
+    )
+    op.drop_index(
+        op.f("ix_realtime_outbox_events_status"),
+        table_name="realtime_outbox_events",
+    )
+    op.drop_index(
+        op.f("ix_realtime_outbox_events_event_type"),
+        table_name="realtime_outbox_events",
+    )
+    op.drop_index(
+        op.f("ix_realtime_outbox_events_aggregate_id"),
+        table_name="realtime_outbox_events",
+    )
+    op.drop_index(
+        op.f("ix_realtime_outbox_events_aggregate_type"),
+        table_name="realtime_outbox_events",
+    )
+    op.drop_table("realtime_outbox_events")
+
+    op.drop_index(
+        "ix_cbt_runtime_states_started_heartbeat",
+        table_name="cbt_runtime_states",
+    )
+    op.drop_index(
+        op.f("ix_cbt_runtime_states_last_heartbeat_at"),
+        table_name="cbt_runtime_states",
+    )
+    op.drop_index(
+        op.f("ix_cbt_runtime_states_started_at"),
+        table_name="cbt_runtime_states",
+    )
+    op.drop_index(
+        op.f("ix_cbt_runtime_states_runtime_id"),
+        table_name="cbt_runtime_states",
+    )
+    op.drop_table("cbt_runtime_states")
+
+
+def _downgrade_results() -> None:
     op.add_column(
         "exam_results",
         sa.Column("maximum_score", sa.Numeric(8, 2), nullable=True),
@@ -606,34 +937,57 @@ def downgrade() -> None:
     )
     op.alter_column("exam_results", "score", nullable=False)
     op.alter_column("exam_results", "maximum_score", nullable=False)
-    op.drop_index("ix_exam_results_sync_status_attempt", table_name="exam_results")
-    op.drop_constraint(
-        "ck_exam_results_synced_at_matches_status", "exam_results", type_="check"
+
+    op.drop_index(
+        "ix_exam_results_sync_status_attempt",
+        table_name="exam_results",
     )
     op.drop_constraint(
-        "ck_exam_results_component_score_within_max", "exam_results", type_="check"
+        "ck_exam_results_synced_at_matches_status",
+        "exam_results",
+        type_="check",
     )
     op.drop_constraint(
-        "ck_exam_results_component_max_positive", "exam_results", type_="check"
+        "ck_exam_results_component_score_within_max",
+        "exam_results",
+        type_="check",
     )
     op.drop_constraint(
-        "ck_exam_results_component_score_nonnegative", "exam_results", type_="check"
+        "ck_exam_results_component_max_positive",
+        "exam_results",
+        type_="check",
     )
     op.drop_constraint(
-        "ck_exam_results_percentage_within_100", "exam_results", type_="check"
+        "ck_exam_results_component_score_nonnegative",
+        "exam_results",
+        type_="check",
     )
     op.drop_constraint(
-        "ck_exam_results_percentage_nonnegative", "exam_results", type_="check"
+        "ck_exam_results_percentage_within_100",
+        "exam_results",
+        type_="check",
     )
     op.drop_constraint(
-        "ck_exam_results_raw_score_within_max", "exam_results", type_="check"
+        "ck_exam_results_percentage_nonnegative",
+        "exam_results",
+        type_="check",
     )
     op.drop_constraint(
-        "ck_exam_results_raw_max_positive", "exam_results", type_="check"
+        "ck_exam_results_raw_score_within_max",
+        "exam_results",
+        type_="check",
     )
     op.drop_constraint(
-        "ck_exam_results_raw_score_nonnegative", "exam_results", type_="check"
+        "ck_exam_results_raw_max_positive",
+        "exam_results",
+        type_="check",
     )
+    op.drop_constraint(
+        "ck_exam_results_raw_score_nonnegative",
+        "exam_results",
+        type_="check",
+    )
+
     op.create_check_constraint(
         "ck_exam_results_score_within_maximum",
         "exam_results",
@@ -649,12 +1003,23 @@ def downgrade() -> None:
         "exam_results",
         "score >= 0",
     )
+
+    op.alter_column(
+        "exam_results",
+        "calculated_at",
+        existing_type=sa.DateTime(timezone=True),
+        existing_nullable=False,
+        server_default=None,
+    )
+
     op.drop_column("exam_results", "component_maximum_score")
     op.drop_column("exam_results", "component_score")
     op.drop_column("exam_results", "percentage")
     op.drop_column("exam_results", "raw_max_score")
     op.drop_column("exam_results", "raw_score")
 
+
+def _downgrade_exam_suspensions() -> None:
     op.drop_index(
         op.f("ix_exam_suspensions_resumed_by_actor_id"),
         table_name="exam_suspensions",
@@ -667,9 +1032,14 @@ def downgrade() -> None:
         "ix_exam_suspensions_exam_suspended_at",
         table_name="exam_suspensions",
     )
-    op.drop_index(op.f("ix_exam_suspensions_exam_id"), table_name="exam_suspensions")
+    op.drop_index(
+        op.f("ix_exam_suspensions_exam_id"),
+        table_name="exam_suspensions",
+    )
     op.drop_table("exam_suspensions")
 
+
+def _downgrade_question_authoring() -> None:
     op.add_column(
         "exam_questions",
         sa.Column(
@@ -684,7 +1054,11 @@ def downgrade() -> None:
         "exam_questions",
         "points > 0",
     )
-    op.alter_column("exam_questions", "points", server_default=None)
+    op.alter_column(
+        "exam_questions",
+        "points",
+        server_default=None,
+    )
 
     op.drop_index(
         op.f("ix_exam_question_selections_question_id"),
@@ -700,6 +1074,8 @@ def downgrade() -> None:
     )
     op.drop_table("exam_question_selections")
 
+
+def _downgrade_exams() -> None:
     op.add_column(
         "exams",
         sa.Column(
@@ -710,49 +1086,113 @@ def downgrade() -> None:
     )
     op.add_column(
         "exams",
-        sa.Column("source_assessment_component_code", sa.String(length=64), nullable=True),
+        sa.Column(
+            "source_assessment_component_code",
+            sa.String(length=64),
+            nullable=True,
+        ),
     )
     op.add_column(
         "exams",
-        sa.Column("source_assessment_component_name", sa.String(length=255), nullable=True),
+        sa.Column(
+            "source_assessment_component_name",
+            sa.String(length=255),
+            nullable=True,
+        ),
     )
     op.add_column(
-        "exams", sa.Column("source_assessment_component_id", sa.Uuid(), nullable=True)
+        "exams",
+        sa.Column("source_assessment_component_id", sa.Uuid(), nullable=True),
     )
     op.add_column(
-        "exams", sa.Column("source_assessment_scheme_id", sa.Uuid(), nullable=True)
+        "exams",
+        sa.Column("source_assessment_scheme_id", sa.Uuid(), nullable=True),
     )
-    op.add_column("exams", sa.Column("closes_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("exams", sa.Column("opens_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "exams",
+        sa.Column("closes_at", sa.DateTime(timezone=True), nullable=True),
+    )
+    op.add_column(
+        "exams",
+        sa.Column("opens_at", sa.DateTime(timezone=True), nullable=True),
+    )
     op.add_column(
         "exams",
         sa.Column("maximum_score", sa.Numeric(8, 2), nullable=True),
     )
+
     op.execute("UPDATE exams SET opens_at = scheduled_start_at")
     op.execute(
-        "UPDATE exams SET maximum_score = COALESCE(component_maximum_score, question_count)"
+        "UPDATE exams "
+        "SET maximum_score = COALESCE(component_maximum_score, question_count)"
     )
     op.execute(
-        "UPDATE exams SET source_assessment_component_maximum_score = component_maximum_score"
+        "UPDATE exams "
+        "SET source_assessment_component_maximum_score = component_maximum_score"
     )
     op.alter_column("exams", "maximum_score", nullable=False)
 
-    op.drop_constraint("ck_exams_cancellation_reason_required", "exams", type_="check")
-    op.drop_constraint("ck_exams_cancellation_actor_required", "exams", type_="check")
-    op.drop_constraint("ck_exams_activation_actor_required", "exams", type_="check")
-    op.drop_constraint("ck_exams_sealing_actor_required", "exams", type_="check")
-    op.drop_constraint("ck_exams_component_maximum_positive", "exams", type_="check")
-    op.drop_constraint("ck_exams_valid_normal_start_window", "exams", type_="check")
-    op.drop_constraint("ck_exams_roster_error_length", "exams", type_="check")
+    op.drop_constraint(
+        "ck_exams_cancellation_reason_required",
+        "exams",
+        type_="check",
+    )
+    op.drop_constraint(
+        "ck_exams_cancellation_actor_required",
+        "exams",
+        type_="check",
+    )
+    op.drop_constraint(
+        "ck_exams_activation_actor_required",
+        "exams",
+        type_="check",
+    )
+    op.drop_constraint(
+        "ck_exams_sealing_actor_required",
+        "exams",
+        type_="check",
+    )
+    op.drop_constraint(
+        "ck_exams_component_maximum_positive",
+        "exams",
+        type_="check",
+    )
+    op.drop_constraint(
+        "ck_exams_valid_normal_start_window",
+        "exams",
+        type_="check",
+    )
+    op.drop_constraint(
+        "ck_exams_roster_error_length",
+        "exams",
+        type_="check",
+    )
     op.drop_constraint(
         "ck_exams_roster_candidate_count_nonnegative",
         "exams",
         type_="check",
     )
-    op.drop_constraint("ck_exams_roster_version_nonnegative", "exams", type_="check")
-    op.drop_constraint("ck_exams_revision_lineage_shape", "exams", type_="check")
-    op.drop_constraint("ck_exams_revision_positive", "exams", type_="check")
-    op.drop_constraint("ck_exams_question_count_positive", "exams", type_="check")
+    op.drop_constraint(
+        "ck_exams_roster_version_nonnegative",
+        "exams",
+        type_="check",
+    )
+    op.drop_constraint(
+        "ck_exams_revision_lineage_shape",
+        "exams",
+        type_="check",
+    )
+    op.drop_constraint(
+        "ck_exams_revision_positive",
+        "exams",
+        type_="check",
+    )
+    op.drop_constraint(
+        "ck_exams_question_count_positive",
+        "exams",
+        type_="check",
+    )
+
     op.create_check_constraint(
         "ck_exams_valid_schedule",
         "exams",
@@ -769,6 +1209,7 @@ def downgrade() -> None:
         "exams",
         "maximum_score > 0",
     )
+
     op.drop_constraint("exam_status", "exams", type_="check")
     op.create_check_constraint(
         "exam_status",
@@ -776,9 +1217,18 @@ def downgrade() -> None:
         "status IN ('draft', 'submitted', 'sealed', 'active', 'closed', 'cancelled')",
     )
 
-    op.drop_index("ix_exams_scheduled_status", table_name="exams")
-    op.drop_index("ix_exams_roster_status_exam_status", table_name="exams")
-    op.drop_index("uq_exams_scope_title_revision", table_name="exams")
+    op.drop_index(
+        "ix_exams_scheduled_status",
+        table_name="exams",
+    )
+    op.drop_index(
+        "ix_exams_roster_status_exam_status",
+        table_name="exams",
+    )
+    op.drop_index(
+        "uq_exams_scope_title_revision",
+        table_name="exams",
+    )
     op.create_index(
         "uq_exams_term_curriculum_subject_title_lower",
         "exams",
@@ -786,23 +1236,77 @@ def downgrade() -> None:
         unique=True,
     )
 
-    op.drop_index(op.f("ix_exams_cancelled_by_actor_id"), table_name="exams")
-    op.drop_index(op.f("ix_exams_closed_by_actor_id"), table_name="exams")
-    op.drop_index(op.f("ix_exams_activated_by_actor_id"), table_name="exams")
-    op.drop_index(op.f("ix_exams_sealed_by_actor_id"), table_name="exams")
-    op.drop_index(op.f("ix_exams_revision_of_exam_id"), table_name="exams")
-    op.drop_index(op.f("ix_exams_roster_status"), table_name="exams")
-    op.drop_index(op.f("ix_exams_latest_normal_start_at"), table_name="exams")
-    op.drop_index(op.f("ix_exams_scheduled_start_at"), table_name="exams")
-    op.drop_index(op.f("ix_exams_question_selection_mode"), table_name="exams")
-    op.drop_index(op.f("ix_exams_question_bank_id"), table_name="exams")
+    op.drop_index(
+        op.f("ix_exams_cancelled_by_actor_id"),
+        table_name="exams",
+    )
+    op.drop_index(
+        op.f("ix_exams_closed_by_actor_id"),
+        table_name="exams",
+    )
+    op.drop_index(
+        op.f("ix_exams_activated_by_actor_id"),
+        table_name="exams",
+    )
+    op.drop_index(
+        op.f("ix_exams_sealed_by_actor_id"),
+        table_name="exams",
+    )
+    op.drop_index(
+        op.f("ix_exams_revision_of_exam_id"),
+        table_name="exams",
+    )
+    op.drop_index(
+        op.f("ix_exams_roster_status"),
+        table_name="exams",
+    )
+    op.drop_index(
+        op.f("ix_exams_latest_normal_start_at"),
+        table_name="exams",
+    )
+    op.drop_index(
+        op.f("ix_exams_scheduled_start_at"),
+        table_name="exams",
+    )
+    op.drop_index(
+        op.f("ix_exams_question_selection_mode"),
+        table_name="exams",
+    )
+    op.drop_index(
+        op.f("ix_exams_question_bank_id"),
+        table_name="exams",
+    )
 
-    op.drop_constraint(op.f("fk_exams_cancelled_by_actor_id_local_actors"), "exams", type_="foreignkey")
-    op.drop_constraint(op.f("fk_exams_closed_by_actor_id_local_actors"), "exams", type_="foreignkey")
-    op.drop_constraint(op.f("fk_exams_activated_by_actor_id_local_actors"), "exams", type_="foreignkey")
-    op.drop_constraint(op.f("fk_exams_sealed_by_actor_id_local_actors"), "exams", type_="foreignkey")
-    op.drop_constraint(op.f("fk_exams_revision_of_exam_id_exams"), "exams", type_="foreignkey")
-    op.drop_constraint(op.f("fk_exams_question_bank_id_question_banks"), "exams", type_="foreignkey")
+    op.drop_constraint(
+        op.f("fk_exams_cancelled_by_actor_id_local_actors"),
+        "exams",
+        type_="foreignkey",
+    )
+    op.drop_constraint(
+        op.f("fk_exams_closed_by_actor_id_local_actors"),
+        "exams",
+        type_="foreignkey",
+    )
+    op.drop_constraint(
+        op.f("fk_exams_activated_by_actor_id_local_actors"),
+        "exams",
+        type_="foreignkey",
+    )
+    op.drop_constraint(
+        op.f("fk_exams_sealed_by_actor_id_local_actors"),
+        "exams",
+        type_="foreignkey",
+    )
+    op.drop_constraint(
+        op.f("fk_exams_revision_of_exam_id_exams"),
+        "exams",
+        type_="foreignkey",
+    )
+    op.drop_constraint(
+        op.f("fk_exams_question_bank_id_question_banks"),
+        "exams",
+        type_="foreignkey",
+    )
 
     op.drop_column("exams", "component_maximum_score")
     op.drop_column("exams", "cancellation_reason")
@@ -822,3 +1326,12 @@ def downgrade() -> None:
     op.drop_column("exams", "question_count")
     op.drop_column("exams", "question_selection_mode")
     op.drop_column("exams", "question_bank_id")
+
+
+def downgrade() -> None:
+    """Downgrade schema."""
+    _downgrade_runtime()
+    _downgrade_results()
+    _downgrade_exam_suspensions()
+    _downgrade_question_authoring()
+    _downgrade_exams()
