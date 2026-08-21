@@ -14,4 +14,5 @@ from app.domains.exams import models as exams_models  # noqa: F401
 from app.domains.media import models as media_models  # noqa: F401
 from app.domains.questions import models as questions_models  # noqa: F401
 from app.domains.results import models as results_models  # noqa: F401
+from app.domains.runtime import models as runtime_models  # noqa: F401
 from app.domains.sync import models as sync_models  # noqa: F401
