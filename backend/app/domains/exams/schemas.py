@@ -276,6 +276,19 @@ class ExamResponse(OutputBase):
     revision_number: int
     revision_of_exam_id: UUID | None
     created_by_actor_id: UUID
+
+    submitted_by_actor_id: UUID | None
+    submitted_at: datetime | None
+    sealed_by_actor_id: UUID | None
+    sealed_at: datetime | None
+    activated_by_actor_id: UUID | None
+    activated_at: datetime | None
+    closed_by_actor_id: UUID | None
+    closed_at: datetime | None
+    cancelled_by_actor_id: UUID | None
+    cancelled_at: datetime | None
+    cancellation_reason: str | None
+
     component_maximum_score: Decimal | None
     created_at: datetime
     updated_at: datetime
