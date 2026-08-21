@@ -97,6 +97,17 @@ class ExamSchemaValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate questions"):
             ManualQuestionReorder(question_ids=[question_id, question_id])
 
+    def test_question_configuration_does_not_confirm_destructive_clear_by_default(
+        self,
+    ) -> None:
+        payload = ExamQuestionConfiguration(
+            question_bank_id=uuid4(),
+            question_selection_mode=ExamQuestionSelectionMode.RANDOM,
+            question_count=20,
+        )
+
+        self.assertFalse(payload.clear_existing_manual_selections)
+
 
 class ExamServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_create_random_exam_requires_enough_active_questions(self) -> None:
@@ -244,7 +255,9 @@ class ExamServiceTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 AcademicRepository,
                 "get_assessment_scheme_by_id",
-                new=AsyncMock(return_value=SimpleNamespace(id=exam.assessment_scheme_id)),
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=exam.assessment_scheme_id)
+                ),
             ),
             patch.object(
                 AcademicRepository,
@@ -284,6 +297,150 @@ class ExamServiceTests(unittest.IsolatedAsyncioTestCase):
         save_exam.assert_not_awaited()
         db.commit.assert_not_awaited()
 
+    async def test_configure_random_questions_requires_destructive_confirmation(
+        self,
+    ) -> None:
+        db = AsyncMock()
+        current_actor = actor()
+        exam = draft_exam(
+            question_selection_mode=ExamQuestionSelectionMode.MANUAL,
+            question_count=3,
+        )
+        payload = ExamQuestionConfiguration(
+            question_bank_id=exam.question_bank_id,
+            question_selection_mode=ExamQuestionSelectionMode.RANDOM,
+            question_count=2,
+        )
+        existing_selections = [
+            SimpleNamespace(question_id=uuid4(), position=1),
+            SimpleNamespace(question_id=uuid4(), position=2),
+        ]
+
+        with (
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=exam),
+            ),
+            patch.object(
+                AcademicAuthorizationService,
+                "require_can_author_curriculum_subject",
+                new=AsyncMock(),
+            ),
+            patch.object(
+                QuestionRepository,
+                "get_bank_by_id",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(
+                        id=exam.question_bank_id,
+                        is_active=True,
+                        curriculum_subject_id=exam.curriculum_subject_id,
+                    )
+                ),
+            ),
+            patch.object(
+                ExamRepository,
+                "list_question_selections",
+                new=AsyncMock(return_value=existing_selections),
+            ),
+            patch.object(
+                ExamRepository,
+                "clear_question_selections",
+                new=AsyncMock(),
+            ) as clear_selections,
+            patch.object(
+                ExamRepository,
+                "save_exam",
+                new=AsyncMock(),
+            ) as save_exam,
+        ):
+            with self.assertRaisesRegex(
+                ValueError,
+                "clear_existing_manual_selections=true",
+            ):
+                await ExamService.configure_questions(
+                    db,
+                    actor=current_actor,  # type: ignore[arg-type]
+                    exam_id=exam.id,
+                    payload=payload,
+                )
+
+        clear_selections.assert_not_awaited()
+        save_exam.assert_not_awaited()
+        db.commit.assert_not_awaited()
+
+    async def test_configure_manual_bank_change_requires_destructive_confirmation(
+        self,
+    ) -> None:
+        db = AsyncMock()
+        current_actor = actor()
+        new_bank_id = uuid4()
+        exam = draft_exam(
+            question_selection_mode=ExamQuestionSelectionMode.MANUAL,
+            question_count=3,
+        )
+        payload = ExamQuestionConfiguration(
+            question_bank_id=new_bank_id,
+            question_selection_mode=ExamQuestionSelectionMode.MANUAL,
+            question_count=3,
+        )
+        existing_selections = [
+            SimpleNamespace(question_id=uuid4(), position=1),
+        ]
+
+        with (
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=exam),
+            ),
+            patch.object(
+                AcademicAuthorizationService,
+                "require_can_author_curriculum_subject",
+                new=AsyncMock(),
+            ),
+            patch.object(
+                QuestionRepository,
+                "get_bank_by_id",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(
+                        id=new_bank_id,
+                        is_active=True,
+                        curriculum_subject_id=exam.curriculum_subject_id,
+                    )
+                ),
+            ),
+            patch.object(
+                ExamRepository,
+                "list_question_selections",
+                new=AsyncMock(return_value=existing_selections),
+            ),
+            patch.object(
+                ExamRepository,
+                "clear_question_selections",
+                new=AsyncMock(),
+            ) as clear_selections,
+            patch.object(
+                ExamRepository,
+                "save_exam",
+                new=AsyncMock(),
+            ) as save_exam,
+        ):
+            with self.assertRaisesRegex(
+                ValueError,
+                "clear_existing_manual_selections=true",
+            ):
+                await ExamService.configure_questions(
+                    db,
+                    actor=current_actor,  # type: ignore[arg-type]
+                    exam_id=exam.id,
+                    payload=payload,
+                )
+
+        clear_selections.assert_not_awaited()
+        save_exam.assert_not_awaited()
+        db.commit.assert_not_awaited()
+
     async def test_configure_random_questions_clears_manual_selections(self) -> None:
         db = AsyncMock()
         current_actor = actor()
@@ -296,6 +453,7 @@ class ExamServiceTests(unittest.IsolatedAsyncioTestCase):
             question_bank_id=new_bank_id,
             question_selection_mode=ExamQuestionSelectionMode.RANDOM,
             question_count=2,
+            clear_existing_manual_selections=True,
         )
         existing_selections = [
             SimpleNamespace(question_id=uuid4(), position=1),
@@ -354,7 +512,10 @@ class ExamServiceTests(unittest.IsolatedAsyncioTestCase):
 
         clear_selections.assert_awaited_once_with(db, exam.id)
         self.assertEqual(result.question_bank_id, new_bank_id)
-        self.assertEqual(result.question_selection_mode, ExamQuestionSelectionMode.RANDOM)
+        self.assertEqual(
+            result.question_selection_mode,
+            ExamQuestionSelectionMode.RANDOM,
+        )
         self.assertEqual(result.question_count, 2)
         db.commit.assert_awaited_once()
 
