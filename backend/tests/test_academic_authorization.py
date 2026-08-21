@@ -38,7 +38,9 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                 curriculum_subject_id=subject_id,
             )
 
-    async def test_teacher_with_current_assignment_can_author_shared_subject(self) -> None:
+    async def test_teacher_with_current_assignment_can_author_shared_subject(
+        self,
+    ) -> None:
         membership_id = uuid4()
         subject_id = uuid4()
         actor = SimpleNamespace(
@@ -52,12 +54,16 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 AcademicRepository,
                 "get_curriculum_subject_by_id",
-                new=AsyncMock(return_value=SimpleNamespace(id=subject_id, is_active=True)),
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=subject_id, is_active=True)
+                ),
             ),
             patch.object(
                 AcademicRepository,
                 "get_teacher_by_membership_id",
-                new=AsyncMock(return_value=SimpleNamespace(id=membership_id, status="active")),
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=membership_id, status="active")
+                ),
             ),
             patch.object(
                 AcademicRepository,
@@ -91,12 +97,16 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 AcademicRepository,
                 "get_curriculum_subject_by_id",
-                new=AsyncMock(return_value=SimpleNamespace(id=subject_id, is_active=True)),
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=subject_id, is_active=True)
+                ),
             ),
             patch.object(
                 AcademicRepository,
                 "get_teacher_by_membership_id",
-                new=AsyncMock(return_value=SimpleNamespace(id=membership_id, status="active")),
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=membership_id, status="active")
+                ),
             ),
             patch.object(
                 AcademicRepository,
@@ -108,10 +118,12 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                 AcademicAuthorizationError,
                 "does not have an active assignment",
             ):
-                await AcademicAuthorizationService.require_can_author_curriculum_subject(
-                    object(),  # type: ignore[arg-type]
-                    actor=actor,  # type: ignore[arg-type]
-                    curriculum_subject_id=subject_id,
+                await (
+                    AcademicAuthorizationService.require_can_author_curriculum_subject(
+                        object(),  # type: ignore[arg-type]
+                        actor=actor,  # type: ignore[arg-type]
+                        curriculum_subject_id=subject_id,
+                    )
                 )
 
     async def test_exact_class_scope_requires_exact_teacher_assignment(self) -> None:
@@ -129,17 +141,23 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 AcademicRepository,
                 "get_class_by_id",
-                new=AsyncMock(return_value=SimpleNamespace(id=class_id, is_active=True)),
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=class_id, is_active=True)
+                ),
             ),
             patch.object(
                 AcademicRepository,
                 "get_curriculum_subject_by_id",
-                new=AsyncMock(return_value=SimpleNamespace(id=subject_id, is_active=True)),
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=subject_id, is_active=True)
+                ),
             ),
             patch.object(
                 AcademicRepository,
                 "get_teacher_by_membership_id",
-                new=AsyncMock(return_value=SimpleNamespace(id=membership_id, status="active")),
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=membership_id, status="active")
+                ),
             ),
             patch.object(
                 AcademicRepository,

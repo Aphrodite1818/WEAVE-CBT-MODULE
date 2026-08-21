@@ -30,9 +30,7 @@ async def upload_question_image(
     """Upload and normalize one locally stored question image."""
 
     try:
-        data = await file.read(
-            settings.MEDIA_MAX_IMAGE_SIZE_BYTES + 1
-        )
+        data = await file.read(settings.MEDIA_MAX_IMAGE_SIZE_BYTES + 1)
 
         if len(data) > settings.MEDIA_MAX_IMAGE_SIZE_BYTES:
             raise HTTPException(

@@ -127,7 +127,9 @@ class QuestionValidationTests(unittest.TestCase):
 
 
 class QuestionServiceTests(unittest.IsolatedAsyncioTestCase):
-    async def test_create_single_choice_persists_question_options_and_commits(self) -> None:
+    async def test_create_single_choice_persists_question_options_and_commits(
+        self,
+    ) -> None:
         db = AsyncMock()
         current_actor = actor()
         current_bank = bank()
@@ -182,7 +184,9 @@ class QuestionServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item.text for item in saved_options], ["Lagos", "Abuja"])
         db.commit.assert_awaited_once()
 
-    async def test_update_omitted_image_preserves_asset_and_increments_version(self) -> None:
+    async def test_update_omitted_image_preserves_asset_and_increments_version(
+        self,
+    ) -> None:
         db = AsyncMock()
         current_actor = actor()
         current_bank = bank()
@@ -233,7 +237,9 @@ class QuestionServiceTests(unittest.IsolatedAsyncioTestCase):
         cleanup.assert_not_awaited()
         db.commit.assert_awaited_once()
 
-    async def test_explicit_same_existing_image_does_not_require_editor_ownership(self) -> None:
+    async def test_explicit_same_existing_image_does_not_require_editor_ownership(
+        self,
+    ) -> None:
         db = AsyncMock()
         admin = actor(role="admin")
         teacher_owner_id = uuid4()
@@ -291,7 +297,9 @@ class QuestionServiceTests(unittest.IsolatedAsyncioTestCase):
         resolve_new_image.assert_not_awaited()
         cleanup.assert_not_awaited()
 
-    async def test_update_explicit_null_removes_image_and_cleans_old_asset(self) -> None:
+    async def test_update_explicit_null_removes_image_and_cleans_old_asset(
+        self,
+    ) -> None:
         db = AsyncMock()
         current_actor = actor()
         current_bank = bank()
@@ -340,7 +348,9 @@ class QuestionServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.version, 2)
         cleanup.assert_awaited_once_with(db, asset_id=image_id)
 
-    async def test_bank_curriculum_cannot_change_while_any_question_row_exists(self) -> None:
+    async def test_bank_curriculum_cannot_change_while_any_question_row_exists(
+        self,
+    ) -> None:
         db = AsyncMock()
         admin = actor(role="admin")
         current_bank = bank()
@@ -357,7 +367,9 @@ class QuestionServiceTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=1),
             ),
         ):
-            with self.assertRaisesRegex(ValueError, "only change while the bank is empty"):
+            with self.assertRaisesRegex(
+                ValueError, "only change while the bank is empty"
+            ):
                 await QuestionService.update_question_bank(
                     db,
                     actor=admin,  # type: ignore[arg-type]

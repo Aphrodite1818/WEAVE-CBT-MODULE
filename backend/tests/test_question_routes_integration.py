@@ -284,9 +284,7 @@ class QuestionRouteIntegrationTests(unittest.TestCase):
                 ),
             ),
         ):
-            response = self.client.get(
-                f"/api/v1/questions/{question_id}/image"
-            )
+            response = self.client.get(f"/api/v1/questions/{question_id}/image")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"normalized-webp")
@@ -305,9 +303,7 @@ class QuestionRouteIntegrationTests(unittest.TestCase):
                 )
             ),
         ):
-            response = self.client.delete(
-                f"/api/v1/questions/{question_id}"
-            )
+            response = self.client.delete(f"/api/v1/questions/{question_id}")
 
         self.assertEqual(response.status_code, 409)
         self.assertIn("archive it instead", response.json()["detail"])

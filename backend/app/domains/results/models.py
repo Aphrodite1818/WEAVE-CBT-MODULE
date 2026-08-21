@@ -14,6 +14,7 @@ from uuid import UUID
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
+    Enum as SQLEnum,
     ForeignKey,
     Index,
     Integer,
@@ -21,22 +22,40 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    text,
-)
-from sqlalchemy import (
-    Enum as SQLEnum,
+    func,
+    text as sql_text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+
 
 WEAVE_ID_MAX_LENGTH = 128
 RESULT_IDEMPOTENCY_KEY_MAX_LENGTH = 128
 RESULT_SYNC_ERROR_MAX_LENGTH = 1024
 
 
+# ========================== #
+# ENUMS
+# ========================== #
+
+
 class ResultSyncStatus(str, PyEnum):
-    """Synchronization state of a local CBT result."""
+    """
+    Synchronization state of a locally calculated CBT result.
+
+    PENDING
+        Result exists locally but has not yet been synchronized to Weave.
+
+    SYNCING
+        A worker is currently attempting synchronization.
+
+    SYNCED
+        Weave successfully accepted the assessment-component result.
+
+    FAILED
+        The latest synchronization attempt failed and may be retried.
+    """
 
     PENDING = "pending"
     SYNCING = "syncing"
@@ -44,25 +63,56 @@ class ResultSyncStatus(str, PyEnum):
     FAILED = "failed"
 
 
+# ========================== #
+# EXAM RESULT
+# ========================== #
+
+
 class ExamResult(Base):
     """
-    Final locally calculated score for one candidate examination attempt.
+    Final locally calculated result for one candidate examination attempt.
 
-    The result represents one Weave assessment component, not the student's
-    complete academic result.
+    CBT preserves two different score representations:
+
+        RAW EXAM SCORE
+
+            raw_score
+            raw_max_score
+
+        WEAVE ASSESSMENT-COMPONENT SCORE
+
+            component_score
+            component_maximum_score
 
     Example:
 
-        Assessment component: CA 1
-        Component maximum:    10
-        Candidate score:       5
+        Exam contains 40 questions.
 
-    The local UI may display this as both:
+        Candidate answers 32 correctly.
 
-        5 / 10
-        50 / 100
+        Assessment component:
+            CA1
+            maximum score = 10
 
-    Only the raw component score is synchronized back to Weave.
+        Stored result:
+
+            raw_score = 32
+            raw_max_score = 40
+
+            percentage = 80.00
+
+            component_score = 8.00
+            component_maximum_score = 10.00
+
+    The local CBT UI can therefore display:
+
+        32 / 40
+        80 / 100
+        8 / 10
+
+    Weave receives the component score, not the raw CBT question count.
+
+    One ExamAttempt produces at most one ExamResult.
     """
 
     __tablename__ = "exam_results"
@@ -77,6 +127,10 @@ class ExamResult(Base):
         index=True,
     )
 
+    # Snapshotted references make result querying and synchronization
+    # straightforward without repeatedly traversing:
+    #
+    # result -> attempt -> candidate -> exam
     candidate_id: Mapped[UUID] = mapped_column(
         ForeignKey(
             "exam_candidates.id",
@@ -104,12 +158,58 @@ class ExamResult(Base):
         index=True,
     )
 
-    score: Mapped[Decimal] = mapped_column(
+    # ========================== #
+    # RAW CBT SCORE
+    # ========================== #
+
+    # Number of questions answered correctly.
+    #
+    # Since every question contributes exactly one raw mark,
+    # this is always an integer.
+    raw_score: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    # Number of frozen ExamQuestion rows in the paper.
+    raw_max_score: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    # Normalized raw score over 100.
+    #
+    # Example:
+    # 32 / 40 = 80.00
+    percentage: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2),
+        nullable=False,
+    )
+
+    # ========================== #
+    # ASSESSMENT COMPONENT SCORE
+    # ========================== #
+
+    # Score normalized against the frozen Weave assessment-component
+    # maximum.
+    #
+    # Example:
+    #
+    # raw = 32 / 40
+    # component maximum = 10
+    #
+    # component_score = 8.00
+    component_score: Mapped[Decimal] = mapped_column(
         Numeric(8, 2),
         nullable=False,
     )
 
-    maximum_score: Mapped[Decimal] = mapped_column(
+    # Frozen component maximum from the Exam.
+    #
+    # This must not be re-read from current synchronized academics when
+    # calculating historical results because Weave configuration may have
+    # changed after the exam was sealed.
+    component_maximum_score: Mapped[Decimal] = mapped_column(
         Numeric(8, 2),
         nullable=False,
     )
@@ -117,7 +217,12 @@ class ExamResult(Base):
     calculated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
+        server_default=func.now(),
     )
+
+    # ========================== #
+    # WEAVE SYNC
+    # ========================== #
 
     sync_status: Mapped[ResultSyncStatus] = mapped_column(
         SQLEnum(
@@ -134,6 +239,8 @@ class ExamResult(Base):
         index=True,
     )
 
+    # Stable key sent with synchronization requests so repeating the same
+    # job after a timeout/crash cannot create duplicate Weave results.
     idempotency_key: Mapped[str] = mapped_column(
         String(RESULT_IDEMPOTENCY_KEY_MAX_LENGTH),
         nullable=False,
@@ -141,6 +248,7 @@ class ExamResult(Base):
         index=True,
     )
 
+    # Identifier returned by Weave after successful synchronization.
     weave_result_id: Mapped[str | None] = mapped_column(
         String(WEAVE_ID_MAX_LENGTH),
         nullable=True,
@@ -152,7 +260,7 @@ class ExamResult(Base):
         Integer,
         nullable=False,
         default=0,
-        server_default=text("0"),
+        server_default=sql_text("0"),
     )
 
     last_sync_attempt_at: Mapped[datetime | None] = mapped_column(
@@ -176,27 +284,66 @@ class ExamResult(Base):
             "exam_id",
             name="uq_exam_results_candidate_exam",
         ),
+        # ========================== #
+        # RAW SCORE CONSTRAINTS
+        # ========================== #
         CheckConstraint(
-            "score >= 0",
-            name="ck_exam_results_score_nonnegative",
+            "raw_score >= 0",
+            name="ck_exam_results_raw_score_nonnegative",
         ),
         CheckConstraint(
-            "maximum_score > 0",
-            name="ck_exam_results_maximum_score_positive",
+            "raw_max_score > 0",
+            name="ck_exam_results_raw_max_positive",
         ),
         CheckConstraint(
-            "score <= maximum_score",
-            name="ck_exam_results_score_within_maximum",
+            "raw_score <= raw_max_score",
+            name="ck_exam_results_raw_score_within_max",
         ),
+        # ========================== #
+        # PERCENTAGE CONSTRAINTS
+        # ========================== #
+        CheckConstraint(
+            "percentage >= 0",
+            name="ck_exam_results_percentage_nonnegative",
+        ),
+        CheckConstraint(
+            "percentage <= 100",
+            name="ck_exam_results_percentage_within_100",
+        ),
+        # ========================== #
+        # COMPONENT SCORE CONSTRAINTS
+        # ========================== #
+        CheckConstraint(
+            "component_score >= 0",
+            name="ck_exam_results_component_score_nonnegative",
+        ),
+        CheckConstraint(
+            "component_maximum_score > 0",
+            name="ck_exam_results_component_max_positive",
+        ),
+        CheckConstraint(
+            "component_score <= component_maximum_score",
+            name="ck_exam_results_component_score_within_max",
+        ),
+        # ========================== #
+        # SYNC CONSTRAINTS
+        # ========================== #
         CheckConstraint(
             "sync_attempts >= 0",
             name="ck_exam_results_sync_attempts_nonnegative",
         ),
         CheckConstraint(
-            f"sync_error IS NULL OR char_length(sync_error) <= "
-            f"{RESULT_SYNC_ERROR_MAX_LENGTH}",
+            "sync_error IS NULL OR "
+            f"char_length(sync_error) <= {RESULT_SYNC_ERROR_MAX_LENGTH}",
             name="ck_exam_results_sync_error_length",
         ),
+        CheckConstraint(
+            "synced_at IS NULL OR sync_status = 'synced'",
+            name="ck_exam_results_synced_at_matches_status",
+        ),
+        # ========================== #
+        # INDEXES
+        # ========================== #
         Index(
             "ix_exam_results_exam_sync_status",
             "exam_id",
@@ -206,5 +353,10 @@ class ExamResult(Base):
             "ix_exam_results_component_sync_status",
             "assessment_component_id",
             "sync_status",
+        ),
+        Index(
+            "ix_exam_results_sync_status_attempt",
+            "sync_status",
+            "last_sync_attempt_at",
         ),
     )

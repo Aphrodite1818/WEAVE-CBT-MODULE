@@ -168,7 +168,7 @@ class Settings(BaseSettings):
     LOCAL_JWT_ALGORITHM: str = "HS256"
 
     LOCAL_ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
-        default=5,
+        default=60,
         ge=1,
     )
 

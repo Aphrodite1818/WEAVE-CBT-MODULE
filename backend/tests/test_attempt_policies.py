@@ -14,9 +14,7 @@ os.environ.setdefault(
 # Attempts are a later implementation phase on implementing-services.
 # Keep the policy specification in place without reintroducing obsolete service
 # contracts solely to satisfy collection during the question/media phase.
-raise unittest.SkipTest(
-    "Deferred until the exam-attempt service phase is implemented."
-)
+raise unittest.SkipTest("Deferred until the exam-attempt service phase is implemented.")
 
 from app.domains.attempts.exceptions import (  # noqa: E402
     AttemptTimeExhausted,

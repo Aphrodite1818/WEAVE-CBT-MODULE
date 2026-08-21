@@ -219,11 +219,9 @@ class QuestionService:
         *,
         actor: LocalActor,
     ) -> list[QuestionBank]:
-        subjects = (
-            await AcademicAuthorizationService.list_actor_authorable_curriculum_subjects(
-                db,
-                actor=actor,
-            )
+        subjects = await AcademicAuthorizationService.list_actor_authorable_curriculum_subjects(
+            db,
+            actor=actor,
         )
         return await QuestionRepository.list_banks_for_curriculum_subjects(
             db,
@@ -660,7 +658,10 @@ class QuestionService:
 
         await db.commit()
 
-        if old_image_asset_id is not None and old_image_asset_id != question.image_asset_id:
+        if (
+            old_image_asset_id is not None
+            and old_image_asset_id != question.image_asset_id
+        ):
             try:
                 await MediaService.delete_unreferenced_asset(
                     db,

@@ -137,12 +137,9 @@ class LocalMediaStorage:
                     # Palette PNGs may carry transparency without an alpha band.
                     # Convert before resizing so their alpha is preserved correctly.
                     has_transparency = (
-                        "A" in source.getbands()
-                        or "transparency" in source.info
+                        "A" in source.getbands() or "transparency" in source.info
                     )
-                    working = source.convert(
-                        "RGBA" if has_transparency else "RGB"
-                    )
+                    working = source.convert("RGBA" if has_transparency else "RGB")
 
                     scale = min(
                         CANVAS_WIDTH / width,
@@ -219,9 +216,7 @@ class LocalMediaStorage:
     ) -> None:
         """Write through a same-directory temporary file then atomically replace."""
 
-        temporary = destination.with_name(
-            f".{destination.name}.{uuid4().hex}.tmp"
-        )
+        temporary = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
 
         try:
             temporary.write_bytes(data)

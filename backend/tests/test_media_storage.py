@@ -42,27 +42,21 @@ def non_white_bounds(image: Image.Image):
 
 class MediaNormalizationTests(unittest.TestCase):
     def test_wide_image_is_contained_without_stretching(self) -> None:
-        normalized = LocalMediaStorage._normalize_image(
-            encoded_png(2000, 500, "red")
-        )
+        normalized = LocalMediaStorage._normalize_image(encoded_png(2000, 500, "red"))
         image = decode(normalized)
 
         self.assertEqual(image.size, (CANVAS_WIDTH, CANVAS_HEIGHT))
         self.assertEqual(non_white_bounds(image), (0, 300, 1200, 600))
 
     def test_portrait_image_is_contained_without_stretching(self) -> None:
-        normalized = LocalMediaStorage._normalize_image(
-            encoded_png(500, 2000, "blue")
-        )
+        normalized = LocalMediaStorage._normalize_image(encoded_png(500, 2000, "blue"))
         image = decode(normalized)
 
         self.assertEqual(image.size, (CANVAS_WIDTH, CANVAS_HEIGHT))
         self.assertEqual(non_white_bounds(image), (487, 0, 712, 900))
 
     def test_tiny_image_is_never_upscaled_more_than_two_times(self) -> None:
-        normalized = LocalMediaStorage._normalize_image(
-            encoded_png(100, 100, "black")
-        )
+        normalized = LocalMediaStorage._normalize_image(encoded_png(100, 100, "black"))
         image = decode(normalized)
 
         self.assertEqual(non_white_bounds(image), (500, 350, 700, 550))
@@ -80,9 +74,7 @@ class MediaStorageIntegrationTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as directory:
             storage = LocalMediaStorage(root=Path(directory))
 
-            stored = await storage.save_question_image(
-                encoded_png(640, 480, "green")
-            )
+            stored = await storage.save_question_image(encoded_png(640, 480, "green"))
             data = await storage.read(stored.storage_key)
 
             self.assertEqual(stored.mime_type, "image/webp")
