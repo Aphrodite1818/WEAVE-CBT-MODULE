@@ -512,6 +512,45 @@ class AcademicRepository:
     ) -> AcademicTeacher | None:
         return await cls._get_by_id(db, AcademicTeacher, teacher_id)
 
+    @staticmethod
+    async def list_teachers(
+        db: AsyncSession,
+        *,
+        active_only: bool = True,
+    ) -> list[AcademicTeacher]:
+        query = select(AcademicTeacher).where(
+            AcademicTeacher.source_deleted_at.is_(None)
+        )
+        if active_only:
+            query = query.where(AcademicTeacher.status == "active")
+        result = await db.execute(
+            query.order_by(
+                AcademicTeacher.last_name.asc(),
+                AcademicTeacher.first_name.asc(),
+                AcademicTeacher.id.asc(),
+            )
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_teachers_by_ids(
+        db: AsyncSession,
+        teacher_ids: Sequence[UUID],
+        *,
+        active_only: bool = True,
+    ) -> list[AcademicTeacher]:
+        unique_ids = list(dict.fromkeys(teacher_ids))
+        if not unique_ids:
+            return []
+        query = select(AcademicTeacher).where(
+            AcademicTeacher.id.in_(unique_ids),
+            AcademicTeacher.source_deleted_at.is_(None),
+        )
+        if active_only:
+            query = query.where(AcademicTeacher.status == "active")
+        result = await db.execute(query.order_by(AcademicTeacher.id.asc()))
+        return list(result.scalars().all())
+
     @classmethod
     async def get_teacher_by_membership_id(
         cls,

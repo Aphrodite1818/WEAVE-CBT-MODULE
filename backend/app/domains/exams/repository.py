@@ -122,6 +122,23 @@ class ExamRepository:
         return (await db.execute(query)).scalar_one_or_none()
 
     @staticmethod
+    async def get_latest_child_revision(
+        db: AsyncSession,
+        exam_id: UUID,
+        *,
+        lock: bool = False,
+    ) -> Exam | None:
+        query = (
+            select(Exam)
+            .where(Exam.revision_of_exam_id == exam_id)
+            .order_by(Exam.revision_number.desc(), Exam.created_at.desc())
+            .limit(1)
+        )
+        if lock:
+            query = query.with_for_update(of=Exam)
+        return (await db.execute(query)).scalar_one_or_none()
+
+    @staticmethod
     async def list_exam_revisions(
         db: AsyncSession,
         *,
@@ -487,6 +504,26 @@ class ExamRepository:
         return list(result.scalars().all())
 
     @staticmethod
+    async def list_invigilators_for_exam_and_teachers(
+        db: AsyncSession,
+        *,
+        exam_id: UUID,
+        teacher_ids: Sequence[UUID],
+        lock: bool = False,
+    ) -> list[ExamInvigilator]:
+        unique_ids = list(dict.fromkeys(teacher_ids))
+        if not unique_ids:
+            return []
+        query = select(ExamInvigilator).where(
+            ExamInvigilator.exam_id == exam_id,
+            ExamInvigilator.teacher_id.in_(unique_ids),
+        )
+        if lock:
+            query = query.with_for_update(of=ExamInvigilator)
+        result = await db.execute(query.order_by(ExamInvigilator.teacher_id.asc()))
+        return list(result.scalars().all())
+
+    @staticmethod
     async def remove_invigilator(
         db: AsyncSession,
         invigilator: ExamInvigilator,
@@ -501,6 +538,24 @@ class ExamRepository:
     ) -> None:
         await db.execute(
             delete(ExamInvigilator).where(ExamInvigilator.exam_id == exam_id)
+        )
+        await db.flush()
+
+    @staticmethod
+    async def remove_invigilators_by_teacher_ids(
+        db: AsyncSession,
+        *,
+        exam_id: UUID,
+        teacher_ids: Sequence[UUID],
+    ) -> None:
+        unique_ids = list(dict.fromkeys(teacher_ids))
+        if not unique_ids:
+            return
+        await db.execute(
+            delete(ExamInvigilator).where(
+                ExamInvigilator.exam_id == exam_id,
+                ExamInvigilator.teacher_id.in_(unique_ids),
+            )
         )
         await db.flush()
 

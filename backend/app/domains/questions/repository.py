@@ -167,12 +167,16 @@ class QuestionRepository:
         question_ids: Sequence[UUID],
         *,
         active_only: bool = False,
+        lock: bool = False,
     ) -> list[Question]:
         if not question_ids:
             return []
         query = select(Question).where(Question.id.in_(question_ids))
         if active_only:
             query = query.where(Question.is_active.is_(True))
+
+        if lock:
+            query = query.with_for_update(of=Question)
         return list((await db.execute(query)).scalars().all())
 
     @staticmethod

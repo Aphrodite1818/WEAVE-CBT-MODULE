@@ -80,7 +80,7 @@ class ExamCreate(InputBase):
     latest_normal_start_at: datetime | None = None
 
     @model_validator(mode="after")
-    def validate_start_window(self) -> "ExamCreate":
+    def validate_start_window(self) -> ExamCreate:
         if (
             self.scheduled_start_at is not None
             and self.latest_normal_start_at is not None
@@ -134,7 +134,7 @@ class ExamUpdate(InputBase):
     latest_normal_start_at: datetime | None = None
 
     @model_validator(mode="after")
-    def validate_patch_contract(self) -> "ExamUpdate":
+    def validate_patch_contract(self) -> ExamUpdate:
         """
         Required exam fields may be omitted during PATCH but may not
         explicitly be cleared with null.
@@ -235,6 +235,18 @@ class ManualQuestionRemove(InputBase):
     question_id: UUID
 
 
+class ExamInvigilatorAssignment(InputBase):
+    teacher_ids: list[UUID] = Field(min_length=1)
+
+
+class ExamReasonPayload(InputBase):
+    reason: str = Field(min_length=1)
+
+
+class ExamResumePayload(InputBase):
+    reason: str | None = Field(default=None, min_length=1)
+
+
 # ========================== #
 # RESPONSES
 # ========================== #
@@ -269,43 +281,17 @@ class ExamResponse(OutputBase):
     updated_at: datetime
 
 
-# ========================== #
-# SUBMIT
-# ========================== #
+class ExamInvigilatorResponse(OutputBase):
+    exam_id: UUID
+    teacher_id: UUID
+    created_at: datetime
+    updated_at: datetime
 
 
-class ExamSubmit(InputBase):
-    """
-    Request the lifecycle transition:
-
-        DRAFT -> SUBMITTED
-
-    The authenticated actor is supplied separately to ExamService.
-    """
-
-    pass
-
-
-# ========================== #
-# SEAL
-# ========================== #
-
-
-class ExamSeal(InputBase):
-    """
-    Request the administrative lifecycle transition:
-
-        SUBMITTED -> SEALED
-
-    ExamService derives and freezes:
-
-        - selected questions;
-        - question snapshots;
-        - option snapshots;
-        - target classes;
-        - assessment-component maximum;
-        - lifecycle timestamps and actors;
-        - roster state.
-    """
-
-    pass
+class AcademicTeacherResponse(OutputBase):
+    id: UUID
+    teacher_account_id: UUID
+    first_name: str | None
+    last_name: str | None
+    staff_id: str | None
+    status: str
