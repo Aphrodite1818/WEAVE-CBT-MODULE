@@ -185,16 +185,21 @@ class ExamQuestionConfiguration(InputBase):
         CBT chooses question_count questions from question_bank_id
         when the exam is sealed.
 
+    MANUAL:
+        A separate service incrementally manages the source questions
+        selected for the exam.
 
-    a separate service is responsible for handling how questions are assigned 
-    when mode is set to MANUAL
+    clear_existing_manual_selections is an explicit acknowledgement for
+    destructive configuration changes. It must be true when changing the
+    question bank or leaving MANUAL mode would invalidate existing manual
+    selections.
     """
 
     question_bank_id: UUID
-
     question_selection_mode: ExamQuestionSelectionMode
-
     question_count: int = Field(gt=0)
+    clear_existing_manual_selections: bool = False
+
 
 class ManualQuestionAdd(InputBase):
     question_ids: list[UUID] = Field(min_length=1)
@@ -224,6 +229,7 @@ class ManualQuestionReorder(InputBase):
             raise ValueError("question_ids cannot contain duplicate questions")
 
         return value
+
 
 class ManualQuestionRemove(InputBase):
     question_id: UUID
@@ -261,6 +267,7 @@ class ExamResponse(OutputBase):
     component_maximum_score: Decimal | None
     created_at: datetime
     updated_at: datetime
+
 
 # ========================== #
 # SUBMIT
