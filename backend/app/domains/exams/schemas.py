@@ -1,0 +1,304 @@
+"""Schemas consumed by the exam service and route layers."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from decimal import Decimal
+from uuid import UUID
+
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
+
+from app.domains.exams.models import (
+    ExamQuestionSelectionMode,
+    ExamRosterStatus,
+    ExamStatus,
+)
+
+
+class InputBase(BaseModel):
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        use_enum_values=True,
+        extra="forbid",
+    )
+
+
+class OutputBase(BaseModel):
+    model_config = ConfigDict(
+        from_attributes=True,
+        use_enum_values=True,
+    )
+
+
+# ========================== #
+# CREATE
+# ========================== #
+
+
+class ExamCreate(InputBase):
+    """
+    Create a new revision-1 examination in DRAFT state.
+
+    Lifecycle fields such as status, revision number, creator,
+    roster state and component maximum are determined by ExamService.
+    """
+
+    session_id: UUID
+    term_id: UUID
+    curriculum_subject_id: UUID
+
+    assessment_scheme_id: UUID
+    assessment_component_id: UUID
+
+    question_bank_id: UUID
+
+    question_selection_mode: ExamQuestionSelectionMode = (
+        ExamQuestionSelectionMode.RANDOM
+    )
+
+    question_count: int = Field(gt=0)
+
+    title: str = Field(
+        min_length=1,
+        max_length=255,
+    )
+
+    instructions: str | None = None
+
+    duration_minutes: int = Field(gt=0)
+
+    shuffle_questions: bool = True
+    shuffle_options: bool = True
+
+    scheduled_start_at: datetime | None = None
+    latest_normal_start_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_start_window(self) -> "ExamCreate":
+        if (
+            self.scheduled_start_at is not None
+            and self.latest_normal_start_at is not None
+            and self.latest_normal_start_at < self.scheduled_start_at
+        ):
+            raise ValueError(
+                "latest_normal_start_at cannot be earlier than scheduled_start_at"
+            )
+
+        return self
+
+
+# ========================== #
+# UPDATE
+# ========================== #
+
+
+class ExamUpdate(InputBase):
+    """
+    PATCH payload for a DRAFT examination.
+
+    Omitted fields remain unchanged.
+
+    ExamService still determines whether each requested change is legal
+    for the exam's current lifecycle and academic configuration.
+    """
+
+    session_id: UUID | None = None
+    term_id: UUID | None = None
+
+    assessment_scheme_id: UUID | None = None
+    assessment_component_id: UUID | None = None
+
+    title: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+    )
+
+    instructions: str | None = None
+
+    duration_minutes: int | None = Field(
+        default=None,
+        gt=0,
+    )
+
+    shuffle_questions: bool | None = None
+    shuffle_options: bool | None = None
+
+    scheduled_start_at: datetime | None = None
+    latest_normal_start_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_patch_contract(self) -> "ExamUpdate":
+        """
+        Required exam fields may be omitted during PATCH but may not
+        explicitly be cleared with null.
+        """
+
+        non_nullable_fields = {
+            "session_id",
+            "term_id",
+            "assessment_scheme_id",
+            "assessment_component_id",
+            "title",
+            "duration_minutes",
+            "shuffle_questions",
+            "shuffle_options",
+        }
+
+        for field_name in non_nullable_fields:
+            if (
+                field_name in self.model_fields_set
+                and getattr(self, field_name) is None
+            ):
+                raise ValueError(f"{field_name} cannot be null")
+
+        if (
+            "scheduled_start_at" in self.model_fields_set
+            and "latest_normal_start_at" in self.model_fields_set
+            and self.scheduled_start_at is not None
+            and self.latest_normal_start_at is not None
+            and self.latest_normal_start_at < self.scheduled_start_at
+        ):
+            raise ValueError(
+                "latest_normal_start_at cannot be earlier than scheduled_start_at"
+            )
+
+        return self
+
+
+# ========================== #
+# QUESTION CONFIGURATION
+# ========================== #
+
+
+class ExamQuestionConfiguration(InputBase):
+    """
+    Configure the question-selection strategy of a DRAFT exam.
+
+    RANDOM:
+        CBT chooses question_count questions from question_bank_id
+        when the exam is sealed.
+
+
+    a separate service is responsible for handling how questions are assigned 
+    when mode is set to MANUAL
+    """
+
+    question_bank_id: UUID
+
+    question_selection_mode: ExamQuestionSelectionMode
+
+    question_count: int = Field(gt=0)
+
+class ManualQuestionAdd(InputBase):
+    question_ids: list[UUID] = Field(min_length=1)
+
+    @field_validator("question_ids")
+    @classmethod
+    def validate_unique_question_ids(
+        cls,
+        value: list[UUID],
+    ) -> list[UUID]:
+        if len(value) != len(set(value)):
+            raise ValueError("question_ids cannot contain duplicate questions")
+
+        return value
+
+
+class ManualQuestionReorder(InputBase):
+    question_ids: list[UUID] = Field(min_length=1)
+
+    @field_validator("question_ids")
+    @classmethod
+    def validate_unique_question_ids(
+        cls,
+        value: list[UUID],
+    ) -> list[UUID]:
+        if len(value) != len(set(value)):
+            raise ValueError("question_ids cannot contain duplicate questions")
+
+        return value
+
+class ManualQuestionRemove(InputBase):
+    question_id: UUID
+
+
+# ========================== #
+# RESPONSES
+# ========================== #
+
+
+class ExamResponse(OutputBase):
+    id: UUID
+    session_id: UUID
+    term_id: UUID
+    curriculum_subject_id: UUID
+    assessment_scheme_id: UUID
+    assessment_component_id: UUID
+    question_bank_id: UUID
+    question_selection_mode: ExamQuestionSelectionMode
+    question_count: int
+    title: str
+    instructions: str | None
+    duration_minutes: int
+    shuffle_questions: bool
+    shuffle_options: bool
+    status: ExamStatus
+    scheduled_start_at: datetime | None
+    latest_normal_start_at: datetime | None
+    roster_status: ExamRosterStatus
+    roster_version: int
+    roster_candidate_count: int
+    revision_number: int
+    revision_of_exam_id: UUID | None
+    created_by_actor_id: UUID
+    component_maximum_score: Decimal | None
+    created_at: datetime
+    updated_at: datetime
+
+# ========================== #
+# SUBMIT
+# ========================== #
+
+
+class ExamSubmit(InputBase):
+    """
+    Request the lifecycle transition:
+
+        DRAFT -> SUBMITTED
+
+    The authenticated actor is supplied separately to ExamService.
+    """
+
+    pass
+
+
+# ========================== #
+# SEAL
+# ========================== #
+
+
+class ExamSeal(InputBase):
+    """
+    Request the administrative lifecycle transition:
+
+        SUBMITTED -> SEALED
+
+    ExamService derives and freezes:
+
+        - selected questions;
+        - question snapshots;
+        - option snapshots;
+        - target classes;
+        - assessment-component maximum;
+        - lifecycle timestamps and actors;
+        - roster state.
+    """
+
+    pass

@@ -107,9 +107,7 @@ class ResultRepository:
         *,
         lock: bool = False,
     ) -> ExamResult | None:
-        query = select(ExamResult).where(
-            ExamResult.idempotency_key == idempotency_key
-        )
+        query = select(ExamResult).where(ExamResult.idempotency_key == idempotency_key)
         if lock:
             query = query.with_for_update(of=ExamResult)
         return (await db.execute(query)).scalar_one_or_none()
@@ -121,9 +119,7 @@ class ResultRepository:
         *,
         lock: bool = False,
     ) -> ExamResult | None:
-        query = select(ExamResult).where(
-            ExamResult.weave_result_id == weave_result_id
-        )
+        query = select(ExamResult).where(ExamResult.weave_result_id == weave_result_id)
         if lock:
             query = query.with_for_update(of=ExamResult)
         return (await db.execute(query)).scalar_one_or_none()

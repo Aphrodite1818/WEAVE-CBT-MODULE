@@ -313,8 +313,7 @@ class AttemptRepository:
         return (
             await db.execute(
                 select(AttemptOptionAllocation).where(
-                    AttemptOptionAllocation.attempt_question_id
-                    == attempt_question_id,
+                    AttemptOptionAllocation.attempt_question_id == attempt_question_id,
                     AttemptOptionAllocation.exam_question_option_id
                     == exam_question_option_id,
                 )
@@ -328,10 +327,7 @@ class AttemptRepository:
     ) -> list[AttemptOptionAllocation]:
         result = await db.execute(
             select(AttemptOptionAllocation)
-            .where(
-                AttemptOptionAllocation.attempt_question_id
-                == attempt_question_id
-            )
+            .where(AttemptOptionAllocation.attempt_question_id == attempt_question_id)
             .order_by(
                 AttemptOptionAllocation.position.asc(),
                 AttemptOptionAllocation.id.asc(),
@@ -349,9 +345,7 @@ class AttemptRepository:
             return []
         result = await db.execute(
             select(AttemptOptionAllocation)
-            .where(
-                AttemptOptionAllocation.attempt_question_id.in_(question_ids)
-            )
+            .where(AttemptOptionAllocation.attempt_question_id.in_(question_ids))
             .order_by(
                 AttemptOptionAllocation.attempt_question_id.asc(),
                 AttemptOptionAllocation.position.asc(),

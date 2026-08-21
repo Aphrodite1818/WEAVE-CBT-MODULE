@@ -44,9 +44,7 @@ class RuntimeRepository:
         *,
         lock: bool = False,
     ) -> CBTRuntimeState | None:
-        query = select(CBTRuntimeState).where(
-            CBTRuntimeState.runtime_id == runtime_id
-        )
+        query = select(CBTRuntimeState).where(CBTRuntimeState.runtime_id == runtime_id)
         if lock:
             query = query.with_for_update(of=CBTRuntimeState)
         return (await db.execute(query)).scalar_one_or_none()
@@ -128,9 +126,7 @@ class RuntimeRepository:
         *,
         lock: bool = False,
     ) -> RealtimeOutboxEvent | None:
-        query = select(RealtimeOutboxEvent).where(
-            RealtimeOutboxEvent.id == event_id
-        )
+        query = select(RealtimeOutboxEvent).where(RealtimeOutboxEvent.id == event_id)
         if lock:
             query = query.with_for_update(of=RealtimeOutboxEvent)
         return (await db.execute(query)).scalar_one_or_none()

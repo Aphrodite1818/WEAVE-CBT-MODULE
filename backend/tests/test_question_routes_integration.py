@@ -13,7 +13,7 @@ os.environ.setdefault(
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
 from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from starlette.testclient import TestClient  # noqa: E402
 
 from app.core.database import get_database_session  # noqa: E402
 from app.domains.auth.dependencies import get_current_local_actor  # noqa: E402

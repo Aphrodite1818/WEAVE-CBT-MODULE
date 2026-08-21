@@ -9,6 +9,7 @@ from app.core.database import check_database_connection, dispose_database_engine
 from app.core.redis import close_redis_client
 from app.core.settings import settings
 from app.domains.auth.router import router as auth_router
+from app.domains.exams.router import router as exams_router
 from app.domains.media.router import router as media_router
 from app.domains.node.router import router as node_router
 from app.domains.questions.router import router as questions_router
@@ -48,5 +49,6 @@ for router in (
     sync_router,
     media_router,
     questions_router,
+    exams_router,
 ):
     app.include_router(router, prefix=settings.API_V1_PREFIX)

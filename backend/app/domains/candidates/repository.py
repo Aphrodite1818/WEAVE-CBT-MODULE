@@ -26,7 +26,9 @@ class CandidateRepository:
     """Provide persistence operations for rosters, credentials and late starts."""
 
     @staticmethod
-    async def add_candidate(db: AsyncSession, candidate: ExamCandidate) -> ExamCandidate:
+    async def add_candidate(
+        db: AsyncSession, candidate: ExamCandidate
+    ) -> ExamCandidate:
         db.add(candidate)
         await db.flush()
         return candidate
@@ -43,7 +45,9 @@ class CandidateRepository:
         return rows
 
     @staticmethod
-    async def save_candidate(db: AsyncSession, candidate: ExamCandidate) -> ExamCandidate:
+    async def save_candidate(
+        db: AsyncSession, candidate: ExamCandidate
+    ) -> ExamCandidate:
         db.add(candidate)
         await db.flush()
         return candidate

@@ -6,7 +6,7 @@ import asyncio
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-import httpx
+import httpx2 as httpx
 from pydantic import SecretStr
 
 from app.core.settings import settings
