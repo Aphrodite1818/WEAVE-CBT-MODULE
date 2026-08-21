@@ -56,6 +56,32 @@ class ExamService:
     """Business operations for locally owned CBT examinations."""
 
     @staticmethod
+    async def _validate_random_question_capacity(
+        db: AsyncSession,
+        *,
+        question_bank_id: UUID,
+        question_count: int,
+    ) -> None:
+        """
+        Ensure a RANDOM configuration can be satisfied by its question bank.
+
+        Both creation and later question reconfiguration use this helper so
+        the RANDOM-capacity business rule has one implementation.
+        """
+
+        active_question_count = await QuestionRepository.count_questions_for_bank(
+            db,
+            question_bank_id,
+            active_only=True,
+        )
+
+        if active_question_count < question_count:
+            raise ValueError(
+                "Question bank does not contain enough active questions "
+                "for the requested question count"
+            )
+
+    @staticmethod
     async def create_exam(
         db: AsyncSession,
         *,
@@ -174,17 +200,11 @@ class ExamService:
         )
 
         if question_selection_mode == ExamQuestionSelectionMode.RANDOM:
-            active_question_count = await QuestionRepository.count_questions_for_bank(
+            await ExamService._validate_random_question_capacity(
                 db,
-                question_bank.id,
-                active_only=True,
+                question_bank_id=question_bank.id,
+                question_count=payload.question_count,
             )
-
-            if active_question_count < payload.question_count:
-                raise ValueError(
-                    "Question bank does not contain enough active questions "
-                    "for the requested question count"
-                )
 
         # prevent duplicate revision-1 exam
         existing_exam = await ExamRepository.get_exam_revision(
@@ -583,10 +603,13 @@ class ExamService:
         - the exam remains in MANUAL mode
         - the question bank does not change
 
-        Existing manual selections are cleared when:
+        Existing manual selections may be cleared when:
         - the question bank changes
         - MANUAL mode changes to RANDOM
         - stale manual selections exist while changing RANDOM to MANUAL
+
+        Destructive changes to valid MANUAL work require explicit
+        clear_existing_manual_selections confirmation from the caller.
 
         This operation does NOT add manual questions.
         Manual questions are managed incrementally by dedicated services.
@@ -658,33 +681,47 @@ class ExamService:
             and not bank_changed
         )
 
+        # Existing MANUAL work is only destroyed when the caller explicitly
+        # acknowledges the destructive transition. This prevents an accidental
+        # mode or bank change from silently wiping authored question choices.
+        destructive_manual_change = (
+            bool(existing_selections)
+            and exam.question_selection_mode == ExamQuestionSelectionMode.MANUAL
+            and (
+                question_selection_mode != ExamQuestionSelectionMode.MANUAL
+                or bank_changed
+            )
+        )
+
+        if (
+            destructive_manual_change
+            and not payload.clear_existing_manual_selections
+        ):
+            raise ValueError(
+                "This question configuration change would remove existing "
+                "manual question selections. Set "
+                "clear_existing_manual_selections=true to confirm the change"
+            )
+
         should_clear_manual_selections = False
 
         if question_selection_mode == ExamQuestionSelectionMode.RANDOM:
-            # RANDOM mode must have enough available source questions
-            active_question_count = (
-                await QuestionRepository.count_questions_for_bank(
-                    db,
-                    question_bank.id,
-                    active_only=True,
-                )
+            await ExamService._validate_random_question_capacity(
+                db,
+                question_bank_id=question_bank.id,
+                question_count=payload.question_count,
             )
 
-            if active_question_count < payload.question_count:
-                raise ValueError(
-                    "Question bank does not contain enough active questions "
-                    "for the requested question count"
-                )
-
-            # RANDOM exams must not retain manual selections
+            # RANDOM exams must not retain manual selection references.
+            # For valid MANUAL work, destructive confirmation was checked above.
             if existing_selections:
                 should_clear_manual_selections = True
 
         elif question_selection_mode == ExamQuestionSelectionMode.MANUAL:
             if preserve_manual_selections:
-                # existing selections survive configuration changes on the
+                # Existing selections survive configuration changes on the
                 # same MANUAL bank, but the required count cannot be reduced
-                # below the amount already selected
+                # below the amount already selected.
                 if len(existing_selections) > payload.question_count:
                     raise ValueError(
                         "Question count cannot be lower than the number "
@@ -692,8 +729,9 @@ class ExamService:
                     )
 
             else:
-                # bank changed or mode changed into MANUAL.
-                # existing selections do not belong to the new configuration.
+                # The bank changed or stale selections survived a previous
+                # non-MANUAL state. They cannot belong to this configuration.
+                # Valid MANUAL work requires confirmation before reaching here.
                 if existing_selections:
                     should_clear_manual_selections = True
 
@@ -801,14 +839,12 @@ class ExamService:
             exam_id=exam_id,
         )
 
-
         question_ids = payload.question_ids
 
         if not question_ids:
             raise ValueError(
                 "At least one question must be selected"
             )
-
 
         if len(question_ids) != len(set(question_ids)):
             raise ValueError(
@@ -952,7 +988,6 @@ class ExamService:
         positions remain continuous.
         """
 
-       
         exam = await ExamService._require_manual_draft_exam(
             db,
             actor=actor,
@@ -1043,6 +1078,7 @@ class ExamService:
             exam_id=exam_id,
         )
         question_ids = payload.question_ids
+
         if len(question_ids) != len(set(question_ids)):
             raise ValueError(
                 "Question order cannot contain duplicate questions"
@@ -1107,9 +1143,3 @@ class ExamService:
             ) from exc
 
         return exam
-
-
-
-
-
-
