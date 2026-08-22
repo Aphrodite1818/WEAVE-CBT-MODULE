@@ -15,7 +15,9 @@ from app.main import app  # noqa: E402
 
 class MainTests(unittest.TestCase):
     def test_core_local_routes_are_registered(self) -> None:
-        paths = set(app.openapi()["paths"])
+        openapi_paths = app.openapi()["paths"]
+        paths = set(openapi_paths)
+
         self.assertIn("/api/v1/installation/status", paths)
         self.assertIn("/api/v1/installation/pair", paths)
         self.assertIn("/api/v1/auth/login", paths)
@@ -28,8 +30,10 @@ class MainTests(unittest.TestCase):
         self.assertIn("/api/v1/questions/banks/{bank_id}/single-choice", paths)
         self.assertIn("/api/v1/questions/banks/{bank_id}/multiple-choice", paths)
         self.assertIn("/api/v1/questions/{question_id}/image", paths)
+
         self.assertIn("/api/v1/exams", paths)
         self.assertIn("/api/v1/exams/{exam_id}", paths)
+        self.assertIn("get", openapi_paths["/api/v1/exams/{exam_id}"])
         self.assertIn("/api/v1/exams/{exam_id}/questions/configuration", paths)
         self.assertIn("/api/v1/exams/{exam_id}/submit", paths)
         self.assertIn("/api/v1/exams/{exam_id}/return-to-draft", paths)
@@ -46,6 +50,19 @@ class MainTests(unittest.TestCase):
         self.assertIn("/api/v1/exams/{exam_id}/manual-questions", paths)
         self.assertIn("/api/v1/exams/{exam_id}/manual-questions/remove", paths)
         self.assertIn("/api/v1/exams/{exam_id}/manual-questions/reorder", paths)
+
+        self.assertIn("/api/v1/exams/{exam_id}/candidates", paths)
+        self.assertIn("/api/v1/candidates/{candidate_id}", paths)
+        self.assertIn("/api/v1/candidates/{candidate_id}/block", paths)
+        self.assertIn("/api/v1/candidates/{candidate_id}/unblock", paths)
+        self.assertIn(
+            "/api/v1/candidates/{candidate_id}/late-start-authorizations",
+            paths,
+        )
+        self.assertIn(
+            "/api/v1/late-start-authorizations/{authorization_id}/revoke",
+            paths,
+        )
 
 
 if __name__ == "__main__":
