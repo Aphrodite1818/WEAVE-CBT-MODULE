@@ -1,0 +1,87 @@
+from __future__ import annotations
+
+from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.domains.candidates.models import CandidateStatus
+from app.domains.exams.models import ExamRosterStatus
+
+
+class InputBase(BaseModel):
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        use_enum_values=True,
+        extra="forbid",
+    )
+
+
+class OutputBase(BaseModel):
+    model_config = ConfigDict(
+        from_attributes=True,
+        use_enum_values=True,
+    )
+
+
+class CandidateStatusReasonPayload(InputBase):
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class CandidateLateStartGrantPayload(InputBase):
+    reason: str = Field(min_length=1)
+    expires_at: datetime | None = None
+
+
+class CandidateLateStartRevocationPayload(InputBase):
+    reason: str = Field(min_length=1)
+
+
+class CandidateResponse(OutputBase):
+    id: UUID
+
+    exam_id: UUID
+    enrollment_id: UUID
+    student_id: UUID
+    class_id: UUID
+
+    admission_number: str
+    display_name: str
+
+    status: CandidateStatus
+    status_reason: str | None
+
+    roster_version: int
+
+    created_at: datetime
+    updated_at: datetime
+
+
+class CandidateRosterResponse(OutputBase):
+    exam_id: UUID
+
+    roster_status: ExamRosterStatus
+    roster_version: int
+
+    roster_candidate_count: int
+
+    offset: int
+    limit: int
+    total: int
+
+    candidates: list[CandidateResponse]
+
+
+class CandidateLateStartAuthorizationResponse(OutputBase):
+    id: UUID
+    candidate_id: UUID
+    granted_by_actor_id: UUID
+    reason: str
+    granted_at: datetime
+    expires_at: datetime | None
+    consumed_at: datetime | None
+    revoked_at: datetime | None
+    revoked_by_actor_id: UUID | None
+    revocation_reason: str | None
+    created_at: datetime
+    updated_at: datetime
