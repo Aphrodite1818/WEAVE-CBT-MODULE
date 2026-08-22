@@ -433,3 +433,105 @@ class CandidateLateStartAuthorization(Base):
             "granted_at",
         ),
     )
+
+
+class CandidateMakeupAuthorization(Base):
+    """
+    Administrative approval allowing one candidate who missed an
+    examination to write the exact examination later as a makeup
+
+
+    The authorization points to ExamCandidate rather than directly storing
+    student/exam/subject information again.
+
+
+    ExamCandidate already freezes:
+        student_id
+        exam_id
+        enrollment_id
+        class_id
+        admission_number
+
+
+    Therefore:
+        CandidateMakeupAuthorization
+        -> ExamCandidate
+        -> exact original Exam
+
+    is sufficient to identify exactly what the student missed
+
+    This row does NOT create an attempt and does NOT allocate questions
+
+    Later, MakeupAttemptService will consume the authorization when the
+    candidat actually begins the makeup examination
+    """
+
+    __tablename__ = "candidate_make_up_authorizations"
+
+    candidate_id: Mapped[UUID] = mapped_column(
+        ForeignKey("exam_candidates.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+
+    approved_by_actor_id: Mapped[UUID] = mapped_column(
+        ForeignKey("local_actors.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+
+    reason: Mapped[str] = mapped_column(
+        String(STATUS_REASON_MAX_LENGTH), nullable=False
+    )
+
+    approved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True, server_default=func.now()
+    )
+
+    consumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    revoked_by_actor_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("local_actors.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+
+    revocation_reason: Mapped[str | None] = mapped_column(
+        String(STATUS_REASON_MAX_LENGTH), nullable=True
+    )
+
+    __table_args__ = (
+        Index(
+            "uq_candidate_makeup_one_active",
+            "candidate_id",
+            unique=True,
+            postgresql_where=sql_text("revoked_at IS NULL"),
+        ),
+        CheckConstraint(
+            "consumed_at IS NULL OR consumed_at >= approved_at",
+            name="ck_candidate_makeup_consumed_valid",
+        ),
+        CheckConstraint(
+            "revoked_at IS NULL OR revoked_at >= approved_at",
+            name="ck_candidate_makeup_revoked_valid",
+        ),
+        CheckConstraint(
+            "revoked_at IS NULL OR revoked_by_actor_id IS NOT NULL",
+            name="ck_candidate_makeup_revocation_actor_required",
+        ),
+        CheckConstraint(
+            "revoked_at IS NULL OR revocation_reason IS NOT NULL",
+            name="ck_candidate_makeup_revocation_reason_required",
+        ),
+        CheckConstraint(
+            "NOT (consumed_at IS NOT NULL AND revoked_at IS NOT NULL)",
+            name="ck_candidate_makeup_not_consumed_and_revoked",
+        ),
+        Index(
+            "ix_candidate_makeup_candidate_approved",
+            "candidate_id",
+            "approved_at",
+        ),
+    )

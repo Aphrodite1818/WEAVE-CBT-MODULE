@@ -519,7 +519,9 @@ class ExamServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.question_count, 2)
         db.commit.assert_awaited_once()
 
-    async def test_add_manual_questions_rejects_questions_from_another_bank(self) -> None:
+    async def test_add_manual_questions_rejects_questions_from_another_bank(
+        self,
+    ) -> None:
         db = AsyncMock()
         current_actor = actor()
         exam = draft_exam(

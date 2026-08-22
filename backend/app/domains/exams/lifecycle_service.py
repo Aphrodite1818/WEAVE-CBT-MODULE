@@ -245,9 +245,7 @@ class ExamLifecycleServiceMixin:
                     "before submission"
                 )
 
-            selected_question_ids = [
-                selection.question_id for selection in selections
-            ]
+            selected_question_ids = [selection.question_id for selection in selections]
             questions = await QuestionRepository.list_questions_by_ids(
                 db,
                 selected_question_ids,
@@ -552,12 +550,10 @@ class ExamLifecycleServiceMixin:
             if offering is None:
                 continue
 
-            assignment = (
-                await AcademicRepository.get_active_assignment_for_class_curriculum_subject(
-                    db,
-                    classroom.id,
-                    exam.curriculum_subject_id,
-                )
+            assignment = await AcademicRepository.get_active_assignment_for_class_curriculum_subject(
+                db,
+                classroom.id,
+                exam.curriculum_subject_id,
             )
             target_classes.append(
                 ExamTargetClass(
@@ -1125,9 +1121,7 @@ class ExamLifecycleServiceMixin:
         if exam is None:
             raise ExamNotFound("Examination does not exist")
         if exam.status not in {ExamStatus.ACTIVE, ExamStatus.SUSPENDED}:
-            raise ExamStateError(
-                "Only ACTIVE or SUSPENDED examinations can be closed"
-            )
+            raise ExamStateError("Only ACTIVE or SUSPENDED examinations can be closed")
 
         closed_at = datetime.now(UTC)
         suspension = None

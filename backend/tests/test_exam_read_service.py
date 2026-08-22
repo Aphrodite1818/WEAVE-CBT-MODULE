@@ -64,7 +64,9 @@ class ExamReadServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIs(result, current_exam)
 
-    async def test_assigned_invigilator_can_get_exam_without_authoring_access(self) -> None:
+    async def test_assigned_invigilator_can_get_exam_without_authoring_access(
+        self,
+    ) -> None:
         db = AsyncMock()
         teacher_id = uuid4()
         current_actor = actor(role="teacher", membership_id=teacher_id)
@@ -151,9 +153,7 @@ class ExamReadServiceTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 AcademicAuthorizationService,
                 "require_can_author_curriculum_subject",
-                new=AsyncMock(
-                    side_effect=AcademicAuthorizationError("No assignment")
-                ),
+                new=AsyncMock(side_effect=AcademicAuthorizationError("No assignment")),
             ),
             self.assertRaisesRegex(ExamAuthorizationError, "not allowed"),
         ):

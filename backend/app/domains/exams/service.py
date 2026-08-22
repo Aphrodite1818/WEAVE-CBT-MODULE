@@ -40,9 +40,7 @@ class ExamService(ExamLifecycleServiceMixin, _AuthoringExamService):
             return exam
 
         if actor.role != "teacher":
-            raise ExamAuthorizationError(
-                "You are not allowed to view this examination"
-            )
+            raise ExamAuthorizationError("You are not allowed to view this examination")
 
         # The original author retains read access even if their current
         # teaching assignment later changes.

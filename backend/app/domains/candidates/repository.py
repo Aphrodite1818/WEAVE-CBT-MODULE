@@ -11,15 +11,19 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domains.attempts.models import ExamAttempt
 from app.domains.candidates.models import (
     CandidateLateStartAuthorization,
+    CandidateMakeupAuthorization,
     CandidateStatus,
     ExamCandidate,
     StudentCBTCredential,
 )
+from app.domains.exams.models import Exam
+from app.domains.academics.models import Curriculum, CurriculumSubject
 
 
 class CandidateRepository:
@@ -337,3 +341,341 @@ class CandidateRepository:
         db.add(authorization)
         await db.flush()
         return authorization
+
+    # ========================== #
+    # MISSED EXAM DETECTION
+    # ========================== #
+
+    @staticmethod
+    async def list_missed_candidates_for_exam(
+        db: AsyncSession,
+        exam_id: UUID,
+        *,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> list[ExamCandidate]:
+        """
+        Return academically eligible candidates who never created an attempt
+        for this examination.
+
+        The service layer is responsible for ensuring the examination is
+        CLOSED before this query is treated as a confirmed missed-exam list.
+
+        A candidate who has ANY ExamAttempt is not considered "missed" here.
+        Interrupted, terminated, submitted, etc. are different recovery
+        scenarios.
+        """
+
+        has_attempt = exists(
+            select(ExamAttempt.id).where(ExamAttempt.candidate_id == ExamCandidate.id)
+        )
+
+        query = (
+            select(ExamCandidate)
+            .where(
+                ExamCandidate.exam_id == exam_id,
+                ExamCandidate.status == CandidateStatus.ELIGIBLE,
+                ~has_attempt,
+            )
+            .order_by(
+                ExamCandidate.display_name.asc(),
+                ExamCandidate.admission_number.asc(),
+                ExamCandidate.id.asc(),
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+
+        return list((await db.execute(query)).scalars().all())
+
+    @staticmethod
+    async def count_missed_candidates_for_exam(
+        db: AsyncSession,
+        exam_id: UUID,
+    ) -> int:
+        has_attempt = exists(
+            select(ExamAttempt.id).where(ExamAttempt.candidate_id == ExamCandidate.id)
+        )
+
+        query = (
+            select(func.count())
+            .select_from(ExamCandidate)
+            .where(
+                ExamCandidate.exam_id == exam_id,
+                ExamCandidate.status == CandidateStatus.ELIGIBLE,
+                ~has_attempt,
+            )
+        )
+
+        return int((await db.execute(query)).scalar_one() or 0)
+
+    # ========================== #
+    # MAKEUP AUTHORIZATION
+    # ========================== #
+
+    @staticmethod
+    async def add_makeup_authorization(
+        db: AsyncSession,
+        authorization: CandidateMakeupAuthorization,
+    ) -> CandidateMakeupAuthorization:
+        db.add(authorization)
+        await db.flush()
+        return authorization
+
+    @staticmethod
+    async def save_makeup_authorization(
+        db: AsyncSession,
+        authorization: CandidateMakeupAuthorization,
+    ) -> CandidateMakeupAuthorization:
+        db.add(authorization)
+        await db.flush()
+        return authorization
+
+    @staticmethod
+    async def get_makeup_authorization_by_id(
+        db: AsyncSession,
+        authorization_id: UUID,
+        *,
+        lock: bool = False,
+    ) -> CandidateMakeupAuthorization | None:
+        query = select(CandidateMakeupAuthorization).where(
+            CandidateMakeupAuthorization.id == authorization_id
+        )
+
+        if lock:
+            query = query.with_for_update(of=CandidateMakeupAuthorization)
+
+        return (await db.execute(query)).scalar_one_or_none()
+
+    @staticmethod
+    async def get_active_makeup_authorization(
+        db: AsyncSession,
+        candidate_id: UUID,
+        *,
+        lock: bool = False,
+    ) -> CandidateMakeupAuthorization | None:
+        """
+        Return the candidate's currently usable/unrevoked authorization.
+
+        `consumed_at` is deliberately NOT filtered here.
+
+        A consumed authorization still represents the one makeup approval
+        already used by this candidate and therefore prevents another active
+        approval from being created.
+        """
+
+        query = (
+            select(CandidateMakeupAuthorization)
+            .where(
+                CandidateMakeupAuthorization.candidate_id == candidate_id,
+                CandidateMakeupAuthorization.revoked_at.is_(None),
+            )
+            .order_by(
+                CandidateMakeupAuthorization.approved_at.desc(),
+                CandidateMakeupAuthorization.id.desc(),
+            )
+            .limit(1)
+        )
+
+        if lock:
+            query = query.with_for_update(of=CandidateMakeupAuthorization)
+
+        return (await db.execute(query)).scalar_one_or_none()
+
+    @staticmethod
+    async def list_makeup_authorizations(
+        db: AsyncSession,
+        candidate_id: UUID,
+    ) -> list[CandidateMakeupAuthorization]:
+        result = await db.execute(
+            select(CandidateMakeupAuthorization)
+            .where(CandidateMakeupAuthorization.candidate_id == candidate_id)
+            .order_by(
+                CandidateMakeupAuthorization.approved_at.asc(),
+                CandidateMakeupAuthorization.id.asc(),
+            )
+        )
+
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_active_makeup_authorizations_for_candidates(
+        db: AsyncSession,
+        candidate_ids: Sequence[UUID],
+    ) -> list[CandidateMakeupAuthorization]:
+        ids = list(dict.fromkeys(candidate_ids))
+
+        if not ids:
+            return []
+
+        result = await db.execute(
+            select(CandidateMakeupAuthorization)
+            .where(
+                CandidateMakeupAuthorization.candidate_id.in_(ids),
+                CandidateMakeupAuthorization.revoked_at.is_(None),
+            )
+            .order_by(
+                CandidateMakeupAuthorization.candidate_id.asc(),
+                CandidateMakeupAuthorization.approved_at.asc(),
+            )
+        )
+
+        return list(result.scalars().all())
+    
+
+
+
+
+
+    @staticmethod
+    async def list_pending_makeups_for_student(
+        db: AsyncSession,
+        *,
+        student_id: UUID,
+        session_id: UUID,
+        term_id: UUID,
+    ) -> list[tuple[CandidateMakeupAuthorization, ExamCandidate, Exam]]:
+        """
+        Return a student's currently pending makeup examinations in the same
+        order in which the original examinations were scheduled.
+
+        Pending means:
+
+            - makeup authorization exists;
+            - authorization has not been revoked;
+            - authorization has not been consumed;
+            - candidate belongs to the supplied student;
+            - original exam belongs to the supplied session and term.
+
+        The student does not choose which makeup to write.
+
+        The first row returned by this query is therefore the next makeup
+        examination that may eventually be offered to the student.
+        """
+
+        result = await db.execute(
+            select(
+                CandidateMakeupAuthorization,
+                ExamCandidate,
+                Exam,
+            )
+            .join(
+                ExamCandidate,
+                ExamCandidate.id
+                == CandidateMakeupAuthorization.candidate_id,
+            )
+            .join(
+                Exam,
+                Exam.id == ExamCandidate.exam_id,
+            )
+            .where(
+                ExamCandidate.student_id == student_id,
+                CandidateMakeupAuthorization.revoked_at.is_(None),
+                CandidateMakeupAuthorization.consumed_at.is_(None),
+                Exam.session_id == session_id,
+                Exam.term_id == term_id,
+            )
+            .order_by(
+                Exam.scheduled_start_at.asc().nulls_last(),
+                Exam.id.asc(),
+                ExamCandidate.id.asc(),
+            )
+        )
+
+        return list(result.tuples().all())
+
+
+
+
+    
+    @staticmethod
+    async def count_pending_makeups_for_student(
+        db: AsyncSession,
+        *,
+        student_id: UUID,
+        session_id: UUID,
+        term_id: UUID,
+    ) -> int:
+        query = (
+            select(func.count())
+            .select_from(CandidateMakeupAuthorization)
+            .join(
+                ExamCandidate,
+                ExamCandidate.id
+                == CandidateMakeupAuthorization.candidate_id,
+            )
+            .join(
+                Exam,
+                Exam.id == ExamCandidate.exam_id,
+            )
+            .where(
+                ExamCandidate.student_id == student_id,
+                CandidateMakeupAuthorization.revoked_at.is_(None),
+                CandidateMakeupAuthorization.consumed_at.is_(None),
+                Exam.session_id == session_id,
+                Exam.term_id == term_id,
+            )
+        )
+
+        return int(
+            (await db.execute(query)).scalar_one() or 0
+        )
+
+
+
+
+
+    @staticmethod
+    async def list_pending_makeups_for_student(
+        db: AsyncSession,
+        *,
+        student_id: UUID,
+        session_id: UUID,
+        term_id: UUID,
+    ) -> list[
+        tuple[
+            CandidateMakeupAuthorization,
+            ExamCandidate,
+            Exam,
+            UUID,
+        ]
+    ]:
+        result = await db.execute(
+            select(
+                CandidateMakeupAuthorization,
+                ExamCandidate,
+                Exam,
+                Curriculum.academic_level_id,
+            )
+            .join(
+                ExamCandidate,
+                ExamCandidate.id
+                == CandidateMakeupAuthorization.candidate_id,
+            )
+            .join(
+                Exam,
+                Exam.id == ExamCandidate.exam_id,
+            )
+            .join(
+                CurriculumSubject,
+                CurriculumSubject.id == Exam.curriculum_subject_id,
+            )
+            .join(
+                Curriculum,
+                Curriculum.id == CurriculumSubject.curriculum_id,
+            )
+            .where(
+                ExamCandidate.student_id == student_id,
+                CandidateMakeupAuthorization.revoked_at.is_(None),
+                CandidateMakeupAuthorization.consumed_at.is_(None),
+                Exam.session_id == session_id,
+                Exam.term_id == term_id,
+            )
+            .order_by(
+                Exam.scheduled_start_at.asc().nulls_last(),
+                Exam.id.asc(),
+                ExamCandidate.id.asc(),
+            )
+        )
+
+        return list(result.tuples().all())

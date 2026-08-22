@@ -181,14 +181,10 @@ class ExamService:
         )
 
         if question_bank is None:
-            raise ValueError(
-                "Question bank does not exist"
-            )
+            raise ValueError("Question bank does not exist")
 
         if not question_bank.is_active:
-            raise ValueError(
-                "Question bank is inactive"
-            )
+            raise ValueError("Question bank is inactive")
 
         if question_bank.curriculum_subject_id != payload.curriculum_subject_id:
             raise ValueError(
@@ -303,15 +299,11 @@ class ExamService:
         )
 
         if exam is None:
-            raise ExamNotFound(
-                "Examination does not exist"
-            )
+            raise ExamNotFound("Examination does not exist")
 
         # only draft exams can be modified
         if exam.status != ExamStatus.DRAFT:
-            raise ExamStateError(
-                "Only examinations in DRAFT state can be edited"
-            )
+            raise ExamStateError("Only examinations in DRAFT state can be edited")
 
         # make sure actor can manage examinations for the current
         # curriculum-subject scope
@@ -342,26 +334,15 @@ class ExamService:
         }
 
         for field_name in required_fields:
-            if (
-                field_name in fields
-                and getattr(payload, field_name) is None
-            ):
-                raise ValueError(
-                    f"{field_name} cannot be null"
-                )
+            if field_name in fields and getattr(payload, field_name) is None:
+                raise ValueError(f"{field_name} cannot be null")
 
         # build final academic scope
         next_session_id = (
-            payload.session_id
-            if "session_id" in fields
-            else exam.session_id
+            payload.session_id if "session_id" in fields else exam.session_id
         )
 
-        next_term_id = (
-            payload.term_id
-            if "term_id" in fields
-            else exam.term_id
-        )
+        next_term_id = payload.term_id if "term_id" in fields else exam.term_id
 
         next_assessment_scheme_id = (
             payload.assessment_scheme_id
@@ -375,11 +356,7 @@ class ExamService:
             else exam.assessment_component_id
         )
 
-        next_title = (
-            payload.title
-            if "title" in fields
-            else exam.title
-        )
+        next_title = payload.title if "title" in fields else exam.title
 
         next_duration_minutes = (
             payload.duration_minutes
@@ -469,14 +446,10 @@ class ExamService:
         )
 
         if question_bank is None:
-            raise ValueError(
-                "The examination question bank no longer exists"
-            )
+            raise ValueError("The examination question bank no longer exists")
 
         if not question_bank.is_active:
-            raise ValueError(
-                "The examination question bank is inactive"
-            )
+            raise ValueError("The examination question bank is inactive")
 
         if question_bank.curriculum_subject_id != exam.curriculum_subject_id:
             raise ValueError(
@@ -516,10 +489,7 @@ class ExamService:
             revision_number=exam.revision_number,
         )
 
-        if (
-            existing_exam is not None
-            and existing_exam.id != exam.id
-        ):
+        if existing_exam is not None and existing_exam.id != exam.id:
             raise ValueError(
                 "An examination with this title already exists for "
                 "the selected term, curriculum subject and assessment "
@@ -544,9 +514,7 @@ class ExamService:
             exam.title = next_title
 
         if "instructions" in fields:
-            exam.instructions = _normalize_optional_text(
-                payload.instructions
-            )
+            exam.instructions = _normalize_optional_text(payload.instructions)
 
         if "duration_minutes" in fields:
             exam.duration_minutes = next_duration_minutes
@@ -561,9 +529,7 @@ class ExamService:
             exam.scheduled_start_at = payload.scheduled_start_at
 
         if "latest_normal_start_at" in fields:
-            exam.latest_normal_start_at = (
-                payload.latest_normal_start_at
-            )
+            exam.latest_normal_start_at = payload.latest_normal_start_at
 
         try:
             exam = await ExamRepository.save_exam(
@@ -624,9 +590,7 @@ class ExamService:
         )
 
         if exam is None:
-            raise ExamNotFound(
-                "Examination does not exist"
-            )
+            raise ExamNotFound("Examination does not exist")
 
         if exam.status != ExamStatus.DRAFT:
             raise ExamStateError(
@@ -649,19 +613,14 @@ class ExamService:
         )
 
         if question_bank is None:
-            raise ValueError(
-                "Question bank does not exist"
-            )
+            raise ValueError("Question bank does not exist")
 
         if not question_bank.is_active:
-            raise ValueError(
-                "Question bank is inactive"
-            )
+            raise ValueError("Question bank is inactive")
 
         if question_bank.curriculum_subject_id != exam.curriculum_subject_id:
             raise ValueError(
-                "Question bank does not belong to the examination "
-                "curriculum subject"
+                "Question bank does not belong to the examination curriculum subject"
             )
 
         question_selection_mode = ExamQuestionSelectionMode(
@@ -693,10 +652,7 @@ class ExamService:
             )
         )
 
-        if (
-            destructive_manual_change
-            and not payload.clear_existing_manual_selections
-        ):
+        if destructive_manual_change and not payload.clear_existing_manual_selections:
             raise ValueError(
                 "This question configuration change would remove existing "
                 "manual question selections. Set "
@@ -736,9 +692,7 @@ class ExamService:
                     should_clear_manual_selections = True
 
         else:
-            raise ValueError(
-                "Unsupported question selection mode"
-            )
+            raise ValueError("Unsupported question selection mode")
 
         try:
             if should_clear_manual_selections:
@@ -789,9 +743,7 @@ class ExamService:
         )
 
         if exam is None:
-            raise ExamNotFound(
-                "Examination does not exist"
-            )
+            raise ExamNotFound("Examination does not exist")
 
         if exam.status != ExamStatus.DRAFT:
             raise ExamStateError(
@@ -842,14 +794,10 @@ class ExamService:
         question_ids = payload.question_ids
 
         if not question_ids:
-            raise ValueError(
-                "At least one question must be selected"
-            )
+            raise ValueError("At least one question must be selected")
 
         if len(question_ids) != len(set(question_ids)):
-            raise ValueError(
-                "Question selections cannot contain duplicate questions"
-            )
+            raise ValueError("Question selections cannot contain duplicate questions")
 
         # make sure current bank still exists and remains valid
         question_bank = await QuestionRepository.get_bank_by_id(
@@ -859,14 +807,10 @@ class ExamService:
         )
 
         if question_bank is None:
-            raise ValueError(
-                "The examination question bank no longer exists"
-            )
+            raise ValueError("The examination question bank no longer exists")
 
         if not question_bank.is_active:
-            raise ValueError(
-                "The examination question bank is inactive"
-            )
+            raise ValueError("The examination question bank is inactive")
 
         if question_bank.curriculum_subject_id != exam.curriculum_subject_id:
             raise ValueError(
@@ -880,14 +824,10 @@ class ExamService:
         )
 
         existing_question_ids = {
-            selection.question_id
-            for selection in existing_selections
+            selection.question_id for selection in existing_selections
         }
 
-        duplicate_existing_ids = (
-            existing_question_ids
-            & set(question_ids)
-        )
+        duplicate_existing_ids = existing_question_ids & set(question_ids)
 
         if duplicate_existing_ids:
             raise ValueError(
@@ -895,15 +835,11 @@ class ExamService:
                 "added to this examination"
             )
 
-        final_selection_count = (
-            len(existing_selections)
-            + len(question_ids)
-        )
+        final_selection_count = len(existing_selections) + len(question_ids)
 
         if final_selection_count > exam.question_count:
             raise ValueError(
-                "Adding these questions would exceed the examination "
-                "question count"
+                "Adding these questions would exceed the examination question count"
             )
 
         questions = await QuestionRepository.list_questions_by_ids(
@@ -912,10 +848,7 @@ class ExamService:
             active_only=True,
         )
 
-        questions_by_id = {
-            question.id: question
-            for question in questions
-        }
+        questions_by_id = {question.id: question for question in questions}
 
         # incoming IDs are already unique, therefore a count mismatch
         # means at least one question does not exist or is inactive
@@ -934,10 +867,7 @@ class ExamService:
                 )
 
         current_final_position = max(
-            (
-                selection.position
-                for selection in existing_selections
-            ),
+            (selection.position for selection in existing_selections),
             default=0,
         )
 
@@ -1004,9 +934,7 @@ class ExamService:
         )
 
         if selection is None:
-            raise ValueError(
-                "Question is not selected for this examination"
-            )
+            raise ValueError("Question is not selected for this examination")
 
         current_selections = await ExamRepository.list_question_selections(
             db,
@@ -1080,9 +1008,7 @@ class ExamService:
         question_ids = payload.question_ids
 
         if len(question_ids) != len(set(question_ids)):
-            raise ValueError(
-                "Question order cannot contain duplicate questions"
-            )
+            raise ValueError("Question order cannot contain duplicate questions")
 
         current_selections = await ExamRepository.list_question_selections(
             db,
@@ -1090,13 +1016,11 @@ class ExamService:
         )
 
         current_question_ids = [
-            selection.question_id
-            for selection in current_selections
+            selection.question_id for selection in current_selections
         ]
 
-        if (
-            len(question_ids) != len(current_question_ids)
-            or set(question_ids) != set(current_question_ids)
+        if len(question_ids) != len(current_question_ids) or set(question_ids) != set(
+            current_question_ids
         ):
             raise ValueError(
                 "Question order must contain exactly the questions "

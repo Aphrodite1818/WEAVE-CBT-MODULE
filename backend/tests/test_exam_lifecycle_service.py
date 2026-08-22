@@ -313,7 +313,9 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
         delete_exam.assert_awaited_once_with(db, current_exam)
         db.commit.assert_awaited_once()
 
-    async def test_assign_invigilator_needs_school_membership_not_assignment(self) -> None:
+    async def test_assign_invigilator_needs_school_membership_not_assignment(
+        self,
+    ) -> None:
         db = AsyncMock()
         admin = actor(role="admin")
         teacher_id = uuid4()
@@ -686,7 +688,9 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
         save_exam.assert_not_awaited()
         add_event.assert_not_awaited()
 
-    async def test_revision_creation_rejects_active_suspended_and_closed_leaf(self) -> None:
+    async def test_revision_creation_rejects_active_suspended_and_closed_leaf(
+        self,
+    ) -> None:
         admin = actor(role="admin")
 
         for lifecycle_status in (
@@ -1099,7 +1103,9 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cancellable.status, ExamStatus.CANCELLED)
         self.assertEqual(cancellable.cancellation_reason, "Invalid paper")
 
-    async def test_manual_sealing_resolution_preserves_selection_order_and_locks(self) -> None:
+    async def test_manual_sealing_resolution_preserves_selection_order_and_locks(
+        self,
+    ) -> None:
         db = AsyncMock()
         first_id = uuid4()
         second_id = uuid4()
@@ -1140,7 +1146,9 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
             lock=True,
         )
 
-    async def test_assign_invigilators_rejects_missing_or_inactive_teacher(self) -> None:
+    async def test_assign_invigilators_rejects_missing_or_inactive_teacher(
+        self,
+    ) -> None:
         db = AsyncMock()
         admin = actor(role="admin")
         teacher_id = uuid4()

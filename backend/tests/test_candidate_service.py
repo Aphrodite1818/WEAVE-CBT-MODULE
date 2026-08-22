@@ -20,6 +20,7 @@ from app.core.exceptions import AcademicAuthorizationError
 from app.domains.candidates.models import CandidateStatus
 from app.domains.candidates.repository import CandidateRepository
 from app.domains.candidates.service import CandidateService
+from app.domains.attempts.repository import AttemptRepository
 from app.domains.exams.models import ExamRosterStatus, ExamStatus
 from app.domains.exams.repository import ExamRepository
 
@@ -38,10 +39,12 @@ def actor(*, role: str = "admin", membership_id=None) -> SimpleNamespace:
 def exam(**overrides) -> SimpleNamespace:
     values = {
         "id": uuid4(),
+        "title": "Mathematics CA 1",
         "status": ExamStatus.SEALED,
         "roster_status": ExamRosterStatus.READY,
         "roster_version": 2,
         "roster_candidate_count": 3,
+        "scheduled_start_at": datetime.now(UTC),
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -76,6 +79,25 @@ def authorization(**overrides) -> SimpleNamespace:
         "reason": "Late transport",
         "granted_at": now,
         "expires_at": None,
+        "consumed_at": None,
+        "revoked_at": None,
+        "revoked_by_actor_id": None,
+        "revocation_reason": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def makeup_authorization(**overrides) -> SimpleNamespace:
+    now = datetime.now(UTC)
+    values = {
+        "id": uuid4(),
+        "candidate_id": uuid4(),
+        "approved_by_actor_id": uuid4(),
+        "reason": "Missed original sitting",
+        "approved_at": now,
         "consumed_at": None,
         "revoked_at": None,
         "revoked_by_actor_id": None,
@@ -180,7 +202,8 @@ class CandidateServiceTests(unittest.IsolatedAsyncioTestCase):
                 ExamRepository,
                 "get_invigilator",
                 new=AsyncMock(return_value=None),
-            ),self.assertRaises(AcademicAuthorizationError)
+            ),
+            self.assertRaises(AcademicAuthorizationError),
         ):
             await CandidateService.list_roster(
                 db,
@@ -202,7 +225,8 @@ class CandidateServiceTests(unittest.IsolatedAsyncioTestCase):
                 ExamRepository,
                 "get_target_class",
                 new=AsyncMock(return_value=None),
-            ),self.assertRaisesRegex(ValueError, "Class is not part")
+            ),
+            self.assertRaisesRegex(ValueError, "Class is not part"),
         ):
             await CandidateService.list_roster(
                 db,
@@ -317,7 +341,8 @@ class CandidateServiceTests(unittest.IsolatedAsyncioTestCase):
                         ExamRepository,
                         "get_exam_by_id",
                         new=AsyncMock(return_value=exam(id=row.exam_id)),
-                    ),self.assertRaisesRegex(ValueError, "eligible")
+                    ),
+                    self.assertRaisesRegex(ValueError, "eligible"),
                 ):
                     await CandidateService.block_candidate(
                         db,
@@ -339,7 +364,8 @@ class CandidateServiceTests(unittest.IsolatedAsyncioTestCase):
                 ExamRepository,
                 "get_exam_by_id",
                 new=AsyncMock(return_value=exam(id=row.exam_id)),
-            ),self.assertRaisesRegex(ValueError, "blocked")
+            ),
+            self.assertRaisesRegex(ValueError, "blocked"),
         ):
             await CandidateService.unblock_candidate(
                 db,
@@ -366,7 +392,8 @@ class CandidateServiceTests(unittest.IsolatedAsyncioTestCase):
                         new=AsyncMock(
                             return_value=exam(id=row.exam_id, status=lifecycle_status)
                         ),
-                    ),self.assertRaisesRegex(ValueError, "read-only")
+                    ),
+                    self.assertRaisesRegex(ValueError, "read-only"),
                 ):
                     await CandidateService.block_candidate(
                         db,
@@ -442,7 +469,9 @@ class CandidateServiceTests(unittest.IsolatedAsyncioTestCase):
             )
         db.commit.assert_not_awaited()
 
-    async def test_blocked_or_withdrawn_candidate_cannot_receive_late_start(self) -> None:
+    async def test_blocked_or_withdrawn_candidate_cannot_receive_late_start(
+        self,
+    ) -> None:
         for status in (CandidateStatus.BLOCKED, CandidateStatus.WITHDRAWN):
             with self.subTest(status=status):
                 db = AsyncMock()
@@ -459,7 +488,8 @@ class CandidateServiceTests(unittest.IsolatedAsyncioTestCase):
                         new=AsyncMock(
                             return_value=exam(id=row.exam_id, status=ExamStatus.ACTIVE)
                         ),
-                    ),self.assertRaisesRegex(ValueError, "eligible")
+                    ),
+                    self.assertRaisesRegex(ValueError, "eligible"),
                 ):
                     await CandidateService.grant_late_start(
                         db,
@@ -489,7 +519,9 @@ class CandidateServiceTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 ExamRepository,
                 "get_exam_by_id",
-                new=AsyncMock(return_value=exam(id=row.exam_id, status=ExamStatus.ACTIVE)),
+                new=AsyncMock(
+                    return_value=exam(id=row.exam_id, status=ExamStatus.ACTIVE)
+                ),
             ),
             patch.object(
                 CandidateRepository,
@@ -635,7 +667,8 @@ class CandidateServiceTests(unittest.IsolatedAsyncioTestCase):
                 CandidateRepository,
                 "save_candidate",
                 new=AsyncMock(side_effect=integrity_error),
-            ),self.assertRaisesRegex(ValueError, "could not be blocked") as ctx
+            ),
+            self.assertRaisesRegex(ValueError, "could not be blocked") as ctx,
         ):
             await CandidateService.block_candidate(
                 db,
@@ -647,6 +680,293 @@ class CandidateServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("constraint-name", str(ctx.exception))
         db.rollback.assert_awaited_once()
         db.commit.assert_not_awaited()
+
+    async def test_list_missed_candidates_includes_makeup_authorization(self) -> None:
+        db = AsyncMock()
+        current_exam = exam(status=ExamStatus.CLOSED)
+        row = candidate(exam_id=current_exam.id)
+        auth = makeup_authorization(candidate_id=row.id)
+
+        with (
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=current_exam),
+            ),
+            patch.object(
+                CandidateRepository,
+                "list_missed_candidates_for_exam",
+                new=AsyncMock(return_value=[row]),
+            ) as list_missed,
+            patch.object(
+                CandidateRepository,
+                "count_missed_candidates_for_exam",
+                new=AsyncMock(return_value=1),
+            ) as count_missed,
+            patch.object(
+                CandidateRepository,
+                "list_active_makeup_authorizations_for_candidates",
+                new=AsyncMock(return_value=[auth]),
+            ) as list_authorizations,
+        ):
+            result = await CandidateService.list_missed_candidates(
+                db,
+                actor=actor(),
+                exam_id=current_exam.id,
+                offset=5,
+                limit=10,
+            )
+
+        self.assertEqual(result.exam_id, current_exam.id)
+        self.assertEqual(result.total, 1)
+        self.assertEqual(result.candidates[0].candidate.id, row.id)
+        self.assertEqual(result.candidates[0].makeup_authorization.id, auth.id)
+        list_missed.assert_awaited_once_with(
+            db,
+            current_exam.id,
+            offset=5,
+            limit=10,
+        )
+        count_missed.assert_awaited_once_with(db, current_exam.id)
+        list_authorizations.assert_awaited_once_with(db, [row.id])
+
+    async def test_list_missed_candidates_requires_closed_exam(self) -> None:
+        db = AsyncMock()
+        current_exam = exam(status=ExamStatus.ACTIVE)
+
+        with (
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=current_exam),
+            ),
+            self.assertRaisesRegex(ValueError, "closed"),
+        ):
+            await CandidateService.list_missed_candidates(
+                db,
+                actor=actor(),
+                exam_id=current_exam.id,
+            )
+
+    async def test_approve_makeup_success(self) -> None:
+        db = AsyncMock()
+        admin = actor()
+        row = candidate()
+        current_exam = exam(id=row.exam_id, status=ExamStatus.CLOSED)
+
+        async def add_authorization(_db, item):
+            now = datetime.now(UTC)
+            item.id = uuid4()
+            item.consumed_at = None
+            item.revoked_at = None
+            item.revoked_by_actor_id = None
+            item.revocation_reason = None
+            item.created_at = now
+            item.updated_at = now
+            return item
+
+        with (
+            patch.object(
+                CandidateRepository,
+                "get_candidate_by_id",
+                new=AsyncMock(return_value=row),
+            ),
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=current_exam),
+            ),
+            patch.object(
+                AttemptRepository,
+                "get_attempt_by_candidate_id",
+                new=AsyncMock(return_value=None),
+            ) as get_attempt,
+            patch.object(
+                CandidateRepository,
+                "get_active_makeup_authorization",
+                new=AsyncMock(return_value=None),
+            ) as get_existing,
+            patch.object(
+                CandidateRepository,
+                "add_makeup_authorization",
+                new=AsyncMock(side_effect=add_authorization),
+            ) as add_makeup,
+        ):
+            result = await CandidateService.approve_makeup(
+                db,
+                actor=admin,
+                candidate_id=row.id,
+                reason="  Medical emergency  ",
+            )
+
+        self.assertEqual(result.reason, "Medical emergency")
+        self.assertEqual(result.candidate_id, row.id)
+        self.assertEqual(result.approved_by_actor_id, admin.id)
+        get_attempt.assert_awaited_once_with(db, candidate_id=row.id, lock=True)
+        get_existing.assert_awaited_once_with(db, row.id, lock=True)
+        add_makeup.assert_awaited_once()
+        db.commit.assert_awaited_once()
+
+    async def test_approve_makeup_rejects_candidate_with_attempt(self) -> None:
+        db = AsyncMock()
+        row = candidate()
+
+        with (
+            patch.object(
+                CandidateRepository,
+                "get_candidate_by_id",
+                new=AsyncMock(return_value=row),
+            ),
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=exam(id=row.exam_id, status=ExamStatus.CLOSED)),
+            ),
+            patch.object(
+                AttemptRepository,
+                "get_attempt_by_candidate_id",
+                new=AsyncMock(return_value=SimpleNamespace(id=uuid4())),
+            ),
+            self.assertRaisesRegex(ValueError, "attempt was already recorded"),
+        ):
+            await CandidateService.approve_makeup(
+                db,
+                actor=actor(),
+                candidate_id=row.id,
+                reason="Missed",
+            )
+
+        db.commit.assert_not_awaited()
+
+    async def test_approve_makeup_rejects_existing_active_authorization(self) -> None:
+        db = AsyncMock()
+        row = candidate()
+
+        with (
+            patch.object(
+                CandidateRepository,
+                "get_candidate_by_id",
+                new=AsyncMock(return_value=row),
+            ),
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=exam(id=row.exam_id, status=ExamStatus.CLOSED)),
+            ),
+            patch.object(
+                AttemptRepository,
+                "get_attempt_by_candidate_id",
+                new=AsyncMock(return_value=None),
+            ),
+            patch.object(
+                CandidateRepository,
+                "get_active_makeup_authorization",
+                new=AsyncMock(return_value=makeup_authorization(candidate_id=row.id)),
+            ),
+            self.assertRaisesRegex(ValueError, "already has an active"),
+        ):
+            await CandidateService.approve_makeup(
+                db,
+                actor=actor(),
+                candidate_id=row.id,
+                reason="Missed",
+            )
+
+        db.commit.assert_not_awaited()
+
+    async def test_revoke_makeup_success(self) -> None:
+        db = AsyncMock()
+        admin = actor()
+        row = candidate()
+        auth = makeup_authorization(candidate_id=row.id)
+
+        with (
+            patch.object(
+                CandidateRepository,
+                "get_makeup_authorization_by_id",
+                new=AsyncMock(return_value=auth),
+            ),
+            patch.object(
+                CandidateRepository,
+                "get_candidate_by_id",
+                new=AsyncMock(return_value=row),
+            ),
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=exam(id=row.exam_id, status=ExamStatus.CLOSED)),
+            ),
+            patch.object(
+                CandidateRepository,
+                "save_makeup_authorization",
+                new=AsyncMock(side_effect=lambda _db, item: item),
+            ) as save_makeup,
+        ):
+            result = await CandidateService.revoke_makeup(
+                db,
+                actor=admin,
+                authorization_id=auth.id,
+                reason="  Approved in error  ",
+            )
+
+        self.assertIsNotNone(result.revoked_at)
+        self.assertEqual(result.revoked_by_actor_id, admin.id)
+        self.assertEqual(result.revocation_reason, "Approved in error")
+        save_makeup.assert_awaited_once_with(db, auth)
+        db.commit.assert_awaited_once()
+
+    async def test_revoke_makeup_rejects_consumed_authorization(self) -> None:
+        db = AsyncMock()
+        auth = makeup_authorization(consumed_at=datetime.now(UTC))
+
+        with (
+            patch.object(
+                CandidateRepository,
+                "get_makeup_authorization_by_id",
+                new=AsyncMock(return_value=auth),
+            ),
+            self.assertRaisesRegex(ValueError, "Consumed"),
+        ):
+            await CandidateService.revoke_makeup(
+                db,
+                actor=actor(),
+                authorization_id=auth.id,
+                reason="No longer needed",
+            )
+
+        db.commit.assert_not_awaited()
+
+    async def test_makeup_authorization_history_listing(self) -> None:
+        db = AsyncMock()
+        row = candidate()
+        first = makeup_authorization(candidate_id=row.id)
+        second = makeup_authorization(candidate_id=row.id)
+
+        with (
+            patch.object(
+                CandidateRepository,
+                "get_candidate_by_id",
+                new=AsyncMock(return_value=row),
+            ),
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=exam(id=row.exam_id)),
+            ),
+            patch.object(
+                CandidateRepository,
+                "list_makeup_authorizations",
+                new=AsyncMock(return_value=[first, second]),
+            ) as list_authorizations,
+        ):
+            result = await CandidateService.list_makeup_authorizations(
+                db,
+                actor=actor(),
+                candidate_id=row.id,
+            )
+
+        self.assertEqual([item.id for item in result], [first.id, second.id])
+        list_authorizations.assert_awaited_once_with(db, row.id)
 
 
 if __name__ == "__main__":

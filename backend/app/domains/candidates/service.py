@@ -16,17 +16,24 @@ from app.domains.candidates.models import (
     CandidateLateStartAuthorization,
     CandidateStatus,
     ExamCandidate,
+    CandidateMakeupAuthorization,
 )
+
 from app.domains.candidates.repository import CandidateRepository
 from app.domains.candidates.schemas import (
     CandidateLateStartAuthorizationResponse,
+    CandidateMakeupAuthorizationResponse,
     CandidateResponse,
     CandidateRosterResponse,
+    MissedCandidateListResponse,
+    MissedCandidateResponse,
 )
+
 from app.domains.exams.exceptions import ExamNotFound
 from app.domains.exams.models import Exam, ExamRosterStatus, ExamStatus
 from app.domains.exams.repository import ExamRepository
 from app.domains.sync.repository import SyncRepository
+from app.domains.attempts.repository import AttemptRepository
 
 
 class CandidateService:
@@ -689,3 +696,228 @@ class CandidateService:
             ) from exc
 
         return exam
+
+    @classmethod
+    async def list_missed_candidates(
+        cls,
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        exam_id: UUID,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> MissedCandidateListResponse:
+        """
+        Return candidates who were on the original roster but never started
+        the examination
+
+        A candidate becomes definitely "misses" only after the original
+        examination is CLOSED
+
+
+        CANCELLED examinations do not produce missed candidates because the
+        sitting itself was invalidated
+        """
+
+        cls._require_admin(actor)
+
+        exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id)
+
+        if exam is None:
+            raise ExamNotFound("Examination does not exist")
+
+        if exam.status != ExamStatus.CLOSED:
+            raise ValueError(
+                "Missed candidates can only be determined after "
+                "the examination is closed"
+            )
+
+        candidates = await CandidateRepository.list_missed_candidates_for_exam(
+            db, exam.id, offset=offset, limit=limit
+        )
+
+        total = await CandidateRepository.count_missed_candidates_for_exam(db, exam.id)
+
+        active_authorizations = (
+            await CandidateRepository.list_active_makeup_authorizations_for_candidates(
+                db, [candidate.id for candidate in candidates]
+            )
+        )
+
+        authorization_by_candidate = {
+            authorization.candidate_id: authorization
+            for authorization in active_authorizations
+        }
+
+        return MissedCandidateListResponse(
+            exam_id=exam.id,
+            exam_title=exam.title,
+            scheduled_start_at=exam.scheduled_start_at,
+            offset=offset,
+            limit=limit,
+            total=total,
+            candidates=[
+                MissedCandidateResponse(
+                    candidate=CandidateResponse.model_validate(candidate),
+                    makeup_authorization=(
+                        CandidateMakeupAuthorizationResponse.model_validate(
+                            authorization_by_candidate[candidate.id]
+                        )
+                        if candidate.id in authorization_by_candidate
+                        else None
+                    ),
+                )
+                for candidate in candidates
+            ],
+        )
+
+    @classmethod
+    async def approve_makeup(
+        cls, db: AsyncSession, *, actor: LocalActor, candidate_id: UUID, reason: str
+    ) -> CandidateMakeupAuthorizationResponse:
+        """
+        Approve one exact missed candidate/exam pair for a future makeup
+
+        Approval does not create an attempt and does not make the makeup
+        immediately executable. Makeup-period eligibility is a later phase
+        """
+
+        cls._require_admin(actor)
+
+        normalized_reason = cls._require_reason(reason)
+        now = datetime.now(UTC)
+
+        candidate, exam = await cls._get_candidate_and_exam(
+            db, candidate_id=candidate_id, lock_candidate=True, lock_exam=True
+        )
+
+        if exam.status != ExamStatus.CLOSED:
+            raise ValueError(
+                "Makeup can only be approved after the original examination is closed"
+            )
+
+        if candidate.status != CandidateStatus.ELIGIBLE:
+            raise ValueError(
+                "Only eligible candidates who missed the examination "
+                "can receive makeup approval"
+            )
+
+        attempt = await AttemptRepository.get_attempt_by_candidate_id(
+            db, candidate_id=candidate_id, lock=True
+        )
+
+        if attempt is not None:
+            raise ValueError(
+                "Candidate cannot receive makeup approval because "
+                "an examination attempt was already recorded for candidate"
+            )
+
+        existing = await CandidateRepository.get_active_makeup_authorization(
+            db, candidate.id, lock=True
+        )
+
+        if existing is not None:
+            raise ValueError("Candidate already has an active makeup authorization")
+
+        authorization = CandidateMakeupAuthorization(
+            candidate_id=candidate.id,
+            approved_by_actor_id=actor.id,
+            reason=normalized_reason,
+            approved_at=now,
+        )
+
+        try:
+            authorization = await CandidateRepository.add_makeup_authorization(
+                db, authorization
+            )
+
+            await db.commit()
+
+        except IntegrityError as exc:
+            await db.rollback()
+
+            raise ValueError("Makeup authorization could not be created") from exc
+
+        return CandidateMakeupAuthorizationResponse.model_validate(authorization)
+
+    @classmethod
+    async def revoke_makeup(
+        cls,
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        authorization_id: UUID,
+        reason: str,
+    ) -> CandidateMakeupAuthorizationResponse:
+        cls._require_admin(actor)
+
+        normalized_reason = cls._require_reason(reason)
+        now = datetime.now(UTC)
+
+        authorization = await CandidateRepository.get_makeup_authorization_by_id(
+            db,
+            authorization_id,
+            lock=True,
+        )
+
+        if authorization is None:
+            raise ValueError("Makeup authorization does not exist")
+
+        if authorization.consumed_at is not None:
+            raise ValueError("Consumed makeup authorization cannot be revoked")
+
+        if authorization.revoked_at is not None:
+            raise ValueError("Makeup authorization has already been revoked")
+
+        # Lock candidate as well so future makeup-attempt creation and
+        # revocation cannot race each other.
+        _candidate, _exam = await cls._get_candidate_and_exam(
+            db,
+            candidate_id=authorization.candidate_id,
+            lock_candidate=True,
+            lock_exam=False,
+        )
+
+        try:
+            authorization.revoked_at = now
+            authorization.revoked_by_actor_id = actor.id
+            authorization.revocation_reason = normalized_reason
+
+            authorization = await CandidateRepository.save_makeup_authorization(
+                db,
+                authorization,
+            )
+
+            await db.commit()
+
+        except IntegrityError as exc:
+            await db.rollback()
+
+            raise ValueError("Makeup authorization could not be revoked") from exc
+
+        return CandidateMakeupAuthorizationResponse.model_validate(authorization)
+
+    @classmethod
+    async def list_makeup_authorizations(
+        cls,
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        candidate_id: UUID,
+    ) -> list[CandidateMakeupAuthorizationResponse]:
+        cls._require_admin(actor)
+
+        candidate, _exam = await cls._get_candidate_and_exam(
+            db,
+            candidate_id=candidate_id,
+        )
+
+        authorizations = await CandidateRepository.list_makeup_authorizations(
+            db,
+            candidate.id,
+        )
+
+        return [
+            CandidateMakeupAuthorizationResponse.model_validate(authorization)
+            for authorization in authorizations
+        ]

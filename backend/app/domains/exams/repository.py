@@ -12,6 +12,7 @@ from uuid import UUID
 
 from sqlalchemy import delete, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.domains.academics.models import Curriculum, CurriculumSubject
 from app.domains.exams.models import (
@@ -742,3 +743,86 @@ class ExamRepository:
             )
         )
         return list(result.scalars().all())
+
+
+    @staticmethod
+    async def has_unfinished_scheduled_exam_for_level(
+        db: AsyncSession,
+        *,
+        session_id: UUID,
+        term_id: UUID,
+        level_id: UUID,
+    ) -> bool:
+        """
+        Return True when the academic level still has at least one unfinished
+        schedule examination in the supplied academic session and term
+
+        This is used by makeup eligibility logic
+
+        Makeup examintaion must not become available while the level's normal
+        scheduled examination cycle is still running 
+
+        Only the latest leaf revision of an examination lineage is considered
+
+        Example:
+            Mathematics revision 1 -> CANCELLED
+            Mathematics revision 2 -> CLOSED
+
+
+        revision 1 is ignored because it has a child revision
+
+        Terminal states:
+            CLOSED
+                Examination completed normally
+            CANCELLED
+                Examination was invalidated and should not block the end of the 
+                normal examination cycle
+
+
+        Every other scheduled state is considered unfinished:
+            DRAFT
+            SUBMITTED
+            SEALED
+            ACTIVE
+            SUSPENDED
+
+
+        Unscheduled examinations are deliberately ignored. This method answers
+        whether the level still has unfinished examinations in its actual normal
+        timetable, not whether unreleated draft exam records exist
+        """
+
+        child_exam = aliased(Exam)
+        has_newer_revision = (
+            select(child_exam.id)
+            .where(child_exam.revision_of_exam_id == Exam.id)
+            .exists()
+        )
+
+        unfinished_exam_exists = (
+            select(Exam.id)
+            .join(
+                CurriculumSubject,
+                CurriculumSubject.id == Exam.curriculum_subject_id,
+            )
+            .join(
+                Curriculum,
+                Curriculum.id == CurriculumSubject.curriculum_id,
+            )
+            .where(
+                Exam.session_id == session_id,
+                Exam.term_id == term_id,
+                Curriculum.academic_level_id == level_id,
+                Exam.scheduled_start_at.is_not(None),
+                Exam.status.notin_(
+                    (
+                        ExamStatus.CLOSED,
+                        ExamStatus.CANCELLED,
+                    )
+                ),
+                ~has_newer_revision,
+            )
+            .exists()
+        )
+
+        return bool(await db.scalar(select(unfinished_exam_exists)))

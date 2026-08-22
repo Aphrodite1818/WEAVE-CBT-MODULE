@@ -37,6 +37,55 @@ class CandidateLateStartRevocationPayload(InputBase):
     reason: str = Field(min_length=1)
 
 
+class CandidateMakeupApprovalPayload(InputBase):
+    reason: str = Field(
+        min_length=1,
+        max_length=500,
+    )
+
+
+class CandidateMakeupRevocationPayload(InputBase):
+    reason: str = Field(
+        min_length=1,
+        max_length=500,
+    )
+
+
+class CandidateMakeupAuthorizationResponse(OutputBase):
+    id: UUID
+    candidate_id: UUID
+
+    approved_by_actor_id: UUID
+    reason: str
+    approved_at: datetime
+
+    consumed_at: datetime | None
+
+    revoked_at: datetime | None
+    revoked_by_actor_id: UUID | None
+    revocation_reason: str | None
+
+    created_at: datetime
+    updated_at: datetime
+
+
+class MissedCandidateResponse(OutputBase):
+    candidate: CandidateResponse
+    makeup_authorization: CandidateMakeupAuthorizationResponse | None
+
+
+class MissedCandidateListResponse(OutputBase):
+    exam_id: UUID
+    exam_title: str
+    scheduled_start_at: datetime | None
+
+    offset: int
+    limit: int
+    total: int
+
+    candidates: list[MissedCandidateResponse]
+
+
 class CandidateResponse(OutputBase):
     id: UUID
 
