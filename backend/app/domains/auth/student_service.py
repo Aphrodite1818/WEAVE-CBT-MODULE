@@ -89,8 +89,9 @@ class StudentAuthService:
         *,
         student_id: UUID,
         statuses: tuple[ExamStatus, ...],
+        scheduled_due_at: datetime | None = None,
     ) -> list[tuple[ExamCandidate, Exam]]:
-        result = await db.execute(
+        query = (
             select(ExamCandidate, Exam)
             .join(Exam, Exam.id == ExamCandidate.exam_id)
             .where(
@@ -99,7 +100,14 @@ class StudentAuthService:
                 Exam.status.in_(statuses),
                 Exam.roster_status == ExamRosterStatus.READY,
             )
-            .order_by(Exam.scheduled_start_at.asc().nulls_last(), Exam.id.asc())
+        )
+        if scheduled_due_at is not None:
+            query = query.where(
+                Exam.scheduled_start_at.is_not(None),
+                Exam.scheduled_start_at <= scheduled_due_at,
+            )
+        result = await db.execute(
+            query.order_by(Exam.scheduled_start_at.asc().nulls_last(), Exam.id.asc())
         )
         return list(result.tuples().all())
 
@@ -123,10 +131,12 @@ class StudentAuthService:
             candidate, exam = active[0]
             return candidate, exam, None, StudentExamAvailability.READY
 
+        now = datetime.now(UTC)
         waiting = await cls._normal_candidate_rows(
             db,
             student_id=enrollment.student_id,
             statuses=(ExamStatus.SEALED,),
+            scheduled_due_at=now,
         )
         if waiting:
             candidate, exam = waiting[0]
