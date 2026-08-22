@@ -8,13 +8,19 @@ from fastapi import FastAPI
 from app.core.database import check_database_connection, dispose_database_engine
 from app.core.redis import close_redis_client
 from app.core.settings import settings
+from app.domains.attempts.router import operator_router as attempts_router
+from app.domains.attempts.router import student_router as student_attempts_router
 from app.domains.auth.router import router as auth_router
+from app.domains.auth.student_router import router as student_auth_router
+from app.domains.candidates.makeup_router import router as makeup_router
 from app.domains.candidates.router import router as candidates_router
 from app.domains.exams.read_router import router as exam_read_router
 from app.domains.exams.router import router as exams_router
+from app.domains.exams.timetable_router import router as timetable_router
 from app.domains.media.router import router as media_router
 from app.domains.node.router import router as node_router
 from app.domains.questions.router import router as questions_router
+from app.domains.results.router import router as results_router
 from app.domains.sync.router import router as sync_router
 from app.domains.sync.supervisor import sync_supervisor
 from app.integrations.weave.client import weave_client
@@ -48,11 +54,17 @@ app = FastAPI(
 for router in (
     node_router,
     auth_router,
+    student_auth_router,
     sync_router,
     media_router,
     questions_router,
     exam_read_router,
     exams_router,
+    timetable_router,
     candidates_router,
+    makeup_router,
+    student_attempts_router,
+    attempts_router,
+    results_router,
 ):
     app.include_router(router, prefix=settings.API_V1_PREFIX)

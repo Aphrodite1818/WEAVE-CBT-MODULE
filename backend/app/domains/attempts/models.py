@@ -1,7 +1,3 @@
-# =========================== #
-#     attempts/models.py      #
-# =========================== #
-
 """Database models for candidate examination attempts."""
 
 from __future__ import annotations
@@ -19,6 +15,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     func,
     text as sql_text,
@@ -26,35 +23,13 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.domains.questions.models import QuestionType
 
 
 ATTEMPT_REASON_MAX_LENGTH = 500
 
 
-# ========================== #
-# ENUMS
-# ========================== #
-
-
 class AttemptStatus(str, PyEnum):
-    """
-    Lifecycle state of one candidate examination sitting.
-
-    IN_PROGRESS
-        Candidate is actively writing and consuming examination time.
-
-    INTERRUPTED
-        Candidate's individual attempt has been paused after a confirmed
-        interruption. Time does not continue consuming while interrupted.
-
-    SUBMITTED
-        Attempt ended normally, either through candidate submission,
-        time expiration, or examination closure.
-
-    TERMINATED
-        Attempt was explicitly terminated by an authorized administrator.
-    """
-
     IN_PROGRESS = "in_progress"
     INTERRUPTED = "interrupted"
     SUBMITTED = "submitted"
@@ -62,76 +37,23 @@ class AttemptStatus(str, PyEnum):
 
 
 class AttemptEndReason(str, PyEnum):
-    """
-    Reason an attempt permanently stopped accepting answers.
-    """
-
     CANDIDATE_SUBMITTED = "candidate_submitted"
     TIME_EXPIRED = "time_expired"
     EXAM_CLOSED = "exam_closed"
     ADMIN_TERMINATED = "admin_terminated"
 
 
-# ========================== #
-# EXAM ATTEMPT
-# ========================== #
-
-
 class ExamAttempt(Base):
-    """
-    One candidate's sitting of one examination.
-
-    One ExamCandidate may have at most one ExamAttempt.
-
-    This means logging into another computer must never create a second
-    attempt. Device transfer or reconnection always resumes this same row.
-
-    Timing is interruption-aware:
-
-        time_limit_seconds
-            Frozen amount of writing time granted to the candidate.
-
-        elapsed_seconds
-            Active writing time already consumed and durably checkpointed.
-
-        active_since
-            Beginning of the currently active writing segment.
-
-    While IN_PROGRESS:
-
-        consumed time =
-            elapsed_seconds
-            + current active segment
-
-    When an individual interruption is confirmed:
-
-        1. current active segment is added to elapsed_seconds
-        2. active_since is cleared
-        3. status becomes INTERRUPTED
-        4. AttemptInterruption is recorded
-
-    When an authorized resume occurs:
-
-        1. status becomes IN_PROGRESS
-        2. active_since is set to the resume time
-
-    High-frequency candidate presence heartbeats belong in Redis.
-    last_heartbeat_at is only a durable PostgreSQL checkpoint and must
-    not be updated for every browser heartbeat.
-    """
+    """One durable attempt for one exact ExamCandidate."""
 
     __tablename__ = "exam_attempts"
 
     candidate_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "exam_candidates.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("exam_candidates.id", ondelete="RESTRICT"),
         nullable=False,
         unique=True,
         index=True,
     )
-
     status: Mapped[AttemptStatus] = mapped_column(
         SQLEnum(
             AttemptStatus,
@@ -146,60 +68,23 @@ class ExamAttempt(Base):
         server_default=AttemptStatus.IN_PROGRESS.value,
         index=True,
     )
-
-    started_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-    )
-
-    # Frozen candidate writing-time allowance.
-    #
-    # Example:
-    # 60-minute exam -> 3600 seconds.
-    time_limit_seconds: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-    )
-
-    # Active writing time already durably consumed.
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    time_limit_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
     elapsed_seconds: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-        default=0,
-        server_default=sql_text("0"),
+        Integer, nullable=False, default=0, server_default=sql_text("0")
     )
-
-    # Beginning of the current active writing segment.
-    #
-    # Must exist only while status == IN_PROGRESS.
     active_since: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
+        DateTime(timezone=True), nullable=True
     )
-
-    # Durable checkpoint only.
-    #
-    # Browser/WebSocket heartbeats should normally update Redis rather
-    # than PostgreSQL on every heartbeat.
     last_heartbeat_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        index=True,
+        DateTime(timezone=True), nullable=False, index=True
     )
-
-    # Latest meaningful candidate activity persisted to PostgreSQL,
-    # for example an accepted answer mutation.
     last_activity_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
+        DateTime(timezone=True), nullable=False
     )
-
-    # Permanent end of the sitting.
     ended_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
+        DateTime(timezone=True), nullable=True
     )
-
     end_reason: Mapped[AttemptEndReason | None] = mapped_column(
         SQLEnum(
             AttemptEndReason,
@@ -211,21 +96,16 @@ class ExamAttempt(Base):
         ),
         nullable=True,
     )
-
-    # Required only when an administrator terminates the attempt.
     termination_reason: Mapped[str | None] = mapped_column(
-        String(ATTEMPT_REASON_MAX_LENGTH),
-        nullable=True,
+        String(ATTEMPT_REASON_MAX_LENGTH), nullable=True
     )
 
     __table_args__ = (
         CheckConstraint(
-            "time_limit_seconds > 0",
-            name="ck_exam_attempts_time_limit_positive",
+            "time_limit_seconds > 0", name="ck_exam_attempts_time_limit_positive"
         ),
         CheckConstraint(
-            "elapsed_seconds >= 0",
-            name="ck_exam_attempts_elapsed_nonnegative",
+            "elapsed_seconds >= 0", name="ck_exam_attempts_elapsed_nonnegative"
         ),
         CheckConstraint(
             "elapsed_seconds <= time_limit_seconds",
@@ -279,87 +159,37 @@ class ExamAttempt(Base):
             "status <> 'submitted' OR end_reason <> 'admin_terminated'",
             name="ck_exam_attempts_submitted_not_admin_terminated",
         ),
-        Index(
-            "ix_exam_attempts_status_heartbeat",
-            "status",
-            "last_heartbeat_at",
-        ),
+        Index("ix_exam_attempts_status_heartbeat", "status", "last_heartbeat_at"),
     )
 
 
-# ========================== #
-# ATTEMPT INTERRUPTION
-# ========================== #
-
-
 class AttemptInterruption(Base):
-    """
-    Historical record of one candidate-specific interruption.
-
-    This is different from ExamSuspension:
-
-        ExamSuspension
-            affects the whole examination.
-
-        AttemptInterruption
-            affects one candidate's sitting.
-
-    Examples:
-
-        - candidate computer crashes;
-        - candidate loses connection for long enough to be considered
-          genuinely disconnected;
-        - invigilator moves the candidate to another computer.
-
-    Multiple interruptions may occur during one attempt.
-
-    Only one unresolved interruption may exist for an attempt at a time.
-    """
+    """Durable history for one candidate-specific interruption."""
 
     __tablename__ = "attempt_interruptions"
 
     attempt_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "exam_attempts.id",
-            ondelete="CASCADE",
-        ),
+        ForeignKey("exam_attempts.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-
     interrupted_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
+        DateTime(timezone=True), nullable=False
     )
-
-    # Frozen remaining writing time at the interruption boundary.
-    remaining_seconds: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-    )
-
+    remaining_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
     reason: Mapped[str] = mapped_column(
-        String(ATTEMPT_REASON_MAX_LENGTH),
-        nullable=False,
+        String(ATTEMPT_REASON_MAX_LENGTH), nullable=False
     )
-
     resumed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
+        DateTime(timezone=True), nullable=True
     )
-
     resumed_by_actor_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey(
-            "local_actors.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("local_actors.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )
-
     resume_reason: Mapped[str | None] = mapped_column(
-        String(ATTEMPT_REASON_MAX_LENGTH),
-        nullable=True,
+        String(ATTEMPT_REASON_MAX_LENGTH), nullable=True
     )
 
     __table_args__ = (
@@ -379,7 +209,6 @@ class AttemptInterruption(Base):
             "resumed_at IS NULL OR resume_reason IS NOT NULL",
             name="ck_attempt_interruptions_resume_reason_required",
         ),
-        # An attempt cannot have two unresolved interruptions at once.
         Index(
             "uq_attempt_interruptions_one_open",
             "attempt_id",
@@ -394,67 +223,61 @@ class AttemptInterruption(Base):
     )
 
 
-# ========================== #
-# QUESTION ALLOCATION
-# ========================== #
-
-
 class AttemptQuestionAllocation(Base):
     """
-    One frozen examination question allocated to one candidate attempt.
+    Immutable candidate-specific question snapshot.
 
-    Allocation is generated once when the candidate begins the exam and
-    is then persisted.
+    Normal attempts copy the already sealed ExamQuestion snapshot.
+    Makeup attempts copy a fresh randomly selected source Question.
 
-    This ensures that refresh, reconnection, server restart, or device
-    transfer never reshuffles the candidate's paper.
-
-    `position` is the candidate-specific presentation position.
-
-    Example:
-
-        Exam canonical order:
-            Q1 Q2 Q3
-
-        Candidate order:
-            Q3 Q1 Q2
-
-        AttemptQuestionAllocation stores:
-            Q3 -> position 1
-            Q1 -> position 2
-            Q2 -> position 3
+    The presentation position and question content therefore survive refresh,
+    reconnect, source-bank edits, and server restart without regenerating the
+    paper.
     """
 
     __tablename__ = "attempt_question_allocations"
 
     attempt_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "exam_attempts.id",
-            ondelete="CASCADE",
-        ),
+        ForeignKey("exam_attempts.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-
-    exam_question_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "exam_questions.id",
-            ondelete="RESTRICT",
-        ),
+    exam_question_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("exam_questions.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    source_question_id: Mapped[UUID] = mapped_column(
+        ForeignKey("questions.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
-
-    position: Mapped[int] = mapped_column(
-        Integer,
+    source_question_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    question_type: Mapped[QuestionType] = mapped_column(
+        SQLEnum(
+            QuestionType,
+            name="attempt_question_type",
+            native_enum=False,
+            create_constraint=True,
+            validate_strings=True,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         nullable=False,
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    instruction: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_asset_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("media_assets.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
     )
 
     __table_args__ = (
         UniqueConstraint(
             "attempt_id",
-            "exam_question_id",
-            name="uq_attempt_questions_attempt_exam_question",
+            "source_question_id",
+            name="uq_attempt_questions_attempt_source_question",
         ),
         UniqueConstraint(
             "attempt_id",
@@ -462,8 +285,11 @@ class AttemptQuestionAllocation(Base):
             name="uq_attempt_questions_attempt_position",
         ),
         CheckConstraint(
-            "position >= 1",
-            name="ck_attempt_questions_position_positive",
+            "source_question_version >= 1",
+            name="ck_attempt_questions_source_version_positive",
+        ),
+        CheckConstraint(
+            "position >= 1", name="ck_attempt_questions_position_positive"
         ),
         Index(
             "ix_attempt_questions_attempt_position",
@@ -473,59 +299,70 @@ class AttemptQuestionAllocation(Base):
     )
 
 
-# ========================== #
-# OPTION ALLOCATION
-# ========================== #
-
-
 class AttemptOptionAllocation(Base):
     """
-    Persisted candidate-specific presentation order for one answer option.
+    Immutable candidate-specific answer-option snapshot.
 
-    The underlying correct answer remains on ExamQuestionOption.
+    Exactly one provenance reference is present:
+      * exam_question_option_id for a normal sealed paper;
+      * source_question_option_id for a fresh makeup paper.
 
-    This table only controls which order the candidate sees the options in.
+    Correctness is persisted locally for offline scoring but never exposed in
+    candidate response schemas.
     """
 
     __tablename__ = "attempt_option_allocations"
 
     attempt_question_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "attempt_question_allocations.id",
-            ondelete="CASCADE",
-        ),
+        ForeignKey("attempt_question_allocations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-
-    exam_question_option_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "exam_question_options.id",
-            ondelete="RESTRICT",
-        ),
-        nullable=False,
+    exam_question_option_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("exam_question_options.id", ondelete="RESTRICT"),
+        nullable=True,
         index=True,
     )
-
-    position: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
+    source_question_option_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("question_options.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    is_correct: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=sql_text("false")
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            "attempt_question_id",
-            "exam_question_option_id",
-            name="uq_attempt_options_question_option",
-        ),
         UniqueConstraint(
             "attempt_question_id",
             "position",
             name="uq_attempt_options_question_position",
         ),
         CheckConstraint(
-            "position >= 1",
-            name="ck_attempt_options_position_positive",
+            "(exam_question_option_id IS NOT NULL "
+            "AND source_question_option_id IS NULL) "
+            "OR (exam_question_option_id IS NULL "
+            "AND source_question_option_id IS NOT NULL)",
+            name="ck_attempt_options_exactly_one_source",
+        ),
+        CheckConstraint(
+            "position >= 1", name="ck_attempt_options_position_positive"
+        ),
+        Index(
+            "uq_attempt_options_exam_source",
+            "attempt_question_id",
+            "exam_question_option_id",
+            unique=True,
+            postgresql_where=sql_text("exam_question_option_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_attempt_options_bank_source",
+            "attempt_question_id",
+            "source_question_option_id",
+            unique=True,
+            postgresql_where=sql_text("source_question_option_id IS NOT NULL"),
         ),
         Index(
             "ix_attempt_options_question_position",
@@ -535,87 +372,26 @@ class AttemptOptionAllocation(Base):
     )
 
 
-# ========================== #
-# ATTEMPT ANSWER
-# ========================== #
-
-
 class AttemptAnswer(Base):
-    """
-    Current durable candidate answer state for one allocated question.
-
-    One AttemptAnswer exists per AttemptQuestionAllocation.
-
-    The selected options themselves are stored in AttemptAnswerSelection
-    because both single-select and multiple-select questions must be
-    supported.
-
-    `mutation_sequence` protects answer persistence from delayed or
-    duplicated WebSocket messages.
-
-    Example:
-
-        sequence 15 -> option B
-        sequence 16 -> option C
-
-    If sequence 15 arrives after sequence 16:
-
-        local stored sequence = 16
-        incoming sequence     = 15
-
-        -> reject/ignore sequence 15
-
-    If sequence 16 is resent because PostgreSQL committed but the ACK was
-    lost:
-
-        local stored sequence = 16
-        incoming sequence     = 16
-
-        -> treat as idempotent and ACK the already-saved state
-
-    Sequence numbers are scoped to THIS question, not globally to the
-    entire attempt. This prevents an answer on one question from causing
-    a valid delayed update for another question to be rejected.
-    """
+    """Current durable answer state for one allocated attempt question."""
 
     __tablename__ = "attempt_answers"
 
     attempt_question_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "attempt_question_allocations.id",
-            ondelete="CASCADE",
-        ),
+        ForeignKey("attempt_question_allocations.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
         index=True,
     )
-
     is_flagged: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default=sql_text("false"),
+        Boolean, nullable=False, default=False, server_default=sql_text("false")
     )
-
-    # Latest accepted client mutation number for this question.
-    #
-    # 0 means the question has not received any candidate mutation yet.
     mutation_sequence: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-        default=0,
-        server_default=sql_text("0"),
+        Integer, nullable=False, default=0, server_default=sql_text("0")
     )
-
-    # Time the question currently became answered.
-    #
-    # If the candidate clears every selected option, this may return to NULL.
     answered_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
+        DateTime(timezone=True), nullable=True
     )
-
-    # Last accepted mutation persisted to this answer row.
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -628,63 +404,22 @@ class AttemptAnswer(Base):
             "mutation_sequence >= 0",
             name="ck_attempt_answers_mutation_sequence_nonnegative",
         ),
-        Index(
-            "ix_attempt_answers_updated",
-            "updated_at",
-        ),
+        Index("ix_attempt_answers_updated", "updated_at"),
     )
 
 
-# ========================== #
-# ANSWER SELECTION
-# ========================== #
-
-
 class AttemptAnswerSelection(Base):
-    """
-    One option currently selected for one candidate answer.
-
-    A single-choice question normally has one row.
-
-    A multiple-select question may have several rows.
-
-    Example:
-
-        Correct choices: A + C
-
-        candidate selects:
-            A
-            C
-
-        -> two AttemptAnswerSelection rows
-
-    Scoring later uses exact-set matching:
-
-        selected option set == correct option set
-            -> 1 raw mark
-
-        otherwise
-            -> 0 raw marks
-
-    No partial credit is awarded.
-    """
+    """One currently selected candidate option for an AttemptAnswer."""
 
     __tablename__ = "attempt_answer_selections"
 
     answer_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "attempt_answers.id",
-            ondelete="CASCADE",
-        ),
+        ForeignKey("attempt_answers.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-
     attempt_option_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "attempt_option_allocations.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("attempt_option_allocations.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
@@ -695,8 +430,5 @@ class AttemptAnswerSelection(Base):
             "attempt_option_id",
             name="uq_attempt_answer_selections_answer_option",
         ),
-        Index(
-            "ix_attempt_answer_selections_answer",
-            "answer_id",
-        ),
+        Index("ix_attempt_answer_selections_answer", "answer_id"),
     )
