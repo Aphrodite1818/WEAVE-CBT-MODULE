@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -64,20 +64,19 @@ class StudentAuthService:
         db: AsyncSession,
         admission_number: str,
     ) -> StudentEnrollment | None:
-        normalized = admission_number.strip().casefold()
-        query = (
+        normalized = admission_number.strip().lower()
+        result = await db.execute(
             select(StudentEnrollment)
             .where(
+                func.lower(StudentEnrollment.admission_number) == normalized,
                 StudentEnrollment.is_current.is_(True),
                 StudentEnrollment.source_deleted_at.is_(None),
                 StudentEnrollment.student_status == "active",
             )
             .order_by(StudentEnrollment.updated_at.desc())
+            .limit(2)
         )
-        rows = list((await db.execute(query)).scalars().all())
-        matches = [
-            row for row in rows if row.admission_number.strip().casefold() == normalized
-        ]
+        matches = list(result.scalars().all())
         if len(matches) > 1:
             raise StudentAuthenticationError(
                 "Admission number resolves to multiple current enrollments"
