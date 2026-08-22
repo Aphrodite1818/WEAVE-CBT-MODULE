@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -40,6 +40,20 @@ class ExamTimetableService:
         if value is None:
             raise ValueError("Curriculum subject does not resolve to an academic level")
         return value
+
+    @staticmethod
+    async def acquire_level_lock(
+        db: AsyncSession,
+        *,
+        session_id: UUID,
+        term_id: UUID,
+        level_id: UUID,
+    ) -> None:
+        scope = f"exam-timetable:{session_id}:{term_id}:{level_id}"
+        await db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:scope, 0))"),
+            {"scope": scope},
+        )
 
     @classmethod
     async def list_leaf_exams(
@@ -86,6 +100,12 @@ class ExamTimetableService:
         if scheduled_start_at is None:
             return
         level_id = await cls.level_id(db, curriculum_subject_id)
+        await cls.acquire_level_lock(
+            db,
+            session_id=session_id,
+            term_id=term_id,
+            level_id=level_id,
+        )
         proposed_end = scheduled_start_at + timedelta(minutes=duration_minutes)
         rows = await cls.list_leaf_exams(
             db,
@@ -110,6 +130,12 @@ class ExamTimetableService:
         if exam is None:
             raise ExamNotFound("Examination does not exist")
         level_id = await cls.level_id(db, exam.curriculum_subject_id)
+        await cls.acquire_level_lock(
+            db,
+            session_id=exam.session_id,
+            term_id=exam.term_id,
+            level_id=level_id,
+        )
         rows = await cls.list_leaf_exams(
             db,
             session_id=exam.session_id,
