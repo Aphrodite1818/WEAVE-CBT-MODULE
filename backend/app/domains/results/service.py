@@ -61,9 +61,7 @@ class ResultService:
             if option.is_correct:
                 correct_by_question[option.attempt_question_id].add(option.id)
 
-        answer_by_question = {
-            answer.attempt_question_id: answer for answer in answers
-        }
+        answer_by_question = {answer.attempt_question_id: answer for answer in answers}
         selected_by_answer: dict[UUID, set[UUID]] = defaultdict(set)
         for selection in selections:
             selected_by_answer[selection.answer_id].add(selection.attempt_option_id)
@@ -77,9 +75,9 @@ class ResultService:
                 raw_score += 1
 
         raw_max = len(questions)
-        percentage = (
-            Decimal(raw_score) * Decimal(100) / Decimal(raw_max)
-        ).quantize(_TWO_DP, rounding=ROUND_HALF_UP)
+        percentage = (Decimal(raw_score) * Decimal(100) / Decimal(raw_max)).quantize(
+            _TWO_DP, rounding=ROUND_HALF_UP
+        )
         component_max = Decimal(exam.component_maximum_score)
         component_score = (
             Decimal(raw_score) * component_max / Decimal(raw_max)
@@ -120,14 +118,20 @@ class ResultService:
         if actor.role == "admin":
             return
         if actor.role != "teacher" or actor.weave_membership_id is None:
-            raise AcademicAuthorizationError("Administrator or invigilator access is required")
+            raise AcademicAuthorizationError(
+                "Administrator or invigilator access is required"
+            )
         try:
             teacher_id = UUID(actor.weave_membership_id)
         except ValueError as exc:
-            raise AcademicAuthorizationError("Teacher has an invalid Weave membership identity") from exc
+            raise AcademicAuthorizationError(
+                "Teacher has an invalid Weave membership identity"
+            ) from exc
         invigilator = await ExamRepository.get_invigilator(db, exam_id, teacher_id)
         if invigilator is None:
-            raise AcademicAuthorizationError("Only assigned invigilators may view these results")
+            raise AcademicAuthorizationError(
+                "Only assigned invigilators may view these results"
+            )
 
     @classmethod
     async def get_result(
@@ -140,7 +144,9 @@ class ResultService:
         result = await ResultRepository.get_result_by_id(db, result_id)
         if result is None:
             raise ValueError("Result does not exist")
-        await cls._require_can_view_exam_results(db, actor=actor, exam_id=result.exam_id)
+        await cls._require_can_view_exam_results(
+            db, actor=actor, exam_id=result.exam_id
+        )
         return result
 
     @classmethod

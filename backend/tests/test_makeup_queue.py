@@ -37,13 +37,16 @@ class MakeupQueueTests(unittest.IsolatedAsyncioTestCase):
                 None,
             ),
         ]
-        with patch.object(
-            CandidateMakeupService,
-            "_queue_rows",
-            AsyncMock(return_value=rows),
-        ), patch(
-            "app.domains.candidates.makeup_service.ExamRepository.has_unfinished_scheduled_exam_for_level",
-            AsyncMock(return_value=False),
+        with (
+            patch.object(
+                CandidateMakeupService,
+                "_queue_rows",
+                AsyncMock(return_value=rows),
+            ),
+            patch(
+                "app.domains.candidates.makeup_service.ExamRepository.has_unfinished_scheduled_exam_for_level",
+                AsyncMock(return_value=False),
+            ),
         ):
             result = await CandidateMakeupService.resolve_queue(
                 AsyncMock(),
@@ -67,13 +70,16 @@ class MakeupQueueTests(unittest.IsolatedAsyncioTestCase):
                 None,
             )
         ]
-        with patch.object(
-            CandidateMakeupService,
-            "_queue_rows",
-            AsyncMock(return_value=rows),
-        ), patch(
-            "app.domains.candidates.makeup_service.ExamRepository.has_unfinished_scheduled_exam_for_level",
-            AsyncMock(return_value=True),
+        with (
+            patch.object(
+                CandidateMakeupService,
+                "_queue_rows",
+                AsyncMock(return_value=rows),
+            ),
+            patch(
+                "app.domains.candidates.makeup_service.ExamRepository.has_unfinished_scheduled_exam_for_level",
+                AsyncMock(return_value=True),
+            ),
         ):
             result = await CandidateMakeupService.resolve_queue(
                 AsyncMock(),

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from secrets import SystemRandom
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -35,7 +36,12 @@ from app.domains.auth.models import LocalActor
 from app.domains.auth.student_repository import StudentAuthRepository
 from app.domains.auth.student_service import StudentSessionContext
 from app.domains.candidates.makeup_service import CandidateMakeupService
-from app.domains.candidates.models import CandidateStatus
+from app.domains.candidates.models import (
+    CandidateLateStartAuthorization,
+    CandidateMakeupAuthorization,
+    CandidateStatus,
+    ExamCandidate,
+)
 from app.domains.candidates.repository import CandidateRepository
 from app.domains.exams.exceptions import ExamNotFound, ExamStateError
 from app.domains.exams.models import Exam, ExamStatus
@@ -56,7 +62,7 @@ class AttemptService:
         *,
         context: StudentSessionContext,
         lock: bool = False,
-    ):
+    ) -> tuple[ExamCandidate, Exam]:
         candidate = await CandidateRepository.get_candidate_by_id(
             db,
             context.candidate_id,
@@ -118,7 +124,7 @@ class AttemptService:
         candidate,
         exam: Exam,
         now: datetime,
-    ):
+    ) -> CandidateMakeupAuthorization:
         if context.makeup_authorization_id is None:
             raise AttemptStateError("Student session is not a makeup session")
         if exam.status != ExamStatus.CLOSED:
@@ -161,23 +167,23 @@ class AttemptService:
         candidate,
         exam: Exam,
         now: datetime,
-    ):
+    ) -> None | CandidateLateStartAuthorization:
         if exam.status != ExamStatus.ACTIVE:
             raise AttemptStateError("Normal examination is not active")
         if candidate.status != CandidateStatus.ELIGIBLE:
-            raise AttemptStateError("Candidate is not eligible to start this examination")
+            raise AttemptStateError(
+                "Candidate is not eligible to start this examination"
+            )
 
         deadline = await AttemptService._effective_late_start_deadline(exam)
         if deadline is None or now <= deadline:
             return None
 
-        authorization = (
-            await CandidateRepository.get_usable_late_start_authorization(
-                db,
-                candidate.id,
-                at=now,
-                lock=True,
-            )
+        authorization = await CandidateRepository.get_usable_late_start_authorization(
+            db,
+            candidate.id,
+            at=now,
+            lock=True,
         )
         if authorization is None:
             raise AttemptStateError(
@@ -242,8 +248,7 @@ class AttemptService:
             allocations,
         )
         allocation_by_exam_question = {
-            allocation.exam_question_id: allocation
-            for allocation in allocations
+            allocation.exam_question_id: allocation for allocation in allocations
         }
 
         all_options = await ExamRepository.list_exam_question_options_for_exam(
@@ -306,14 +311,11 @@ class AttemptService:
         )
         original_questions = await ExamRepository.list_exam_questions(db, exam.id)
         original_source_ids = {
-            question.source_question_id
-            for question in original_questions
+            question.source_question_id for question in original_questions
         }
 
         fresh = [
-            question
-            for question in available
-            if question.id not in original_source_ids
+            question for question in available if question.id not in original_source_ids
         ]
         if len(fresh) < exam.question_count:
             raise AttemptStateError(
@@ -333,9 +335,7 @@ class AttemptService:
         )
         by_id = {question.id: question for question in selected}
         if len(by_id) != exam.question_count:
-            raise AttemptStateError(
-                "One or more makeup questions became unavailable"
-            )
+            raise AttemptStateError("One or more makeup questions became unavailable")
         questions = [by_id[question_id] for question_id in selected_ids]
 
         source_options = await QuestionRepository.list_options_for_questions(
@@ -370,8 +370,7 @@ class AttemptService:
             ],
         )
         allocation_by_source = {
-            allocation.source_question_id: allocation
-            for allocation in allocations
+            allocation.source_question_id: allocation for allocation in allocations
         }
 
         option_allocations: list[AttemptOptionAllocation] = []
@@ -476,10 +475,14 @@ class AttemptService:
                     attempt=attempt,
                     exam=exam,
                 )
-                authorization.consumed_at = now
+                makeup_authorization = cast(
+                    CandidateMakeupAuthorization,
+                    authorization,
+                )
+                makeup_authorization.consumed_at = now
                 await CandidateRepository.save_makeup_authorization(
                     db,
-                    authorization,
+                    makeup_authorization,
                 )
             else:
                 await cls._allocate_normal_paper(
@@ -545,7 +548,10 @@ class AttemptService:
     ) -> int:
         at = at or datetime.now(UTC)
         consumed = attempt.elapsed_seconds
-        if attempt.status == AttemptStatus.IN_PROGRESS and attempt.active_since is not None:
+        if (
+            attempt.status == AttemptStatus.IN_PROGRESS
+            and attempt.active_since is not None
+        ):
             consumed += await cls._active_segment_seconds(
                 db,
                 exam_id=exam_id,
@@ -604,15 +610,10 @@ class AttemptService:
         options_by_question: dict[UUID, list] = defaultdict(list)
         for option in options:
             options_by_question[option.attempt_question_id].append(option)
-        answer_by_question = {
-            answer.attempt_question_id: answer
-            for answer in answers
-        }
+        answer_by_question = {answer.attempt_question_id: answer for answer in answers}
         selected_by_answer: dict[UUID, list[UUID]] = defaultdict(list)
         for selection in selections:
-            selected_by_answer[selection.answer_id].append(
-                selection.attempt_option_id
-            )
+            selected_by_answer[selection.answer_id].append(selection.attempt_option_id)
 
         remaining = await cls.remaining_seconds(
             db,
@@ -717,11 +718,14 @@ class AttemptService:
                     end_reason=AttemptEndReason.EXAM_CLOSED,
                     revoke_reason="Examination closed",
                 )
-            elif await cls.remaining_seconds(
-                db,
-                attempt=attempt,
-                exam_id=exam.id,
-            ) <= 0:
+            elif (
+                await cls.remaining_seconds(
+                    db,
+                    attempt=attempt,
+                    exam_id=exam.id,
+                )
+                <= 0
+            ):
                 await cls._submit_locked(
                     db,
                     attempt=attempt,
@@ -898,6 +902,7 @@ class AttemptService:
     ):
         if attempt.status == AttemptStatus.SUBMITTED:
             from app.domains.results.repository import ResultRepository
+
             existing = await ResultRepository.get_result_by_attempt_id(
                 db,
                 attempt.id,
@@ -964,7 +969,8 @@ class AttemptService:
                 db,
                 attempt=attempt,
                 exam_id=exam.id,
-            ) <= 0
+            )
+            <= 0
         ):
             end_reason = AttemptEndReason.TIME_EXPIRED
         elif not context.is_makeup and exam.status == ExamStatus.CLOSED:

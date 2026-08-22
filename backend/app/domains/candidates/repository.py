@@ -521,11 +521,6 @@ class CandidateRepository:
         )
 
         return list(result.scalars().all())
-    
-
-
-
-
 
     @staticmethod
     async def list_pending_makeups_for_student(
@@ -561,8 +556,7 @@ class CandidateRepository:
             )
             .join(
                 ExamCandidate,
-                ExamCandidate.id
-                == CandidateMakeupAuthorization.candidate_id,
+                ExamCandidate.id == CandidateMakeupAuthorization.candidate_id,
             )
             .join(
                 Exam,
@@ -584,10 +578,6 @@ class CandidateRepository:
 
         return list(result.tuples().all())
 
-
-
-
-    
     @staticmethod
     async def count_pending_makeups_for_student(
         db: AsyncSession,
@@ -601,8 +591,7 @@ class CandidateRepository:
             .select_from(CandidateMakeupAuthorization)
             .join(
                 ExamCandidate,
-                ExamCandidate.id
-                == CandidateMakeupAuthorization.candidate_id,
+                ExamCandidate.id == CandidateMakeupAuthorization.candidate_id,
             )
             .join(
                 Exam,
@@ -617,13 +606,7 @@ class CandidateRepository:
             )
         )
 
-        return int(
-            (await db.execute(query)).scalar_one() or 0
-        )
-
-
-
-
+        return int((await db.execute(query)).scalar_one() or 0)
 
     @staticmethod
     async def list_pending_makeups_for_student(
@@ -649,8 +632,7 @@ class CandidateRepository:
             )
             .join(
                 ExamCandidate,
-                ExamCandidate.id
-                == CandidateMakeupAuthorization.candidate_id,
+                ExamCandidate.id == CandidateMakeupAuthorization.candidate_id,
             )
             .join(
                 Exam,

@@ -15,7 +15,9 @@ from app.domains.results.service import ResultService  # noqa: E402
 
 
 class ResultScoringTests(unittest.IsolatedAsyncioTestCase):
-    async def test_multiple_choice_uses_exact_set_matching_and_component_normalization(self):
+    async def test_multiple_choice_uses_exact_set_matching_and_component_normalization(
+        self,
+    ):
         attempt_id = uuid4()
         candidate_id = uuid4()
         exam_id = uuid4()
@@ -52,24 +54,31 @@ class ResultScoringTests(unittest.IsolatedAsyncioTestCase):
             result.id = uuid4()
             return result
 
-        with patch(
-            "app.domains.results.service.ResultRepository.get_result_by_attempt_id",
-            AsyncMock(return_value=None),
-        ), patch(
-            "app.domains.results.service.AttemptRepository.list_question_allocations",
-            AsyncMock(return_value=questions),
-        ), patch(
-            "app.domains.results.service.AttemptRepository.list_option_allocations_for_questions",
-            AsyncMock(return_value=options),
-        ), patch(
-            "app.domains.results.service.AttemptRepository.list_answers_for_attempt",
-            AsyncMock(return_value=answers),
-        ), patch(
-            "app.domains.results.service.AttemptRepository.list_selections_for_answers",
-            AsyncMock(return_value=selections),
-        ), patch(
-            "app.domains.results.service.ResultRepository.add_result",
-            AsyncMock(side_effect=add_result),
+        with (
+            patch(
+                "app.domains.results.service.ResultRepository.get_result_by_attempt_id",
+                AsyncMock(return_value=None),
+            ),
+            patch(
+                "app.domains.results.service.AttemptRepository.list_question_allocations",
+                AsyncMock(return_value=questions),
+            ),
+            patch(
+                "app.domains.results.service.AttemptRepository.list_option_allocations_for_questions",
+                AsyncMock(return_value=options),
+            ),
+            patch(
+                "app.domains.results.service.AttemptRepository.list_answers_for_attempt",
+                AsyncMock(return_value=answers),
+            ),
+            patch(
+                "app.domains.results.service.AttemptRepository.list_selections_for_answers",
+                AsyncMock(return_value=selections),
+            ),
+            patch(
+                "app.domains.results.service.ResultRepository.add_result",
+                AsyncMock(side_effect=add_result),
+            ),
         ):
             result = await ResultService.calculate_for_submitted_attempt(
                 AsyncMock(),

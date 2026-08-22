@@ -1,0 +1,112 @@
+const DEFAULT_API_BASE_URL = '/api/v1'
+const STAFF_TOKEN_KEY = 'leaf.staffAccessToken'
+
+const statusLabels = {
+  400: 'Invalid request',
+  401: 'Session problem',
+  403: 'Permission problem',
+  404: 'Resource missing',
+  409: 'Lifecycle conflict',
+  429: 'Rate limit',
+}
+
+export class LeafApiError extends Error {
+  constructor({ status, statusText, detail, payload }) {
+    super(detail || statusLabels[status] || statusText || 'Request failed')
+    this.name = 'LeafApiError'
+    this.status = status
+    this.statusText = statusText
+    this.detail = detail
+    this.payload = payload
+  }
+
+  get userMessage() {
+    if (this.detail && !looksLikeInternalError(this.detail)) return this.detail
+    if (this.status >= 500) return 'Leaf could not complete that request. Try again, then contact support if it continues.'
+    return statusLabels[this.status] || this.message
+  }
+}
+
+export function getApiBaseUrl() {
+  return (import.meta.env.VITE_LEAF_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/$/, '')
+}
+
+export function getStaffAccessToken() {
+  return window.localStorage.getItem(STAFF_TOKEN_KEY)
+}
+
+export function setStaffAccessToken(token) {
+  if (token) window.localStorage.setItem(STAFF_TOKEN_KEY, token)
+}
+
+export function clearStaffAccessToken() {
+  window.localStorage.removeItem(STAFF_TOKEN_KEY)
+}
+
+export async function leafRequest(path, options = {}) {
+  const {
+    body,
+    headers = {},
+    method = 'GET',
+    signal,
+    staffAuth = true,
+    formData = false,
+  } = options
+
+  const requestHeaders = { ...headers }
+  const token = getStaffAccessToken()
+  if (staffAuth && token) requestHeaders.Authorization = `Bearer ${token}`
+  if (body !== undefined && !formData) requestHeaders['Content-Type'] = 'application/json'
+
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    method,
+    headers: requestHeaders,
+    credentials: 'include',
+    signal,
+    body: body === undefined ? undefined : formData ? body : JSON.stringify(body),
+  })
+
+  if (response.status === 204) return null
+
+  const payload = await parsePayload(response)
+  if (!response.ok) {
+    throw new LeafApiError({
+      status: response.status,
+      statusText: response.statusText,
+      detail: extractDetail(payload),
+      payload,
+    })
+  }
+
+  return payload
+}
+
+export function queryString(params) {
+  const search = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') search.set(key, value)
+  })
+  const value = search.toString()
+  return value ? `?${value}` : ''
+}
+
+async function parsePayload(response) {
+  const text = await response.text()
+  if (!text) return null
+  try {
+    return JSON.parse(text)
+  } catch {
+    return { detail: text }
+  }
+}
+
+function extractDetail(payload) {
+  if (!payload) return ''
+  if (typeof payload.detail === 'string') return payload.detail
+  if (Array.isArray(payload.detail)) return 'Some fields need attention.'
+  return ''
+}
+
+function looksLikeInternalError(message) {
+  return /traceback|sqlalchemy|integrityerror|constraint|psycopg|asyncpg/i.test(message)
+}

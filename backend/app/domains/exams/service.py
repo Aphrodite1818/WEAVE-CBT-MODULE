@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,13 +23,12 @@ class ExamService(ExamLifecycleServiceMixin, _AuthoringExamService):
     """Combined authoring/lifecycle facade with timetable integrity guards."""
 
     @classmethod
-    async def create_exam(
+    async def _before_create_exam_save(
         cls,
         db: AsyncSession,
         *,
-        actor: LocalActor,
         payload: ExamCreate,
-    ) -> Exam:
+    ) -> None:
         await ExamTimetableService.require_planned_slot_available(
             db,
             session_id=payload.session_id,
@@ -37,7 +37,55 @@ class ExamService(ExamLifecycleServiceMixin, _AuthoringExamService):
             scheduled_start_at=payload.scheduled_start_at,
             duration_minutes=payload.duration_minutes,
         )
-        return await _AuthoringExamService.create_exam(
+
+    @classmethod
+    async def _before_update_exam_save(
+        cls,
+        db: AsyncSession,
+        *,
+        exam: Exam,
+        session_id: UUID,
+        term_id: UUID,
+        scheduled_start_at: datetime | None,
+        duration_minutes: int,
+    ) -> None:
+        await ExamTimetableService.require_planned_slot_available(
+            db,
+            session_id=session_id,
+            term_id=term_id,
+            curriculum_subject_id=exam.curriculum_subject_id,
+            scheduled_start_at=scheduled_start_at,
+            duration_minutes=duration_minutes,
+            exclude_exam_id=exam.id,
+        )
+
+    @classmethod
+    async def _before_activate_exam_save(
+        cls,
+        db: AsyncSession,
+        *,
+        exam: Exam,
+    ) -> None:
+        await ExamTimetableService.require_level_free(db, exam_id=exam.id)
+
+    @classmethod
+    async def _before_resume_exam_save(
+        cls,
+        db: AsyncSession,
+        *,
+        exam: Exam,
+    ) -> None:
+        await ExamTimetableService.require_level_free(db, exam_id=exam.id)
+
+    @classmethod
+    async def create_exam(
+        cls,
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        payload: ExamCreate,
+    ) -> Exam:
+        return await super().create_exam(
             db,
             actor=actor,
             payload=payload,
@@ -52,28 +100,7 @@ class ExamService(ExamLifecycleServiceMixin, _AuthoringExamService):
         payload: ExamUpdate,
         exam_id: UUID,
     ) -> Exam:
-        exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id)
-        if exam is None:
-            raise ExamNotFound("Examination does not exist")
-        fields = payload.model_fields_set
-        await ExamTimetableService.require_planned_slot_available(
-            db,
-            session_id=(payload.session_id if "session_id" in fields else exam.session_id),
-            term_id=(payload.term_id if "term_id" in fields else exam.term_id),
-            curriculum_subject_id=exam.curriculum_subject_id,
-            scheduled_start_at=(
-                payload.scheduled_start_at
-                if "scheduled_start_at" in fields
-                else exam.scheduled_start_at
-            ),
-            duration_minutes=(
-                payload.duration_minutes
-                if "duration_minutes" in fields and payload.duration_minutes is not None
-                else exam.duration_minutes
-            ),
-            exclude_exam_id=exam.id,
-        )
-        return await _AuthoringExamService.update_exam(
+        return await super().update_exam(
             db,
             actor=actor,
             payload=payload,
@@ -100,7 +127,7 @@ class ExamService(ExamLifecycleServiceMixin, _AuthoringExamService):
             duration_minutes=exam.duration_minutes,
             exclude_exam_id=exam.id,
         )
-        return await ExamLifecycleServiceMixin.seal_exam(
+        return await super().seal_exam(
             db,
             actor=actor,
             exam_id=exam_id,
@@ -114,8 +141,7 @@ class ExamService(ExamLifecycleServiceMixin, _AuthoringExamService):
         actor: LocalActor,
         exam_id: UUID,
     ) -> Exam:
-        await ExamTimetableService.require_level_free(db, exam_id=exam_id)
-        return await ExamLifecycleServiceMixin.activate_exam(
+        return await super().activate_exam(
             db,
             actor=actor,
             exam_id=exam_id,
@@ -130,8 +156,7 @@ class ExamService(ExamLifecycleServiceMixin, _AuthoringExamService):
         exam_id: UUID,
         reason: str | None = None,
     ) -> Exam:
-        await ExamTimetableService.require_level_free(db, exam_id=exam_id)
-        return await ExamLifecycleServiceMixin.resume_exam(
+        return await super().resume_exam(
             db,
             actor=actor,
             exam_id=exam_id,

@@ -40,6 +40,22 @@ class ExamLifecycleServiceMixin:
     """Lifecycle operations mixed into the public ExamService facade."""
 
     @staticmethod
+    async def _before_activate_exam_save(
+        db: AsyncSession,
+        *,
+        exam: Exam,
+    ) -> None:
+        return None
+
+    @staticmethod
+    async def _before_resume_exam_save(
+        db: AsyncSession,
+        *,
+        exam: Exam,
+    ) -> None:
+        return None
+
+    @staticmethod
     def _require_admin(actor: LocalActor) -> None:
         if not actor.is_active:
             raise AcademicAuthorizationError("Active local actor is required")
@@ -973,6 +989,8 @@ class ExamLifecycleServiceMixin:
         if exam.sealed_at is None or exam.component_maximum_score is None:
             raise ExamStateError("Exam is missing required sealed state")
 
+        await cls._before_activate_exam_save(db, exam=exam)
+
         activated_at = datetime.now(UTC)
         exam.status = ExamStatus.ACTIVE
         exam.activated_by_actor_id = actor.id
@@ -1081,6 +1099,9 @@ class ExamLifecycleServiceMixin:
         suspension.resumed_at = resumed_at
         suspension.resumed_by_actor_id = actor.id
         suspension.resume_reason = _normalize_optional_text(reason)
+
+        await cls._before_resume_exam_save(db, exam=exam)
+
         exam.status = ExamStatus.ACTIVE
 
         try:

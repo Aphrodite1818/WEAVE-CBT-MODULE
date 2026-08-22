@@ -88,16 +88,13 @@ async def start_exam_batch(
             continue
         try:
             await ExamService.activate_exam(db, actor=actor, exam_id=exam_id)
-            impacts = await ExamTimetableService.impact_after_start(
-                db, exam_id=exam_id
-            )
+            impacts = await ExamTimetableService.impact_after_start(db, exam_id=exam_id)
             results.append(
                 BatchExamStartItemResponse(
                     exam_id=exam_id,
                     started=True,
                     impacts=[
-                        TimetableImpactResponse(**impact.__dict__)
-                        for impact in impacts
+                        TimetableImpactResponse(**impact.__dict__) for impact in impacts
                     ],
                 )
             )

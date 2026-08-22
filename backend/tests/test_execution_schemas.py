@@ -18,6 +18,7 @@ class ExecutionSchemaTests(unittest.TestCase):
 
     def test_answer_option_ids_must_be_unique(self):
         from uuid import uuid4
+
         option_id = uuid4()
         with self.assertRaises(ValueError):
             AttemptAnswerMutation(
@@ -27,6 +28,7 @@ class ExecutionSchemaTests(unittest.TestCase):
 
     def test_batch_exam_ids_must_be_unique(self):
         from uuid import uuid4
+
         exam_id = uuid4()
         with self.assertRaises(ValueError):
             BatchExamStartRequest(exam_ids=[exam_id, exam_id])

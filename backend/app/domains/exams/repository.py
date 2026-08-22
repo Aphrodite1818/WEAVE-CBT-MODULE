@@ -744,7 +744,6 @@ class ExamRepository:
         )
         return list(result.scalars().all())
 
-
     @staticmethod
     async def has_unfinished_scheduled_exam_for_level(
         db: AsyncSession,
@@ -760,7 +759,7 @@ class ExamRepository:
         This is used by makeup eligibility logic
 
         Makeup examintaion must not become available while the level's normal
-        scheduled examination cycle is still running 
+        scheduled examination cycle is still running
 
         Only the latest leaf revision of an examination lineage is considered
 
@@ -775,7 +774,7 @@ class ExamRepository:
             CLOSED
                 Examination completed normally
             CANCELLED
-                Examination was invalidated and should not block the end of the 
+                Examination was invalidated and should not block the end of the
                 normal examination cycle
 
 

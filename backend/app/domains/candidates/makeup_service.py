@@ -133,7 +133,10 @@ class CandidateMakeupService:
             pending_count += 1
 
             if attempt is not None:
-                if attempt.status in {AttemptStatus.IN_PROGRESS, AttemptStatus.INTERRUPTED}:
+                if attempt.status in {
+                    AttemptStatus.IN_PROGRESS,
+                    AttemptStatus.INTERRUPTED,
+                }:
                     return MakeupQueueResolution(
                         available=True,
                         next_candidate_id=candidate.id,

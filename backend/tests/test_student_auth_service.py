@@ -37,36 +37,44 @@ class StudentAuthTests(unittest.IsolatedAsyncioTestCase):
             return session
 
         db = AsyncMock()
-        with patch.object(
-            StudentAuthService,
-            "_get_current_enrollment",
-            AsyncMock(return_value=enrollment),
-        ), patch(
-            "app.domains.auth.student_service.CandidateRepository.get_active_credential_by_student_id",
-            AsyncMock(return_value=credential),
-        ), patch(
-            "app.domains.auth.student_service.verify_candidate_pin",
-            AsyncMock(return_value=True),
-        ), patch.object(
-            StudentAuthService,
-            "_resolve_candidate",
-            AsyncMock(
-                return_value=(
-                    candidate,
-                    exam,
-                    None,
-                    StudentExamAvailability.READY,
-                )
+        with (
+            patch.object(
+                StudentAuthService,
+                "_get_current_enrollment",
+                AsyncMock(return_value=enrollment),
             ),
-        ), patch(
-            "app.domains.auth.student_service.StudentAuthRepository.list_unrevoked_sessions_for_student",
-            AsyncMock(return_value=[]),
-        ), patch(
-            "app.domains.auth.student_service.StudentAuthRepository.save_sessions",
-            AsyncMock(return_value=[]),
-        ), patch(
-            "app.domains.auth.student_service.StudentAuthRepository.add_session",
-            AsyncMock(side_effect=add_session),
+            patch(
+                "app.domains.auth.student_service.CandidateRepository.get_active_credential_by_student_id",
+                AsyncMock(return_value=credential),
+            ),
+            patch(
+                "app.domains.auth.student_service.verify_candidate_pin",
+                AsyncMock(return_value=True),
+            ),
+            patch.object(
+                StudentAuthService,
+                "_resolve_candidate",
+                AsyncMock(
+                    return_value=(
+                        candidate,
+                        exam,
+                        None,
+                        StudentExamAvailability.READY,
+                    )
+                ),
+            ),
+            patch(
+                "app.domains.auth.student_service.StudentAuthRepository.list_unrevoked_sessions_for_student",
+                AsyncMock(return_value=[]),
+            ),
+            patch(
+                "app.domains.auth.student_service.StudentAuthRepository.save_sessions",
+                AsyncMock(return_value=[]),
+            ),
+            patch(
+                "app.domains.auth.student_service.StudentAuthRepository.add_session",
+                AsyncMock(side_effect=add_session),
+            ),
         ):
             result = await StudentAuthService.login(
                 db,

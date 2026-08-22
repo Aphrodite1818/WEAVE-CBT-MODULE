@@ -820,7 +820,9 @@ class CandidateServiceTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 ExamRepository,
                 "get_exam_by_id",
-                new=AsyncMock(return_value=exam(id=row.exam_id, status=ExamStatus.CLOSED)),
+                new=AsyncMock(
+                    return_value=exam(id=row.exam_id, status=ExamStatus.CLOSED)
+                ),
             ),
             patch.object(
                 AttemptRepository,
@@ -851,7 +853,9 @@ class CandidateServiceTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 ExamRepository,
                 "get_exam_by_id",
-                new=AsyncMock(return_value=exam(id=row.exam_id, status=ExamStatus.CLOSED)),
+                new=AsyncMock(
+                    return_value=exam(id=row.exam_id, status=ExamStatus.CLOSED)
+                ),
             ),
             patch.object(
                 AttemptRepository,
@@ -894,7 +898,9 @@ class CandidateServiceTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 ExamRepository,
                 "get_exam_by_id",
-                new=AsyncMock(return_value=exam(id=row.exam_id, status=ExamStatus.CLOSED)),
+                new=AsyncMock(
+                    return_value=exam(id=row.exam_id, status=ExamStatus.CLOSED)
+                ),
             ),
             patch.object(
                 CandidateRepository,

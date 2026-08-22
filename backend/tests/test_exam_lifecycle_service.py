@@ -34,6 +34,7 @@ from app.domains.exams.schemas import (  # noqa: E402
     ExamResponse,
 )
 from app.domains.exams.service import ExamService  # noqa: E402
+from app.domains.exams.timetable_service import ExamTimetableService  # noqa: E402
 from app.domains.questions.models import QuestionType  # noqa: E402
 from app.domains.questions.repository import QuestionRepository  # noqa: E402
 from app.domains.runtime.repository import RuntimeRepository  # noqa: E402
@@ -978,6 +979,11 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
                 "add_outbox_event",
                 new=AsyncMock(),
             ) as add_event,
+            patch.object(
+                ExamTimetableService,
+                "require_level_free",
+                new=AsyncMock(),
+            ) as require_level_free,
         ):
             result = await ExamService.activate_exam(
                 db,
@@ -986,6 +992,7 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(result.status, ExamStatus.ACTIVE)
+        require_level_free.assert_awaited_once_with(db, exam_id=current_exam.id)
         event = add_event.await_args.args[1]
         self.assertEqual(event.event_type, "exam.activated")
         self.assertEqual(event.payload["actor_id"], str(admin.id))
@@ -1045,6 +1052,11 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(side_effect=lambda _db, row: row),
             ),
             patch.object(RuntimeRepository, "add_outbox_event", new=AsyncMock()),
+            patch.object(
+                ExamTimetableService,
+                "require_level_free",
+                new=AsyncMock(),
+            ) as require_level_free,
         ):
             await ExamService.resume_exam(
                 db,
@@ -1054,6 +1066,7 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(current_exam.status, ExamStatus.ACTIVE)
         self.assertEqual(suspension.resume_reason, "Recovered")
+        require_level_free.assert_awaited_once_with(db, exam_id=current_exam.id)
 
         # ACTIVE -> CLOSED
         db = AsyncMock()

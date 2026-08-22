@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -56,6 +57,26 @@ class ExamService:
     """Business operations for locally owned CBT examinations."""
 
     @staticmethod
+    async def _before_create_exam_save(
+        db: AsyncSession,
+        *,
+        payload: ExamCreate,
+    ) -> None:
+        return None
+
+    @staticmethod
+    async def _before_update_exam_save(
+        db: AsyncSession,
+        *,
+        exam: Exam,
+        session_id: UUID,
+        term_id: UUID,
+        scheduled_start_at: datetime | None,
+        duration_minutes: int,
+    ) -> None:
+        return None
+
+    @staticmethod
     async def _validate_random_question_capacity(
         db: AsyncSession,
         *,
@@ -81,8 +102,9 @@ class ExamService:
                 "for the requested question count"
             )
 
-    @staticmethod
+    @classmethod
     async def create_exam(
+        cls,
         db: AsyncSession,
         *,
         actor: LocalActor,
@@ -219,6 +241,8 @@ class ExamService:
                 "component"
             )
 
+        await cls._before_create_exam_save(db, payload=payload)
+
         # build draft exam
         exam = Exam(
             session_id=session.id,
@@ -266,8 +290,9 @@ class ExamService:
 
         return exam
 
-    @staticmethod
+    @classmethod
     async def update_exam(
+        cls,
         db: AsyncSession,
         *,
         actor: LocalActor,
@@ -495,6 +520,15 @@ class ExamService:
                 "the selected term, curriculum subject and assessment "
                 "component"
             )
+
+        await cls._before_update_exam_save(
+            db,
+            exam=exam,
+            session_id=next_session_id,
+            term_id=next_term_id,
+            scheduled_start_at=next_scheduled_start_at,
+            duration_minutes=next_duration_minutes,
+        )
 
         # apply academic scope changes
         if "session_id" in fields:

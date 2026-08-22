@@ -13,13 +13,17 @@ from app.domains.auth.student_models import StudentExamSession
 
 class StudentAuthRepository:
     @staticmethod
-    async def add_session(db: AsyncSession, session: StudentExamSession) -> StudentExamSession:
+    async def add_session(
+        db: AsyncSession, session: StudentExamSession
+    ) -> StudentExamSession:
         db.add(session)
         await db.flush()
         return session
 
     @staticmethod
-    async def save_session(db: AsyncSession, session: StudentExamSession) -> StudentExamSession:
+    async def save_session(
+        db: AsyncSession, session: StudentExamSession
+    ) -> StudentExamSession:
         db.add(session)
         await db.flush()
         return session
@@ -31,7 +35,9 @@ class StudentAuthRepository:
         *,
         lock: bool = False,
     ) -> StudentExamSession | None:
-        query = select(StudentExamSession).where(StudentExamSession.token_hash == token_hash)
+        query = select(StudentExamSession).where(
+            StudentExamSession.token_hash == token_hash
+        )
         if lock:
             query = query.with_for_update(of=StudentExamSession)
         return (await db.execute(query)).scalar_one_or_none()

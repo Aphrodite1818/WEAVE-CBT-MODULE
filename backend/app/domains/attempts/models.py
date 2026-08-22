@@ -68,7 +68,9 @@ class ExamAttempt(Base):
         server_default=AttemptStatus.IN_PROGRESS.value,
         index=True,
     )
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     time_limit_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
     elapsed_seconds: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=sql_text("0")
@@ -288,9 +290,7 @@ class AttemptQuestionAllocation(Base):
             "source_question_version >= 1",
             name="ck_attempt_questions_source_version_positive",
         ),
-        CheckConstraint(
-            "position >= 1", name="ck_attempt_questions_position_positive"
-        ),
+        CheckConstraint("position >= 1", name="ck_attempt_questions_position_positive"),
         Index(
             "ix_attempt_questions_attempt_position",
             "attempt_id",
@@ -347,9 +347,7 @@ class AttemptOptionAllocation(Base):
             "AND source_question_option_id IS NOT NULL)",
             name="ck_attempt_options_exactly_one_source",
         ),
-        CheckConstraint(
-            "position >= 1", name="ck_attempt_options_position_positive"
-        ),
+        CheckConstraint("position >= 1", name="ck_attempt_options_position_positive"),
         Index(
             "uq_attempt_options_exam_source",
             "attempt_question_id",

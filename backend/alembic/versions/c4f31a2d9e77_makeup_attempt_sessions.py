@@ -405,9 +405,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["candidate_id"], ["exam_candidates.id"], ondelete="RESTRICT"
         ),
-        sa.ForeignKeyConstraint(
-            ["exam_id"], ["exams.id"], ondelete="RESTRICT"
-        ),
+        sa.ForeignKeyConstraint(["exam_id"], ["exams.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(
             ["makeup_authorization_id"],
             ["candidate_make_up_authorizations.id"],

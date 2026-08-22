@@ -17,7 +17,10 @@ from app.domains.academics.models import StudentEnrollment
 from app.domains.academics.repository import AcademicRepository
 from app.domains.auth.student_models import StudentExamSession
 from app.domains.auth.student_repository import StudentAuthRepository
-from app.domains.auth.student_schemas import StudentExamAvailability, StudentLoginResponse
+from app.domains.auth.student_schemas import (
+    StudentExamAvailability,
+    StudentLoginResponse,
+)
 from app.domains.candidates.makeup_service import CandidateMakeupService
 from app.domains.candidates.models import CandidateStatus, ExamCandidate
 from app.domains.candidates.repository import CandidateRepository
@@ -160,7 +163,11 @@ class StudentAuthService:
             session_id=session.id,
             term_id=term.id,
         )
-        if not queue.available or queue.next_candidate_id is None or queue.next_exam_id is None:
+        if (
+            not queue.available
+            or queue.next_candidate_id is None
+            or queue.next_exam_id is None
+        ):
             raise StudentAuthenticationError(
                 queue.blocked_reason or "No examination is currently available"
             )
@@ -221,9 +228,12 @@ class StudentAuthService:
         if not valid_pin:
             raise StudentAuthenticationError("Invalid admission number or CBT PIN")
 
-        candidate, exam, makeup_authorization_id, availability = (
-            await cls._resolve_candidate(db, enrollment=enrollment)
-        )
+        (
+            candidate,
+            exam,
+            makeup_authorization_id,
+            availability,
+        ) = await cls._resolve_candidate(db, enrollment=enrollment)
         now = datetime.now(UTC)
         expires_at = now + timedelta(hours=STUDENT_SESSION_LIFETIME_HOURS)
         raw_token = secrets.token_urlsafe(STUDENT_SESSION_TOKEN_BYTES)
@@ -281,15 +291,21 @@ class StudentAuthService:
             or session.revoked_at is not None
             or session.expires_at <= now
         ):
-            raise StudentAuthenticationError("Student examination session is not active")
+            raise StudentAuthenticationError(
+                "Student examination session is not active"
+            )
 
-        candidate = await CandidateRepository.get_candidate_by_id(db, session.candidate_id)
+        candidate = await CandidateRepository.get_candidate_by_id(
+            db, session.candidate_id
+        )
         if (
             candidate is None
             or candidate.student_id != session.student_id
             or candidate.exam_id != session.exam_id
         ):
-            raise StudentAuthenticationError("Student examination session is inconsistent")
+            raise StudentAuthenticationError(
+                "Student examination session is inconsistent"
+            )
 
         if touch and (now - session.last_seen_at) >= timedelta(minutes=5):
             session.last_seen_at = now
