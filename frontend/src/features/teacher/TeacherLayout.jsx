@@ -1,5 +1,5 @@
 import { Icon } from '../../lib/icons'
-import { LeafLogo } from '../../components/ui'
+import { WeaveLogo } from '../../components/ui'
 
 function teacherNavActive(current, section) {
   if (section === 'question-banks') return current === 'question-banks' || current === 'bank-detail'
@@ -32,7 +32,7 @@ export function TeacherLayout({ state, dispatch, signOut, children }) {
   return (
     <main className="teacher-shell">
       <aside className="teacher-sidebar">
-        <LeafLogo />
+        <WeaveLogo />
         <div className="teacher-profile">
           <span className="teacher-avatar">{initials(teacherName)}</span>
           <div>

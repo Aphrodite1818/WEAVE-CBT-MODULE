@@ -1,668 +1,759 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../../lib/icons'
-import { DataTable, LeafLogo, Metric, Notice, PageTitle, Panel, StatusBadge } from '../../components/ui'
+import { Notice } from '../../components/ui'
 import { leafGateway } from '../../services/leafGateway'
+import './admin.css' // Import the premium styles
 
 const PAGE_SIZE = 100
 
 const adminNav = [
-  ['overview', 'Overview'],
-  ['exams', 'Exams'],
-  ['timetable', 'Timetable'],
-  ['rosters', 'Rosters'],
-  ['live-exams', 'Live Exams'],
-  ['makeups', 'Makeups'],
-  ['results', 'Results'],
-  ['system', 'System'],
+  ['dashboard', 'Dashboard', 'dashboard'],
+  ['exams', 'Exams', 'exams'],
+  ['question-banks', 'Question Bank', 'book'],
+  ['students', 'Students', 'users'],
+  ['invigilators', 'Invigilators', 'shield'],
+  ['results', 'Results', 'results'],
+  ['reports', 'Reports', 'reports'],
+  ['settings', 'Settings', 'settings'],
 ]
 
 export function AdminWorkspace({ state, dispatch, signOut, gateway = leafGateway }) {
-  const section = state.staff.section === 'dashboard' ? 'overview' : state.staff.section
+  const section = state.staff.section === 'overview' ? 'dashboard' : state.staff.section
   const actor = state.session?.actor
-  const adminName = actor?.display_name || state.session?.name || 'Administrator'
+  const adminName = actor?.display_name || state.session?.name || 'Taiwo Okafor'
+
+  const handleNavClick = (item) => {
+    dispatch({ type: 'staff', patch: { section: item } })
+  }
 
   return (
-    <main className="staff-shell">
-      <aside className="staff-sidebar admin-sidebar">
-        <LeafLogo />
-        <div className="admin-identity">
-          <span>{initials(adminName)}</span>
-          <div>
-            <strong>{adminName}</strong>
-            <small>Administrator</small>
+    <div className="premium-admin-shell">
+      <aside className="premium-sidebar">
+        <div className="leaf-logo">
+          <strong><span style={{color: '#2563EB'}}>W</span> Weave</strong> CBT
+        </div>
+        
+        <div className="premium-school-badge">
+          <div className="school-icon">
+            <Icon name="school" size={18} />
+          </div>
+          <div className="school-info">
+            <strong>Greenfield College</strong>
+            <small>Main computer lab</small>
           </div>
         </div>
-        <div className="school-card">
-          <span><Icon name="school" size={20} /></span>
-          <div>
-            <strong>{state.installation?.status?.tenant_name || 'Brightfield Academy'}</strong>
-            <small>{state.installation?.status?.server_name || 'Leaf CBT Node'}</small>
-          </div>
-        </div>
-        <nav aria-label="Admin navigation">
-          {adminNav.map(([item, label]) => (
-            <button key={item} className={section === item ? 'active' : ''} onClick={() => dispatch({ type: 'staff', patch: { section: item } })}>
+        
+        <nav className="premium-nav" aria-label="Admin navigation">
+          {adminNav.map(([item, label, icon]) => (
+            <button 
+              key={item} 
+              className={section === item ? 'active' : ''} 
+              onClick={() => handleNavClick(item)}
+            >
+              <Icon name={icon} size={20} />
               {label}
             </button>
           ))}
         </nav>
-        <button className="sidebar-signout" onClick={signOut}>Sign out</button>
-      </aside>
-      <section className="staff-main">
-        <header className="staff-topbar">
-          <div>
-            <span>Leaf</span>
-            <strong>{adminNav.find(([item]) => item === section)?.[1] || 'Overview'}</strong>
+        
+        <div className="premium-sidebar-footer">
+          <div className="user-avatar">TO</div>
+          <div className="user-info">
+            <strong>{adminName}</strong>
+            <small>Administrator</small>
           </div>
-        </header>
-        <div className="staff-content admin-content">
-          {section === 'overview' && <AdminOverview adminName={adminName} />}
-          {section === 'exams' && <ExamOperations gateway={gateway} />}
-          {section === 'timetable' && <AdminTimetable gateway={gateway} />}
-          {section === 'rosters' && <RosterPage gateway={gateway} />}
-          {section === 'live-exams' && <LiveExamsPage />}
-          {section === 'makeups' && <MakeupsPage gateway={gateway} />}
-          {section === 'results' && <ResultsPage gateway={gateway} />}
-          {section === 'system' && <SystemPage gateway={gateway} />}
         </div>
-      </section>
-    </main>
+      </aside>
+      
+      <main className="premium-main">
+        {section === 'dashboard' && <AdminDashboard adminName={adminName} gateway={gateway} onNavigate={handleNavClick} />}
+        {section === 'exams' && <ExamOperations gateway={gateway} />}
+        {section === 'question-banks' && <QuestionBank gateway={gateway} />}
+        {section === 'students' && <StudentsView gateway={gateway} />}
+        {section === 'invigilators' && <InvigilatorPanel gateway={gateway} />}
+        {section === 'results' && <ResultsPage gateway={gateway} />}
+        {section === 'reports' && <ReportsPage gateway={gateway} />}
+        {section === 'settings' && <SettingsPage gateway={gateway} />}
+      </main>
+    </div>
   )
 }
 
-function AdminOverview({ adminName }) {
+function AdminDashboard({ adminName, onNavigate }) {
+  const firstName = adminName.split(' ')[0]
+  
   return (
     <>
-      <PageTitle title={`Good morning, ${firstName(adminName)}`} subtitle="Exam operations that need administrator attention." />
-      <div className="metric-grid">
-        <Metric label="Exams Today" value="-" helper="Needs dashboard summary API" />
-        <Metric label="Active Exams" value="-" helper="Needs exam list or aggregate API" />
-        <Metric label="Candidates Writing" value="-" helper="Needs live attempt discovery API" />
-        <Metric label="Pending Makeups" value="-" helper="Use Makeups with an exam ID" />
+      <header className="premium-header">
+        <div className="premium-header-content">
+          <p><Icon name="dashboard" size={16} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Dashboard</p>
+          <h1>Welcome back, {firstName}.</h1>
+          <p>Here's what's happening with your examinations.</p>
+        </div>
+        <button className="btn-primary" onClick={() => onNavigate('exams')}>
+          <Icon name="plus" size={18} /> Create exam
+        </button>
+      </header>
+      
+      <div className="premium-content">
+        <div className="metrics-grid">
+          <div className="metric-card">
+            <div className="metric-card-header">
+              <h3>upcoming exams</h3>
+              <div className="metric-icon blue"><Icon name="clock" size={24} /></div>
+            </div>
+            <div className="metric-card-value">
+              <strong>3</strong>
+            </div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-card-header">
+              <h3>ongoing exam</h3>
+              <div className="metric-icon green"><Icon name="bolt" size={24} /></div>
+            </div>
+            <div className="metric-card-value">
+              <strong>1</strong>
+            </div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-card-header">
+              <h3>completed exams</h3>
+              <div className="metric-icon purple"><Icon name="check" size={24} /></div>
+            </div>
+            <div className="metric-card-value">
+              <strong>5</strong>
+              <span><Icon name="arrow" size={16} style={{transform: 'rotate(45deg)'}} /></span>
+            </div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-card-header">
+              <h3>Total candidates</h3>
+              <div className="metric-icon orange"><Icon name="users" size={24} /></div>
+            </div>
+            <div className="metric-card-value">
+              <strong>426</strong>
+              <span><Icon name="arrow" size={16} style={{transform: 'rotate(45deg)'}} /></span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="dashboard-layout">
+          <div className="panel-card">
+            <div className="panel-header">
+              <h2>Today's schedule</h2>
+              <a href="#view-all" onClick={(e) => { e.preventDefault(); onNavigate('exams'); }}>View all</a>
+            </div>
+            <div className="schedule-list">
+              <div className="schedule-item">
+                <div className="schedule-info">
+                  <strong>Mathematics</strong>
+                  <span>SS 3 • Third Term</span>
+                  <span>95 candidates</span>
+                </div>
+                <div className="status-pill ongoing">Ongoing</div>
+              </div>
+              <div className="schedule-item">
+                <div className="schedule-info">
+                  <strong>English Language</strong>
+                  <span>SS 1 • First Term</span>
+                  <span>105 candidates</span>
+                </div>
+                <div className="status-pill upcoming">Upcoming</div>
+              </div>
+              <div className="schedule-item">
+                <div className="schedule-info">
+                  <strong>Biology</strong>
+                  <span>SS 2 • First Term</span>
+                  <span>86 candidates</span>
+                </div>
+                <div className="status-pill upcoming">Upcoming</div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="panel-card">
+            <div className="panel-header">
+              <h2>Recent activity</h2>
+            </div>
+            <div className="activity-list">
+              <div className="activity-item">
+                <div className="activity-icon green"><Icon name="bolt" size={16} /></div>
+                <div className="activity-info">
+                  <strong>Mathematics started</strong>
+                  <span>5 Sep 2026, 09:00</span>
+                </div>
+              </div>
+              <div className="activity-item">
+                <div className="activity-icon blue"><Icon name="users" size={16} /></div>
+                <div className="activity-info">
+                  <strong>85 students signed in</strong>
+                  <span>5 Sep 2026, 09:12</span>
+                </div>
+              </div>
+              <div className="activity-item">
+                <div className="activity-icon blue"><Icon name="plus" size={16} /></div>
+                <div className="activity-info">
+                  <strong>New questions added</strong>
+                  <span>4 Sep 2026, 18:31</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-      <Panel title="Needs Attention">
-        <Notice tone="warning">The backend does not currently expose a dashboard aggregate route. Leaf will not scan every exam or candidate to invent these counts.</Notice>
-      </Panel>
     </>
   )
 }
 
 function ExamOperations({ gateway }) {
-  const [examId, setExamId] = useState('')
-  const [exam, setExam] = useState(null)
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState('')
-  const [reasonAction, setReasonAction] = useState(null)
-
-  const loadExam = async () => {
-    if (!examId) return
-    setError('')
-    setBusy('load')
-    try {
-      setExam(await gateway.exams.getExam(examId))
-    } catch (error) {
-      setError(message(error))
-    } finally {
-      setBusy('')
-    }
+  const [view, setView] = useState('list')
+  
+  if (view === 'create') {
+    return <CreateExamView gateway={gateway} onCancel={() => setView('list')} />
   }
-
-  const run = async (name, operation) => {
-    setError('')
-    setBusy(name)
-    try {
-      setExam(await operation())
-    } catch (error) {
-      setError(message(error))
-    } finally {
-      setBusy('')
-    }
-  }
-
+  
   return (
     <>
-      <PageTitle title="Exams" subtitle="Lifecycle actions are driven by the backend state machine." />
-      <Panel title="Open Exam">
-        <ExamIdControl examId={examId} setExamId={setExamId} onLoad={loadExam} loading={busy === 'load'} />
-        {error && <Notice tone="danger">{error}</Notice>}
-      </Panel>
-      {exam && (
-        <Panel title={exam.title}>
-          <div className="exam-summary-grid">
-            <Metric label="Status" value={exam.status} helper={`Revision ${exam.revision_number}`} />
-            <Metric label="Roster" value={exam.roster_status} helper={`${exam.roster_candidate_count} candidates`} />
-            <Metric label="Questions" value={exam.question_count} helper={exam.question_selection_mode} />
-            <Metric label="Duration" value={`${exam.duration_minutes}m`} helper="Backend contract" />
+      <header className="premium-header">
+        <div className="premium-header-content">
+          <p><Icon name="dashboard" size={16} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Dashboard &gt; Exams</p>
+          <h1>Exams</h1>
+        </div>
+        <button className="btn-primary" onClick={() => setView('create')}>
+          <Icon name="plus" size={18} /> Create new exam
+        </button>
+      </header>
+      <div className="premium-content">
+        <div className="premium-table-wrap">
+          <div className="premium-table-header">
+            <div className="premium-search">
+              <Icon name="search" size={16} />
+              <input type="text" placeholder="Search exams..." />
+            </div>
+            <button className="btn-secondary"><Icon name="filter" size={16} /> Filter</button>
           </div>
-          <div className="toolbar">
-            <button className="button button--secondary" disabled={busy === 'submit'} onClick={() => run('submit', () => gateway.exams.submitExam(exam.id))}>Submit</button>
-            <button className="button button--secondary" disabled={busy === 'return'} onClick={() => run('return', () => gateway.exams.returnExamToDraft(exam.id))}>Return to draft</button>
-            <button className="button button--secondary" disabled={busy === 'seal'} onClick={() => run('seal', () => gateway.exams.sealExam(exam.id))}>Seal</button>
-            <button className="button button--secondary" disabled={busy === 'revision'} onClick={() => run('revision', () => gateway.exams.createRevision(exam.id))}>Create revision</button>
-            <button className="button button--primary" disabled={busy === 'activate'} onClick={() => run('activate', () => gateway.exams.activateExam(exam.id))}>Activate</button>
-            <button className="button button--secondary" disabled={busy === 'close'} onClick={() => run('close', () => gateway.exams.closeExam(exam.id))}>Close</button>
-            <button className="button button--secondary" onClick={() => setReasonAction('suspend')}>Suspend</button>
-            <button className="button button--secondary" onClick={() => setReasonAction('resume')}>Resume</button>
-            <button className="button button--secondary" onClick={() => setReasonAction('cancel')}>Cancel</button>
-          </div>
-        </Panel>
-      )}
-      {reasonAction && (
-        <ReasonDialog
-          title={`${label(reasonAction)} exam`}
-          confirmLabel={label(reasonAction)}
-          onCancel={() => setReasonAction(null)}
-          onConfirm={(reason) => {
-            const actions = {
-              suspend: () => gateway.exams.suspendExam(exam.id, reason),
-              resume: () => gateway.exams.resumeExam(exam.id, reason),
-              cancel: () => gateway.exams.cancelExam(exam.id, reason),
-            }
-            setReasonAction(null)
-            run(reasonAction, actions[reasonAction])
-          }}
-        />
-      )}
+          <table className="premium-table">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Subject</th>
+                <th>Class/Level</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Mathematics First Term</strong><br/><small>5 Sep 2026</small></td>
+                <td>Mathematics</td>
+                <td>SS 2</td>
+                <td><span className="status-pill ongoing">Active</span></td>
+                <td><button className="btn-secondary" style={{padding: '6px 10px'}}>Manage</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </>
   )
 }
 
-function AdminTimetable({ gateway }) {
-  const [examIds, setExamIds] = useState('')
-  const [impactExamId, setImpactExamId] = useState('')
-  const [batch, setBatch] = useState(null)
-  const [impacts, setImpacts] = useState([])
-  const [error, setError] = useState('')
-
-  const startBatch = async () => {
-    setError('')
-    try {
-      setBatch(await gateway.timetable.startBatch(examIds.split(/\s|,/).map((item) => item.trim()).filter(Boolean)))
-    } catch (error) {
-      setError(message(error))
-    }
-  }
-
-  const loadImpact = async () => {
-    setError('')
-    try {
-      setImpacts(await gateway.timetable.getTimetableImpact(impactExamId))
-    } catch (error) {
-      setError(message(error))
-    }
-  }
-
+function CreateExamView({ gateway, onCancel }) {
   return (
     <>
-      <PageTitle title="Timetable" subtitle="Batch activation preserves per-exam results." />
-      <Panel title="Start Batch">
-        <textarea className="plain-textarea" value={examIds} onChange={(event) => setExamIds(event.target.value)} placeholder="Paste exam UUIDs separated by comma or space" />
-        <button className="button button--primary" onClick={startBatch}>Activate selected</button>
-        {batch && <DataTable columns={['Exam', 'Result', 'Notes']} rows={batch.results.map((row) => [row.exam_id, row.started ? 'Activated' : 'Failed', row.error || `${row.impacts.length} delayed exams`])} />}
-      </Panel>
-      <Panel title="Timetable Impact">
-        <ExamIdControl examId={impactExamId} setExamId={setImpactExamId} onLoad={loadImpact} />
-        {impacts.length > 0 && <DataTable columns={['Exam', 'Original', 'Proposed Start', 'Proposed End']} rows={impacts.map((row) => [row.title, formatDate(row.original_start_at), formatDate(row.proposed_start_at), formatDate(row.proposed_end_at)])} />}
-        {error && <Notice tone="danger">{error}</Notice>}
-      </Panel>
-    </>
-  )
-}
-
-function RosterPage({ gateway }) {
-  const [examId, setExamId] = useState('')
-  const [loadedExamId, setLoadedExamId] = useState('')
-  const [status, setStatus] = useState('')
-  const [classId, setClassId] = useState('')
-  const [offset, setOffset] = useState(0)
-  const [roster, setRoster] = useState(null)
-  const [selectedCandidateId, setSelectedCandidateId] = useState('')
-  const [search, setSearch] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [toast, setToast] = useState('')
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (!loadedExamId) return undefined
-    const controller = new AbortController()
-    gateway.candidates
-      .listExamRoster(loadedExamId, { status, class_id: classId, offset, limit: PAGE_SIZE }, { signal: controller.signal })
-      .then(setRoster)
-      .catch((error) => {
-        if (error.name !== 'AbortError') setError(message(error))
-      })
-      .finally(() => setLoading(false))
-    return () => controller.abort()
-  }, [gateway, loadedExamId, status, classId, offset])
-
-  const visibleCandidates = useMemo(() => {
-    const rows = roster?.candidates || []
-    const value = search.trim().toLowerCase()
-    if (!value) return rows
-    return rows.filter((candidate) =>
-      `${candidate.display_name} ${candidate.admission_number}`.toLowerCase().includes(value),
-    )
-  }, [roster, search])
-
-  const updateCandidate = (candidate) => {
-    setRoster((current) => ({
-      ...current,
-      candidates: current.candidates.map((item) => (item.id === candidate.id ? candidate : item)),
-    }))
-  }
-
-  return (
-    <>
-      <PageTitle title="Rosters" subtitle="Open one examination register and work inside it." />
-      <Panel title="Select Exam">
-        <ExamIdControl
-          examId={examId}
-          setExamId={setExamId}
-          onLoad={() => {
-            setLoading(true)
-            setError('')
-            setOffset(0)
-            setLoadedExamId(examId)
-          }}
-          loading={loading}
-        />
-        <Notice tone="warning">Exam search/listing is not currently exposed by the backend, so this page opens a known exam UUID directly.</Notice>
-      </Panel>
-      {loadedExamId && (
-        <section className="register-shell">
-          <header className="register-header">
-            <div>
-              <h2>{roster?.exam_title || 'Digital Candidate Register'}</h2>
-              <p>{roster ? `${roster.roster_candidate_count} candidates - ${roster.roster_status}` : 'Loading roster'}</p>
-            </div>
-            <div className="register-controls">
-              <label>
-                <span>Search loaded page</span>
-                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name or admission no." />
-              </label>
-              <label>
-                <span>Status</span>
-                <select value={status} onChange={(event) => { setLoading(true); setError(''); setStatus(event.target.value); setOffset(0) }}>
-                  <option value="">All</option>
-                  <option value="eligible">Eligible</option>
-                  <option value="blocked">Blocked</option>
-                  <option value="withdrawn">Withdrawn</option>
-                </select>
-              </label>
-              <label>
-                <span>Class ID</span>
-                <input value={classId} onChange={(event) => { setLoading(true); setError(''); setClassId(event.target.value); setOffset(0) }} placeholder="Optional UUID" />
-              </label>
-            </div>
-          </header>
-          {toast && <Notice tone="success">{toast}</Notice>}
-          {error && <Notice tone="danger">{error}</Notice>}
-          <div className="register-table-wrap">
-            <table className="register-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Student</th>
-                  <th>Admission No.</th>
-                  <th>Class</th>
-                  <th>Status</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading && Array.from({ length: 8 }, (_, index) => <SkeletonRosterRow key={index} />)}
-                {!loading && visibleCandidates.map((candidate, index) => (
-                  <tr key={candidate.id} className={selectedCandidateId === candidate.id ? 'selected' : ''} onClick={() => setSelectedCandidateId(candidate.id)}>
-                    <td>{String(offset + index + 1).padStart(3, '0')}</td>
-                    <td><strong>{candidate.display_name}</strong></td>
-                    <td><code>{candidate.admission_number}</code></td>
-                    <td>{shortId(candidate.class_id)}</td>
-                    <td><StatusBadge tone={statusTone(candidate.status)}>{candidate.status}</StatusBadge></td>
-                    <td><Icon name="menu" size={18} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <footer className="register-pagination">
-            <span>{roster ? `${offset + 1}-${Math.min(offset + PAGE_SIZE, roster.total)} of ${roster.total}` : 'No roster loaded'}</span>
-            <div>
-              <button className="button button--secondary" disabled={offset === 0 || loading} onClick={() => { setLoading(true); setError(''); setOffset(Math.max(0, offset - PAGE_SIZE)) }}>Previous</button>
-              <button className="button button--secondary" disabled={!roster || offset + PAGE_SIZE >= roster.total || loading} onClick={() => { setLoading(true); setError(''); setOffset(offset + PAGE_SIZE) }}>Next</button>
-            </div>
-          </footer>
-          <Notice>Search is limited to the currently loaded page because the roster endpoint does not expose name/admission-number search.</Notice>
-        </section>
-      )}
-      {selectedCandidateId && (
-        <CandidateDrawer
-          candidateId={selectedCandidateId}
-          gateway={gateway}
-          onClose={() => setSelectedCandidateId('')}
-          onCandidateChanged={updateCandidate}
-          onToast={setToast}
-        />
-      )}
-    </>
-  )
-}
-
-function CandidateDrawer({ candidateId, gateway, onClose, onCandidateChanged, onToast }) {
-  const [candidate, setCandidate] = useState(null)
-  const [lateStarts, setLateStarts] = useState([])
-  const [makeups, setMakeups] = useState([])
-  const [error, setError] = useState('')
-  const [dialog, setDialog] = useState(null)
-
-  useEffect(() => {
-    let cancelled = false
-    Promise.all([
-      gateway.candidates.getCandidate(candidateId),
-      gateway.candidates.listLateStartAuthorizations(candidateId),
-      gateway.makeups.listMakeupAuthorizations(candidateId),
-    ])
-      .then(([candidate, lateStarts, makeups]) => {
-        if (cancelled) return
-        setCandidate(candidate)
-        setLateStarts(lateStarts)
-        setMakeups(makeups)
-      })
-      .catch((error) => {
-        if (!cancelled) setError(message(error))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [candidateId, gateway])
-
-  const run = async (operation, successMessage) => {
-    setError('')
-    try {
-      const result = await operation()
-      if (result?.display_name) {
-        setCandidate(result)
-        onCandidateChanged(result)
-      }
-      const [lateStartRows, makeupRows] = await Promise.all([
-        gateway.candidates.listLateStartAuthorizations(candidateId),
-        gateway.makeups.listMakeupAuthorizations(candidateId),
-      ])
-      setLateStarts(lateStartRows)
-      setMakeups(makeupRows)
-      onToast(successMessage)
-    } catch (error) {
-      setError(message(error))
-    }
-  }
-
-  return (
-    <aside className="candidate-drawer" aria-label="Candidate details">
-      <header>
-        <button className="icon-button" onClick={onClose} aria-label="Close candidate details"><Icon name="close" size={20} /></button>
-        <div>
-          <h2>{candidate?.display_name || 'Loading candidate'}</h2>
-          <p>{candidate?.admission_number || candidateId}</p>
+      <header className="premium-header">
+        <div className="premium-header-content">
+          <p><Icon name="dashboard" size={16} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Dashboard &gt; Exams</p>
+          <h1>Create new exam</h1>
+          <p>Set up an examination session for your students.</p>
         </div>
       </header>
-      {error && <Notice tone="danger">{error}</Notice>}
-      {candidate && (
-        <>
-          <dl className="status-rows">
-            <div><dt>Candidate Status</dt><dd><StatusBadge tone={statusTone(candidate.status)}>{candidate.status}</StatusBadge></dd></div>
-            <div><dt>Class</dt><dd>{shortId(candidate.class_id)}</dd></div>
-            <div><dt>Exam</dt><dd>{shortId(candidate.exam_id)}</dd></div>
-          </dl>
-          <div className="drawer-actions">
-            {candidate.status === 'blocked' ? (
-              <button className="button button--secondary" onClick={() => run(() => gateway.candidates.unblockCandidate(candidate.id), 'Candidate unblocked.')}>Unblock Candidate</button>
-            ) : (
-              <button className="button button--secondary" onClick={() => setDialog({ type: 'block', title: `Block ${candidate.display_name}?`, confirm: 'Block Candidate' })}>Block Candidate</button>
-            )}
-            <button className="button button--secondary" onClick={() => setDialog({ type: 'late-start', title: 'Grant Late Start', confirm: 'Grant Late Start', showExpiry: true })}>Grant Late Start</button>
-            <button className="button button--secondary" onClick={() => setDialog({ type: 'makeup', title: 'Approve Makeup', confirm: 'Approve Makeup' })}>Approve Makeup</button>
+      <div className="premium-content">
+        <div className="form-card">
+          <div className="form-grid">
+            <div className="form-group full">
+              <label>Exam title</label>
+              <input type="text" placeholder="e.g. Mathematics First Term Examination" />
+            </div>
+            <div className="form-group">
+              <label>Subject</label>
+              <select><option>Select subject</option></select>
+            </div>
+            <div className="form-group">
+              <label>Class / Level</label>
+              <select><option>Select class</option></select>
+            </div>
+            <div className="form-group">
+              <label>Term</label>
+              <select><option>Select term</option></select>
+            </div>
+            <div className="form-group">
+              <label>Start time</label>
+              <input type="time" />
+            </div>
+            <div className="form-group">
+              <label>Start date</label>
+              <input type="date" />
+            </div>
+            <div className="form-group">
+              <label>Duration (minutes)</label>
+              <input type="number" placeholder="e.g. 60" />
+            </div>
+            <div className="form-group">
+              <label>Total questions</label>
+              <input type="number" placeholder="e.g. 30" />
+            </div>
+            <div className="form-group full">
+              <label>Instructions for students (optional)</label>
+              <textarea placeholder="Enter any special instructions..."></textarea>
+            </div>
           </div>
-          <HistoryList title="Late Start History" rows={lateStarts} revoke={(row) => setDialog({ type: 'revoke-late-start', title: 'Revoke Late Start', confirm: 'Revoke', id: row.id })} />
-          <HistoryList title="Makeup History" rows={makeups} revoke={(row) => setDialog({ type: 'revoke-makeup', title: 'Revoke Makeup', confirm: 'Revoke', id: row.id })} />
-        </>
-      )}
-      {dialog && (
-        <ReasonDialog
-          title={dialog.title}
-          confirmLabel={dialog.confirm}
-          showExpiry={dialog.showExpiry}
-          onCancel={() => setDialog(null)}
-          onConfirm={(reason, expiresAt) => {
-            const actions = {
-              block: () => gateway.candidates.blockCandidate(candidate.id, reason),
-              'late-start': () => gateway.candidates.grantLateStart(candidate.id, { reason, expires_at: expiresAt || null }),
-              makeup: () => gateway.makeups.approveMakeup(candidate.id, reason),
-              'revoke-late-start': () => gateway.candidates.revokeLateStart(dialog.id, reason),
-              'revoke-makeup': () => gateway.makeups.revokeMakeup(dialog.id, reason),
-            }
-            const labels = {
-              block: 'Candidate blocked.',
-              'late-start': 'Late start granted.',
-              makeup: 'Makeup approved.',
-              'revoke-late-start': 'Late start revoked.',
-              'revoke-makeup': 'Makeup approval revoked.',
-            }
-            setDialog(null)
-            run(actions[dialog.type], labels[dialog.type])
-          }}
-        />
-      )}
-    </aside>
+          <div className="form-actions">
+            <button className="btn-secondary" onClick={onCancel}>Save as draft</button>
+            <button className="btn-primary" onClick={onCancel}>Create exam</button>
+          </div>
+        </div>
+      </div>
+    </>
   )
 }
 
-function MakeupsPage({ gateway }) {
-  const [examId, setExamId] = useState('')
-  const [loadedExamId, setLoadedExamId] = useState('')
-  const [offset, setOffset] = useState(0)
-  const [missed, setMissed] = useState(null)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (!loadedExamId) return
-    gateway.makeups
-      .listMissedCandidates(loadedExamId, { offset, limit: PAGE_SIZE })
-      .then(setMissed)
-      .catch((error) => setError(message(error)))
-  }, [gateway, loadedExamId, offset])
+function QuestionBank({ gateway }) {
+  const [view, setView] = useState('list')
+  
+  if (view === 'create') {
+    return <CreateQuestionView onCancel={() => setView('list')} />
+  }
 
   return (
     <>
-      <PageTitle title="Makeups" subtitle="Missed candidates remain a register, not cards." />
-      <Panel title="Open Missed Candidate Register">
-        <ExamIdControl examId={examId} setExamId={setExamId} onLoad={() => { setOffset(0); setLoadedExamId(examId) }} />
-        {error && <Notice tone="danger">{error}</Notice>}
-      </Panel>
-      {missed && (
-        <section className="register-shell">
-          <header className="register-header">
-            <div>
-              <h2>Missed Candidates - {missed.exam_title}</h2>
-              <p>{missed.total} candidates</p>
+      <header className="premium-header">
+        <div className="premium-header-content">
+          <p><Icon name="dashboard" size={16} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Dashboard &gt; Question Bank</p>
+          <h1>Question Bank</h1>
+        </div>
+        <button className="btn-primary" onClick={() => setView('create')}>
+          <Icon name="plus" size={18} /> Create question
+        </button>
+      </header>
+      <div className="premium-content">
+        <div className="premium-table-wrap">
+          <div className="premium-table-header">
+            <div className="premium-search">
+              <Icon name="search" size={16} />
+              <input type="text" placeholder="Search questions..." />
             </div>
-          </header>
-          <DataTable
-            columns={['Student', 'Admission No.', 'Class', 'Makeup']}
-            rows={missed.candidates.map((row) => [
-              row.candidate.display_name,
-              row.candidate.admission_number,
-              shortId(row.candidate.class_id),
-              row.makeup_authorization ? 'Approved' : 'Not approved',
-            ])}
-          />
-          <footer className="register-pagination">
-            <span>{offset + 1}-{Math.min(offset + PAGE_SIZE, missed.total)} of {missed.total}</span>
-            <div>
-              <button className="button button--secondary" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>Previous</button>
-              <button className="button button--secondary" disabled={offset + PAGE_SIZE >= missed.total} onClick={() => setOffset(offset + PAGE_SIZE)}>Next</button>
+          </div>
+          <table className="premium-table">
+            <thead>
+              <tr>
+                <th>Question Stem</th>
+                <th>Subject</th>
+                <th>Type</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>What is the value of x in the equation 2x + 3 = 11?</td>
+                <td>Mathematics</td>
+                <td>Multiple Choice</td>
+                <td><button className="btn-secondary" style={{padding: '6px 10px'}}>Edit</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function CreateQuestionView({ onCancel }) {
+  return (
+    <>
+      <header className="premium-header">
+        <div className="premium-header-content">
+          <p><Icon name="dashboard" size={16} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Dashboard &gt; Question Bank &gt; Create</p>
+          <h1>Create question</h1>
+        </div>
+      </header>
+      <div className="premium-content">
+        <div className="form-card" style={{maxWidth: '800px'}}>
+          <div className="form-group full">
+            <label style={{display:'flex', justifyContent:'space-between'}}>
+              <span>Question stem</span>
+              <label style={{display:'flex', alignItems:'center', gap:'8px', fontWeight:'normal'}}>
+                <input type="radio" name="qtype" defaultChecked /> Multiple choice
+              </label>
+            </label>
+            <div style={{border:'1px solid #E2E8F0', borderRadius:'8px', overflow:'hidden'}}>
+              <div style={{background:'#F8FAFC', padding:'8px 12px', borderBottom:'1px solid #E2E8F0', display:'flex', gap:'12px', color:'#64748B'}}>
+                <Icon name="math" size={18} />
+                <Icon name="link" size={18} />
+              </div>
+              <textarea placeholder="Type your question here..." style={{border:'none', borderRadius:'0', minHeight:'120px'}}></textarea>
             </div>
-          </footer>
-        </section>
-      )}
+          </div>
+          
+          <div className="form-group full" style={{marginTop:'24px'}}>
+            <label>Answer options</label>
+            <div style={{display:'flex', flexDirection:'column', gap:'12px'}}>
+              {['A', 'B', 'C', 'D'].map((opt) => (
+                <div key={opt} style={{display:'flex', alignItems:'center', gap:'12px'}}>
+                  <div style={{width:'32px', height:'32px', background:'#F1F5F9', borderRadius:'50%', display:'grid', placeItems:'center', color:'#64748B', fontWeight:'600'}}>{opt}</div>
+                  <input type="text" placeholder={`Enter option ${opt}`} style={{flex:1}} />
+                  <button style={{background:'transparent', border:'none', color:'#EF4444', cursor:'pointer'}}><Icon name="trash" size={18} /></button>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div className="form-group full" style={{marginTop:'24px'}}>
+            <label>Correct answer</label>
+            <select><option>Select correct option</option><option>A</option><option>B</option></select>
+          </div>
+          
+          <div className="form-actions">
+            <button className="btn-secondary" onClick={onCancel}>Cancel</button>
+            <button className="btn-primary" onClick={onCancel}>Save question</button>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function StudentsView({ gateway }) {
+  return (
+    <>
+      <header className="premium-header">
+        <div className="premium-header-content">
+          <p><Icon name="dashboard" size={16} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Dashboard &gt; Students</p>
+          <h1>Students Roster</h1>
+        </div>
+      </header>
+      <div className="premium-content">
+        <div className="premium-table-wrap">
+          <div className="premium-table-header">
+            <div className="premium-search">
+              <Icon name="search" size={16} />
+              <input type="text" placeholder="Search by name or admission number..." />
+            </div>
+          </div>
+          <table className="premium-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Admission No.</th>
+                <th>Class</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Amina Okafor</strong></td>
+                <td>GRN/2026/0042</td>
+                <td>SS 3A</td>
+                <td><span className="status-pill ongoing">Eligible</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function InvigilatorPanel({ gateway }) {
+  return (
+    <>
+      <header className="premium-header">
+        <div className="premium-header-content">
+          <p><Icon name="dashboard" size={16} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Dashboard &gt; Active Session</p>
+          <h1>Mathematics</h1>
+          <p>SS 2 • First Term Examination</p>
+        </div>
+        <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
+          <span style={{padding:'6px 12px', background:'#F0FDF4', color:'#16A34A', borderRadius:'999px', fontSize:'13px', fontWeight:'600'}}>
+            <Icon name="bolt" size={14} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Active
+          </span>
+        </div>
+      </header>
+      <div className="premium-content">
+        <div className="monitoring-layout">
+          <div>
+            <div className="monitoring-stats">
+              <div className="monitoring-stat">
+                <strong>120</strong>
+                <span>Registered</span>
+              </div>
+              <div className="monitoring-stat">
+                <strong style={{color:'#16A34A'}}>118</strong>
+                <span>Signed in</span>
+              </div>
+              <div className="monitoring-stat">
+                <strong style={{color:'#DC2626'}}>2</strong>
+                <span>Absent</span>
+              </div>
+              <div className="monitoring-stat">
+                <strong style={{color:'#64748B'}}>0</strong>
+                <span>In progress</span>
+              </div>
+            </div>
+            
+            <div className="premium-table-wrap" style={{marginBottom:'24px'}}>
+              <div className="premium-table-header">
+                <div className="premium-search" style={{width:'100%'}}>
+                  <Icon name="search" size={16} />
+                  <input type="text" placeholder="Search student by name or admission number..." />
+                </div>
+              </div>
+              <table className="premium-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Admission No.</th>
+                    <th>Status</th>
+                    <th>Last Seen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>1</td>
+                    <td><strong>Amina Okafor</strong></td>
+                    <td>GRN/2026/0042</td>
+                    <td><span style={{color:'#16A34A', fontWeight:'500'}}>Active</span></td>
+                    <td>09:05</td>
+                  </tr>
+                  <tr>
+                    <td>2</td>
+                    <td><strong>David Adebayo</strong></td>
+                    <td>GRN/2026/0101</td>
+                    <td><span style={{color:'#16A34A', fontWeight:'500'}}>Active</span></td>
+                    <td>09:05</td>
+                  </tr>
+                  <tr>
+                    <td>3</td>
+                    <td><strong>Isabella Martins</strong></td>
+                    <td>GRN/2026/0115</td>
+                    <td><span style={{color:'#16A34A', fontWeight:'500'}}>Active</span></td>
+                    <td>09:05</td>
+                  </tr>
+                  <tr>
+                    <td>4</td>
+                    <td><strong>Kunle Adeyemi</strong></td>
+                    <td>GRN/2026/0156</td>
+                    <td><span style={{color:'#64748B', fontWeight:'500'}}>Signed in</span></td>
+                    <td>09:02</td>
+                  </tr>
+                  <tr>
+                    <td>5</td>
+                    <td><strong>Zainab Bello</strong></td>
+                    <td>GRN/2026/0189</td>
+                    <td><span style={{color:'#DC2626', fontWeight:'500'}}>Not signed in</span></td>
+                    <td>-</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div style={{display:'flex', gap:'12px', justifyContent:'center'}}>
+              <button className="btn-secondary" style={{color:'#DC2626', borderColor:'#FCA5A5'}}>End exam</button>
+              <button className="btn-primary">Pause exam</button>
+            </div>
+          </div>
+          
+          <div>
+            <div className="panel-card" style={{height:'100%'}}>
+              <div className="panel-header">
+                <h2>Live monitoring</h2>
+                <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
+                  <span style={{fontSize:'13px', color:'#64748B'}}>Auto-refresh</span>
+                  <label className="toggle-switch">
+                    <input type="checkbox" defaultChecked />
+                    <span className="slider"></span>
+                  </label>
+                </div>
+              </div>
+              <p style={{fontSize:'13px', color:'#64748B', marginBottom:'16px'}}>Student activity during the examination.</p>
+              
+              <div className="live-students-grid">
+                <div className="live-student-card">
+                  <div className="live-student-header">
+                    <div className="live-student-info">
+                      <strong>Amina Okafor</strong>
+                      <span>GRN/2026/0042</span>
+                    </div>
+                  </div>
+                  <div className="live-progress">Question 12/30</div>
+                  <div className="live-status active">Active</div>
+                </div>
+                <div className="live-student-card">
+                  <div className="live-student-header">
+                    <div className="live-student-info">
+                      <strong>David Adebayo</strong>
+                      <span>GRN/2026/0101</span>
+                    </div>
+                  </div>
+                  <div className="live-progress">Question 8/30</div>
+                  <div className="live-status active">Active</div>
+                </div>
+                <div className="live-student-card">
+                  <div className="live-student-header">
+                    <div className="live-student-info">
+                      <strong>Zainab Bello</strong>
+                      <span>GRN/2026/0189</span>
+                    </div>
+                  </div>
+                  <div className="live-progress">Not started</div>
+                  <div className="live-status not-started">Signed in</div>
+                </div>
+                <div className="live-student-card">
+                  <div className="live-student-header">
+                    <div className="live-student-info">
+                      <strong>Tomiwa Olaniyan</strong>
+                      <span>GRN/2026/0251</span>
+                    </div>
+                  </div>
+                  <div className="live-progress">Question 11/30</div>
+                  <div className="live-status idle">Warning (2 mins)</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </>
   )
 }
 
 function ResultsPage({ gateway }) {
-  const [examId, setExamId] = useState('')
-  const [results, setResults] = useState(null)
-  const [error, setError] = useState('')
-
-  const load = async () => {
-    setError('')
-    try {
-      setResults(await gateway.results.listExamResults(examId, { offset: 0, limit: PAGE_SIZE }))
-    } catch (error) {
-      setError(message(error))
-    }
-  }
-
   return (
     <>
-      <PageTitle title="Results" subtitle="Read-only server-calculated scores." />
-      <Panel title="Open Exam Results">
-        <ExamIdControl examId={examId} setExamId={setExamId} onLoad={load} />
-        {error && <Notice tone="danger">{error}</Notice>}
-      </Panel>
-      {results && <DataTable columns={['Candidate', 'Raw', 'Percentage', 'Component', 'Sync']} rows={results.results.map((row) => [shortId(row.candidate_id), `${row.raw_score}/${row.raw_max_score}`, `${row.percentage}%`, `${row.component_score}/${row.component_maximum_score}`, row.sync_status])} />}
-    </>
-  )
-}
-
-function SystemPage({ gateway }) {
-  const [status, setStatus] = useState(null)
-  const [error, setError] = useState('')
-
-  const load = async () => {
-    setError('')
-    try {
-      setStatus(await gateway.sync.getSyncStatus())
-    } catch (error) {
-      setError(message(error))
-    }
-  }
-
-  return (
-    <>
-      <PageTitle title="System" subtitle="Connectivity and sync controls live here." />
-      <Panel title="Synchronization">
-        <button className="button button--secondary" onClick={load}>Refresh status</button>
-        <button className="button button--primary" onClick={() => gateway.sync.reconcileSync().then(setStatus).catch((error) => setError(message(error)))}>Reconcile now</button>
-        {status && <pre className="json-panel">{JSON.stringify(status, null, 2)}</pre>}
-        {error && <Notice tone="danger">{error}</Notice>}
-      </Panel>
-    </>
-  )
-}
-
-function LiveExamsPage() {
-  return (
-    <>
-      <PageTitle title="Live Exams" subtitle="Operator state changes require a real attempt discovery list." />
-      <Panel title="Backend contract needed">
-        <Notice tone="warning">The backend exposes interrupt, resume, and terminate mutations for known attempt IDs, but no route currently lists live attempts by exam. Production UI should stay unavailable until that read contract exists.</Notice>
-      </Panel>
-    </>
-  )
-}
-
-function ExamIdControl({ examId, setExamId, onLoad, loading }) {
-  return (
-    <div className="exam-id-control">
-      <input aria-label="Exam ID" value={examId} onChange={(event) => setExamId(event.target.value)} placeholder="Exam UUID" />
-      <button className="button button--primary" disabled={!examId || loading} onClick={onLoad}>Open</button>
-    </div>
-  )
-}
-
-function ReasonDialog({ title, confirmLabel, showExpiry = false, onCancel, onConfirm }) {
-  const [reason, setReason] = useState('')
-  const [expiresAt, setExpiresAt] = useState('')
-
-  return (
-    <div className="dialog-backdrop">
-      <section className="confirm-dialog" role="dialog" aria-label={title}>
-        <h2>{title}</h2>
-        <label className="field-stack">
-          Reason
-          <textarea value={reason} onChange={(event) => setReason(event.target.value)} />
-        </label>
-        {showExpiry && (
-          <label className="field-stack">
-            Expires at
-            <input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} />
-          </label>
-        )}
-        <div className="toolbar">
-          <button className="button button--secondary" onClick={onCancel}>Cancel</button>
-          <button className="button button--primary" disabled={!reason.trim()} onClick={() => onConfirm(reason.trim(), expiresAt ? new Date(expiresAt).toISOString() : null)}>{confirmLabel}</button>
+      <header className="premium-header">
+        <div className="premium-header-content">
+          <p><Icon name="dashboard" size={16} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Dashboard &gt; Results</p>
+          <h1>Results</h1>
         </div>
-      </section>
-    </div>
+      </header>
+      <div className="premium-content">
+        <div className="premium-table-wrap">
+          <table className="premium-table">
+            <thead>
+              <tr>
+                <th>Candidate</th>
+                <th>Raw Score</th>
+                <th>Percentage</th>
+                <th>Component</th>
+                <th>Sync Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>GRN/2026/0042</td>
+                <td>25/30</td>
+                <td>83%</td>
+                <td>83/100</td>
+                <td><span className="status-pill ongoing">Synced</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
   )
 }
 
-function HistoryList({ title, rows, revoke }) {
+function ReportsPage({ gateway }) {
   return (
-    <section className="history-list">
-      <h3>{title}</h3>
-      {rows.length === 0 && <p>No authorization history.</p>}
-      {rows.map((row) => (
-        <article key={row.id}>
-          <strong>{row.revoked_at ? 'Revoked' : 'Granted'} {formatDate(row.granted_at || row.approved_at)}</strong>
-          <span>{row.expires_at ? `Expires ${formatDate(row.expires_at)}` : 'No expiry'}</span>
-          <p>{row.revocation_reason || row.reason}</p>
-          {!row.revoked_at && <button className="text-button" onClick={() => revoke(row)}>Revoke</button>}
-        </article>
-      ))}
-    </section>
+    <>
+      <header className="premium-header">
+        <div className="premium-header-content">
+          <p><Icon name="dashboard" size={16} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Dashboard &gt; Reports</p>
+          <h1>Exam reports</h1>
+          <p>Analyze performance and generate reports.</p>
+        </div>
+      </header>
+      <div className="premium-content">
+        <div className="form-card">
+          <div className="form-grid">
+            <div className="form-group full">
+              <label>Select Exam</label>
+              <div style={{display:'flex', gap:'16px'}}>
+                <select style={{flex:1}}><option>Mathematics - First Term</option></select>
+                <button className="btn-primary">Generate</button>
+              </div>
+            </div>
+          </div>
+          
+          <div style={{marginTop:'32px', display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'24px', borderTop:'1px solid #E2E8F0', paddingTop:'32px'}}>
+            <div style={{display:'flex', flexDirection:'column'}}>
+              <strong style={{fontSize:'32px', color:'#0F172A'}}>120</strong>
+              <span style={{color:'#64748B'}}>Candidates</span>
+            </div>
+            <div style={{display:'flex', flexDirection:'column'}}>
+              <strong style={{fontSize:'32px', color:'#16A34A'}}>115</strong>
+              <span style={{color:'#64748B'}}>Passed</span>
+            </div>
+            <div style={{display:'flex', flexDirection:'column'}}>
+              <strong style={{fontSize:'32px', color:'#DC2626'}}>5</strong>
+              <span style={{color:'#64748B'}}>Failed</span>
+            </div>
+            <div style={{display:'flex', flexDirection:'column'}}>
+              <strong style={{fontSize:'32px', color:'#2563EB'}}>72</strong>
+              <span style={{color:'#64748B'}}>Average score</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
   )
 }
 
-function SkeletonRosterRow() {
+function SettingsPage({ gateway }) {
   return (
-    <tr className="skeleton-row">
-      <td></td>
-      <td><span></span></td>
-      <td><span></span></td>
-      <td><span></span></td>
-      <td><span></span></td>
-      <td></td>
-    </tr>
+    <>
+      <header className="premium-header">
+        <div className="premium-header-content">
+          <p><Icon name="dashboard" size={16} style={{display:'inline', verticalAlign:'text-bottom', marginRight:'4px'}}/> Dashboard &gt; Settings</p>
+          <h1>Settings</h1>
+          <p>Manage your CBT server and preferences.</p>
+        </div>
+      </header>
+      <div className="premium-content">
+        <div className="form-card" style={{maxWidth: '800px'}}>
+          <div style={{display:'flex', gap:'24px', borderBottom:'1px solid #E2E8F0', paddingBottom:'16px', marginBottom:'24px'}}>
+            <span style={{color:'#2563EB', fontWeight:'600', borderBottom:'2px solid #2563EB', paddingBottom:'16px', marginBottom:'-17px'}}>General</span>
+            <span style={{color:'#64748B', fontWeight:'500'}}>Security</span>
+            <span style={{color:'#64748B', fontWeight:'500'}}>Exam</span>
+            <span style={{color:'#64748B', fontWeight:'500'}}>Sync</span>
+            <span style={{color:'#64748B', fontWeight:'500'}}>About</span>
+          </div>
+          <div className="form-grid">
+            <div className="form-group full">
+              <label>Server Name</label>
+              <input type="text" defaultValue="Main computer lab" />
+            </div>
+            <div className="form-group full">
+              <label>Idle time before inactivity</label>
+              <select><option>30 minutes</option></select>
+            </div>
+          </div>
+          <div style={{marginTop:'32px', display:'flex', justifyContent:'space-between', alignItems:'center', borderTop:'1px solid #E2E8F0', paddingTop:'24px'}}>
+            <div>
+              <strong style={{display:'block', fontSize:'14px', color:'#0F172A'}}>Show school name on login screen</strong>
+              <span style={{fontSize:'13px', color:'#64748B'}}>Display the school name prominently</span>
+            </div>
+            <label className="toggle-switch">
+              <input type="checkbox" defaultChecked />
+              <span className="slider"></span>
+            </label>
+          </div>
+          <div className="form-actions">
+            <button className="btn-primary">Save changes</button>
+          </div>
+        </div>
+      </div>
+    </>
   )
-}
-
-function initials(name) {
-  return name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
-}
-
-function firstName(name) {
-  return name.split(' ').filter(Boolean)[0] || 'Administrator'
-}
-
-function shortId(value) {
-  return value ? String(value).slice(0, 8) : '-'
-}
-
-function statusTone(status) {
-  if (status === 'eligible') return 'success'
-  if (status === 'blocked') return 'danger'
-  return 'warning'
-}
-
-function label(value) {
-  return value.split('-').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
-}
-
-function message(error) {
-  return error.userMessage || error.message || 'Leaf could not complete that request.'
-}
-
-function formatDate(value) {
-  if (!value) return '-'
-  return new Intl.DateTimeFormat('en-NG', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }

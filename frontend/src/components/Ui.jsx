@@ -1,14 +1,10 @@
 import { useState } from 'react'
 import { Icon } from '../lib/icons'
 
-export function LeafLogo({ inverse = false, size = 'normal' }) {
+export function WeaveLogo({ inverse = false, size = 'normal' }) {
   return (
-    <div className={`leaf-logo ${inverse ? 'inverse' : ''} ${size === 'large' ? 'large' : ''}`} aria-label="Leaf">
-      <svg className="leaf-mark" viewBox="0 0 64 64" role="img" aria-hidden="true" focusable="false">
-        <path d="M31.55 31.45C22.45 31.7 15.35 29.35 10.7 24.65C5.1 18.95 5.85 9.2 6.45 6.35C9.3 5.75 19.05 5 24.75 10.6C29.45 15.25 31.8 22.35 31.55 31.45Z" />
-        <path d="M32.45 32.55C41.55 32.3 48.65 34.65 53.3 39.35C58.9 45.05 58.15 54.8 57.55 57.65C54.7 58.25 44.95 59 39.25 53.4C34.55 48.75 32.2 41.65 32.45 32.55Z" />
-      </svg>
-      <strong>Leaf</strong>
+    <div className={`leaf-logo ${inverse ? 'inverse' : ''} ${size === 'large' ? 'large' : ''}`} aria-label="Weave">
+      <strong><span style={{color: '#2563EB'}}>W</span> Weave</strong> CBT
     </div>
   )
 }

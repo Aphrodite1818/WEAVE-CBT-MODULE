@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useReducer, useState } from 'react'
-import { FormField, LeafLogo, Notice, TenantIdentity } from './components/ui'
+import { FormField, WeaveLogo, Notice, TenantIdentity } from './components/ui'
 import { AdminWorkspace } from './features/admin/AdminWorkspace'
 import { AuthPage } from './features/auth/AuthPage'
 import { StudentWorkspace } from './features/student/StudentWorkspace'
@@ -19,7 +19,7 @@ export default function App() {
       .then((status) => dispatch({ type: 'bootSuccess', status }))
       .catch((error) => {
         if (error.name !== 'AbortError') {
-          dispatch({ type: 'bootFailure', message: error.userMessage || 'Leaf could not reach the local backend.' })
+          dispatch({ type: 'bootFailure', message: error.userMessage || 'Weave could not reach the local backend.' })
         }
       })
     return () => controller.abort()
@@ -105,7 +105,7 @@ export default function App() {
             leafGateway.installation
               .getInstallationStatus()
               .then((status) => dispatch({ type: 'bootSuccess', status }))
-              .catch((error) => dispatch({ type: 'bootFailure', message: error.userMessage || 'Leaf could not reach the local backend.' }))
+              .catch((error) => dispatch({ type: 'bootFailure', message: error.userMessage || 'Weave could not reach the local backend.' }))
           }}
         />
       )}
@@ -162,8 +162,8 @@ function BootScreen({ error, retry }) {
   return (
     <main className="auth-shell">
       <section className="submission-card">
-        <LeafLogo />
-        <h1>Starting Leaf</h1>
+        <WeaveLogo />
+        <h1>Starting Weave</h1>
         <p>Checking the local CBT backend and installation state.</p>
         {error && <Notice tone="danger">{error}</Notice>}
         {error && <button className="button button--primary" onClick={retry}>Try again</button>}
@@ -179,13 +179,13 @@ function SetupScreen({ tenant, error, loading, onSubmit, onContinue }) {
   return (
     <main className="auth-shell">
       <div className="auth-shell__brand">
-        <LeafLogo />
+        <WeaveLogo />
         <TenantIdentity tenant={tenant} />
       </div>
       <div className="auth-shell__content auth-shell__content--centered">
         <section className="signin-card setup-card">
           <div className="signin-card__header">
-            <h1>Pair Leaf</h1>
+            <h1>Pair Weave</h1>
             <p>Connect this CBT node to its Weave school account.</p>
           </div>
           <form
@@ -200,7 +200,7 @@ function SetupScreen({ tenant, error, loading, onSubmit, onContinue }) {
             <Notice>If this CBT backend is already paired, continue to sign in.</Notice>
             {error && <Notice tone="danger">{error}</Notice>}
             <button className="button button--primary" type="submit" disabled={loading}>
-              {loading ? 'Pairing...' : 'Pair Leaf'}
+              {loading ? 'Pairing...' : 'Pair Weave'}
             </button>
             <button className="button button--secondary" type="button" onClick={onContinue}>
               Continue to sign in
