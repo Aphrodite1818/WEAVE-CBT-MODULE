@@ -1,4 +1,4 @@
-"""Local academic projections synchronized from Weave Cloud v3.
+"""Local academic projections synchronized from Weave Cloud v5.
 
 These rows are read-only projections from Weave. Their primary keys are the
 Weave UUIDs supplied by the synchronization contract. Local CBT-owned domains
@@ -110,10 +110,18 @@ class AcademicLevel(WeaveProjectionMixin, Base):
         String(CATEGORY_MAX_LENGTH), nullable=False, index=True
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
+    specialization_required_from_term_position: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
 
     __table_args__ = (
         CheckConstraint(
             "position >= 0", name="ck_academic_levels_position_nonnegative"
+        ),
+        CheckConstraint(
+            "specialization_required_from_term_position IS NULL OR "
+            "specialization_required_from_term_position BETWEEN 1 AND 3",
+            name="ck_academic_levels_specialization_term_position",
         ),
         Index("ix_academic_levels_category_position", "category", "position"),
     )
@@ -274,45 +282,42 @@ class CurriculumSubject(WeaveProjectionMixin, Base):
     )
 
 
-class SubjectOffering(WeaveProjectionMixin, Base):
-    __tablename__ = "subject_offerings"
+class CurriculumSubjectDepartment(WeaveProjectionMixin, Base):
+    """Department applicability for one synchronized curriculum subject.
+
+    No live rows for a curriculum subject means the subject is general. One or
+    more live rows make it specialization-scoped to the referenced level-specific
+    department identities.
+    """
+
+    __tablename__ = "curriculum_subject_departments"
 
     curriculum_subject_id: Mapped[UUID] = mapped_column(
         ForeignKey("curriculum_subjects.id", ondelete="RESTRICT"),
         nullable=False,
-        index=True,
     )
-    academic_term_id: Mapped[UUID] = mapped_column(
-        ForeignKey("academic_terms.id", ondelete="RESTRICT"), nullable=False, index=True
-    )
-    department_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("departments.id", ondelete="RESTRICT"), nullable=True, index=True
+    department_id: Mapped[UUID] = mapped_column(
+        ForeignKey("departments.id", ondelete="RESTRICT"),
+        nullable=False,
     )
 
     __table_args__ = (
         Index(
-            "uq_subject_offerings_general",
+            "uq_curriculum_subject_departments_current_scope",
             "curriculum_subject_id",
-            "academic_term_id",
-            unique=True,
-            postgresql_where=text(
-                "department_id IS NULL AND source_deleted_at IS NULL"
-            ),
-        ),
-        Index(
-            "uq_subject_offerings_department",
-            "curriculum_subject_id",
-            "academic_term_id",
             "department_id",
             unique=True,
-            postgresql_where=text(
-                "department_id IS NOT NULL AND source_deleted_at IS NULL"
-            ),
+            postgresql_where=text("source_deleted_at IS NULL"),
         ),
         Index(
-            "ix_subject_offerings_term_subject",
-            "academic_term_id",
+            "ix_curriculum_subject_departments_live_subject",
             "curriculum_subject_id",
+            postgresql_where=text("source_deleted_at IS NULL"),
+        ),
+        Index(
+            "ix_curriculum_subject_departments_live_department",
+            "department_id",
+            postgresql_where=text("source_deleted_at IS NULL"),
         ),
     )
 
@@ -415,30 +420,24 @@ class TeacherAssignment(WeaveProjectionMixin, Base):
         nullable=False,
         index=True,
     )
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("true"), index=True
-    )
     effective_from: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     effective_to: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
 
     __table_args__ = (
         Index(
-            "uq_teacher_assignments_active_scope",
-            "class_id",
-            "curriculum_subject_id",
-            unique=True,
-            postgresql_where=text("is_active = true AND source_deleted_at IS NULL"),
-        ),
-        Index(
-            "ix_teacher_assignments_live_teacher",
+            "ix_teacher_assignments_live_teacher_effective",
             "teacher_membership_id",
-            postgresql_where=text("is_active = true AND source_deleted_at IS NULL"),
+            "effective_from",
+            "effective_to",
+            postgresql_where=text("source_deleted_at IS NULL"),
         ),
         Index(
-            "ix_teacher_assignments_live_class_subject",
+            "ix_teacher_assignments_live_scope_effective",
             "class_id",
             "curriculum_subject_id",
-            postgresql_where=text("is_active = true AND source_deleted_at IS NULL"),
+            "effective_from",
+            "effective_to",
+            postgresql_where=text("source_deleted_at IS NULL"),
         ),
         CheckConstraint(
             "effective_to IS NULL OR effective_to >= effective_from",
