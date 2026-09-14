@@ -9,7 +9,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, model_validator
 
-SYNC_SCHEMA_VERSION = 3
+SYNC_SCHEMA_VERSION = 5
 
 
 class WeavePairingRequest(BaseModel):
@@ -99,6 +99,7 @@ class WeaveAcademicLevelSnapshot(SyncContractBase):
     name: str
     category: str
     position: int
+    specialization_required_from_term_position : int | None = None 
 
 
 class WeaveArmLabelSnapshot(SyncContractBase):
@@ -147,11 +148,11 @@ class WeaveCurriculumSubjectSnapshot(SyncContractBase):
     is_active: bool
 
 
-class WeaveSubjectOfferingSnapshot(SyncContractBase):
+class WeaveCurriculumSubjectDepartmentSnapshot(SyncContractBase):
     id: UUID
     curriculum_subject_id: UUID
-    academic_term_id: UUID
-    department_id: UUID | None = None
+    department_id: UUID
+
 
 
 class WeaveAssessmentSchemeSnapshot(SyncContractBase):
@@ -190,7 +191,6 @@ class WeaveTeacherAssignmentSnapshot(SyncContractBase):
     teacher_membership_id: UUID
     class_id: UUID
     curriculum_subject_id: UUID
-    is_active: bool
     effective_from: date
     effective_to: date | None = None
 
@@ -222,7 +222,7 @@ class WeaveAcademicBootstrap(SyncContractBase):
     subjects: list[WeaveSubjectSnapshot]
     curricula: list[WeaveCurriculumSnapshot]
     curriculum_subjects: list[WeaveCurriculumSubjectSnapshot]
-    offerings: list[WeaveSubjectOfferingSnapshot]
+    offerings: list[WeaveCurriculumSubjectDepartmentSnapshot]
     assessment_schemes: list[WeaveAssessmentSchemeSnapshot]
     assessment_components: list[WeaveAssessmentComponentSnapshot]
     admins: list[WeaveAdminSnapshot]
@@ -250,7 +250,7 @@ WeaveSyncEntityType = Literal[
     "subject",
     "curriculum",
     "curriculum_subject",
-    "subject_offering",
+    "curriculum_subject_department",
     "assessment_scheme",
     "assessment_component",
     "admin",
