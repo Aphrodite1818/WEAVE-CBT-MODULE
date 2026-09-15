@@ -1,23 +1,273 @@
-.weave-login-page { min-height: 100vh; display: flex; flex-direction: column; padding: clamp(18px, 3vw, 42px); background: radial-gradient(circle at 13% 25%, rgb(var(--color-primary-soft)), transparent 36%), #fbfdff; color: rgb(var(--color-text)); }
-.weave-login-header { width: min(1180px, 100%); margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
-.weave-login-header button { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; color: rgb(var(--color-primary)); font-weight: 700; cursor: pointer; }
-.weave-login-header > div { display: flex; align-items: center; gap: 20px; }
-.weave-login-school-logo { max-width: 130px; max-height: 44px; object-fit: contain; }
-.weave-login-layout { width: min(1180px, 100%); margin: auto; display: grid; grid-template-columns: 1.1fr .9fr; gap: clamp(30px, 5vw, 75px); align-items: center; }
-.weave-login-intro { min-width: 0; animation: setup-enter .5s ease-out both; }
-.weave-login-intro > span { color: rgb(var(--color-primary)); letter-spacing: .25em; font-size: 12px; font-weight: 800; }
-.weave-login-intro h1 { margin: 16px 0 10px; font-size: clamp(44px, 5vw, 66px); letter-spacing: -.04em; }
-.weave-login-intro p { font-size: 18px; }
-.weave-login-intro img { width: min(100%, 550px); max-height: 44vh; object-fit: cover; object-position: center 40%; border-radius: 28px; box-shadow: 0 20px 50px rgb(var(--color-primary) / .1); }
-.weave-login-card { padding: clamp(30px, 4vw, 50px); background: white; border: 1px solid rgb(var(--color-border)); border-radius: 25px; box-shadow: 0 24px 65px rgb(var(--color-primary) / .1); }
-.weave-login-card__icon { width: 62px; height: 62px; display: grid; place-items: center; margin-bottom: 20px; border-radius: 50%; background: rgb(var(--color-primary-soft)); color: rgb(var(--color-primary)); }
-.weave-login-card h2 { font-size: 28px; margin-bottom: 6px; }
-.weave-login-card p { margin-bottom: 27px; }
-.weave-login-card form { display: grid; gap: 12px; }
-.weave-login-card label { font-size: 14px; font-weight: 750; }
-.weave-login-card input { width: 100%; min-height: 54px; padding: 0 16px; border: 1px solid rgb(var(--color-border)); border-radius: 12px; background: rgb(var(--color-surface)); }
-.weave-login-card input:focus { border-color: rgb(var(--color-focus-ring)); outline: 3px solid rgb(var(--color-focus-ring) / .12); }
-.weave-login-card .setup-primary { margin-top: 10px; }
-.weave-login-footer { width: min(1180px, 100%); margin: 25px auto 0; color: rgb(var(--color-text-muted)); font-size: 12px; }
-@media (max-width: 760px) { .weave-login-layout { grid-template-columns: 1fr; padding: 45px 0; } .weave-login-intro img { display: none; } .weave-login-intro h1 { font-size: 40px; } }
-@media (prefers-reduced-motion: reduce) { .weave-login-page * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+.weave-login-page {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 26px clamp(28px, 4vw, 68px) 18px;
+  background:
+    radial-gradient(ellipse at 12% 12%, rgb(var(--color-primary-soft)) 0 17%, transparent 43%),
+    radial-gradient(ellipse at 93% 28%, rgb(var(--color-accent-soft)) 0 14%, transparent 39%),
+    linear-gradient(180deg, #fff 0%, rgb(var(--color-background)) 100%);
+  color: rgb(var(--color-text));
+}
+.weave-login-page::before,
+.weave-login-page::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  background: rgb(var(--color-primary-soft) / .5);
+  border-radius: 50%;
+}
+.weave-login-page::before { width: 520px; height: 330px; left: -260px; top: 160px; transform: rotate(18deg); }
+.weave-login-page::after { width: 540px; height: 340px; right: -270px; top: 70px; transform: rotate(-14deg); }
+.weave-login-header,
+.weave-login-content,
+.weave-login-footer {
+  width: min(1400px, 100%);
+  margin-inline: auto;
+  position: relative;
+  z-index: 2;
+}
+.weave-login-header { display: flex; align-items: flex-start; justify-content: space-between; }
+.weave-login-brand { display: grid; gap: 2px; }
+.weave-login-brand small { margin-left: 3px; color: rgb(var(--color-text-muted)); font-size: 12px; }
+.weave-login-content { flex: 1; display: grid; align-content: center; padding: 18px 0 8px; }
+.weave-login-back {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 14px 3px;
+  border: 0;
+  background: transparent;
+  color: rgb(var(--color-primary));
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.weave-login-back:hover { text-decoration: underline; text-underline-offset: 3px; }
+.weave-login-layout {
+  min-height: 590px;
+  display: grid;
+  grid-template-columns: minmax(360px, 465px) minmax(420px, 1fr);
+  gap: clamp(34px, 6vw, 92px);
+  align-items: center;
+}
+.weave-login-card {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  display: grid;
+  justify-items: center;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 28px;
+  background: rgb(var(--color-surface) / .95);
+  padding: 29px 35px 27px;
+  box-shadow: 0 24px 70px rgb(var(--color-primary) / .10);
+  backdrop-filter: blur(18px);
+  animation: login-card-enter .5s cubic-bezier(.2,.8,.2,1) both;
+}
+.weave-login-card__icon {
+  width: 66px;
+  height: 66px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 13px;
+  border-radius: 23px;
+  background: linear-gradient(145deg, rgb(var(--color-primary-soft)), rgb(var(--color-surface)));
+  color: rgb(var(--color-primary));
+  box-shadow: inset 0 0 0 1px rgb(var(--color-primary) / .08);
+}
+.weave-login-card h1 {
+  margin: 0 0 4px;
+  font-size: clamp(29px, 2.5vw, 35px);
+  font-weight: 780;
+  letter-spacing: -.045em;
+}
+.weave-login-card > p { margin: 0 0 27px; color: rgb(var(--color-text-soft)); font-size: 16px; }
+.weave-login-card form { width: 100%; display: grid; gap: 15px; }
+.login-field { display: grid; gap: 7px; color: rgb(var(--color-text)); font-size: 13px; font-weight: 750; }
+.login-field__control {
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgb(var(--color-border-strong));
+  border-radius: 13px;
+  padding: 0 13px;
+  background: rgb(var(--color-surface) / .96);
+  color: rgb(var(--color-primary-deep));
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.login-field__control:focus-within {
+  border-color: rgb(var(--color-focus-ring));
+  box-shadow: 0 0 0 4px rgb(var(--color-focus-ring) / .09);
+  transform: translateY(-1px);
+}
+.login-field input {
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: rgb(var(--color-text));
+  padding: 0;
+}
+.login-field input::placeholder { color: rgb(var(--color-text-faint)); }
+.login-field__reveal {
+  width: 31px;
+  height: 31px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid rgb(var(--color-border));
+  background: transparent;
+  color: rgb(var(--color-primary));
+  cursor: pointer;
+  font-size: 15px;
+}
+.weave-login-submit {
+  min-height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 5px;
+  border: 0;
+  border-radius: 13px;
+  background: linear-gradient(135deg, rgb(var(--color-primary)), rgb(var(--color-primary-hover)));
+  color: rgb(var(--color-on-primary));
+  font-weight: 760;
+  cursor: pointer;
+  box-shadow: 0 13px 25px rgb(var(--color-primary) / .22);
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.weave-login-submit:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 17px 32px rgb(var(--color-primary) / .28); }
+.weave-login-submit:disabled { cursor: not-allowed; opacity: .55; }
+.weave-login-trust {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 24px;
+  color: rgb(var(--color-text-muted));
+  font-size: 12px;
+}
+.weave-login-trust .pictogram { color: rgb(var(--color-primary)); }
+.weave-login-art {
+  position: relative;
+  min-height: 590px;
+  overflow: hidden;
+  align-self: stretch;
+  border-radius: 50px 50px 24px 24px;
+  isolation: isolate;
+}
+.weave-login-art__wash {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(circle at 68% 24%, rgb(var(--color-primary-soft)) 0 15%, transparent 48%),
+    linear-gradient(180deg, rgb(var(--color-surface) / .15), rgb(var(--color-primary-soft) / .42));
+}
+.weave-login-art img {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 45%;
+  border-radius: inherit;
+  opacity: .96;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 9%, #000 93%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 9%, #000 93%, transparent 100%);
+}
+.weave-login-page--staff .weave-login-art img { object-position: 58% 45%; filter: saturate(.88) brightness(1.035); }
+.weave-login-motto { position: absolute; z-index: 3; right: 8%; top: 23%; width: 190px; }
+.weave-login-art__staff-badge {
+  position: absolute;
+  z-index: 4;
+  left: 8%;
+  bottom: 12%;
+  max-width: 235px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 20px;
+  padding: 13px 16px;
+  background: rgb(var(--color-surface) / .88);
+  color: rgb(var(--color-primary));
+  box-shadow: var(--product-shadow-soft);
+  backdrop-filter: blur(14px);
+}
+.weave-login-art__staff-badge span { color: rgb(var(--color-text-soft)); font-size: 12px; font-weight: 700; line-height: 1.3; }
+.weave-login-benefits {
+  width: min(920px, calc(100% - 30px));
+  justify-self: center;
+  margin: -26px 0 0;
+  position: relative;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 22px;
+  padding: 12px 14px;
+  background: rgb(var(--color-surface) / .93);
+  box-shadow: 0 16px 44px rgb(var(--color-primary) / .07);
+  backdrop-filter: blur(18px);
+}
+.weave-login-benefits > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 9px;
+  padding: 3px 8px;
+}
+.weave-login-benefits > div > span {
+  grid-row: 1 / 3;
+  width: 43px;
+  height: 43px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  background: rgb(var(--color-primary-soft));
+  color: rgb(var(--color-primary));
+}
+.weave-login-benefits strong { align-self: end; font-size: 11px; }
+.weave-login-benefits small { align-self: start; margin-top: 2px; color: rgb(var(--color-text-muted)); font-size: 9px; line-height: 1.25; }
+.weave-login-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 11px;
+  color: rgb(var(--color-text-muted));
+  font-size: 10px;
+}
+.weave-login-footer span { display: inline-flex; align-items: center; gap: 9px; }
+.weave-login-footer b { color: rgb(var(--color-primary-deep)); }
+.weave-login-footer i { width: 28px; height: 2px; border-radius: 999px; background: rgb(var(--color-primary)); }
+
+@keyframes login-card-enter { from { opacity: 0; transform: translateY(14px) scale(.992); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+@media (max-width: 900px) {
+  .weave-login-layout { grid-template-columns: minmax(320px, 500px); justify-content: center; min-height: auto; }
+  .weave-login-art { display: none; }
+  .weave-login-benefits { margin-top: 24px; grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 620px) {
+  .weave-login-page { padding: 18px 16px; }
+  .weave-login-brand small { display: none; }
+  .weave-login-content { padding-top: 26px; }
+  .weave-login-card { padding: 26px 20px 24px; }
+  .weave-login-benefits { width: 100%; grid-template-columns: 1fr 1fr; }
+  .weave-login-footer span:last-child { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .weave-login-page *, .weave-login-page *::before, .weave-login-page *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
