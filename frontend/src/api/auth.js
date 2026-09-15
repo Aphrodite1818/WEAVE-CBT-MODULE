@@ -10,11 +10,11 @@ export async function loginStaff({ email, password }) {
   return { type: 'staff', role: session.actor.role, name: session.actor.display_name, actor: session.actor }
 }
 
-export async function loginStudent({ admissionNumber, pin }) {
+export async function loginStudent({ admissionNumber, password }) {
   const session = await weaveRequest('/student/auth/login', {
     method: 'POST',
     staffAuth: false,
-    body: { admission_number: admissionNumber, pin },
+    body: { admission_number: admissionNumber, password },
   })
   return { type: 'student', name: session.display_name, ...session }
 }
