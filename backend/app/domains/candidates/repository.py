@@ -1,8 +1,8 @@
-"""Persistence operations for examination candidates and CBT credentials.
+"""Persistence operations for examination candidates and candidate policy data.
 
 Repositories only perform database reads/writes and row locking. Roster
-eligibility, credential verification, late-start policy, lifecycle decisions,
-and transaction boundaries belong to services/workers.
+eligibility, late-start policy, makeup policy, lifecycle decisions, and
+transaction boundaries belong to services/workers.
 """
 
 from __future__ import annotations
@@ -20,14 +20,13 @@ from app.domains.candidates.models import (
     CandidateMakeupAuthorization,
     CandidateStatus,
     ExamCandidate,
-    StudentCBTCredential,
 )
 from app.domains.exams.models import Exam
 from app.domains.academics.models import Curriculum, CurriculumSubject
 
 
 class CandidateRepository:
-    """Provide persistence operations for rosters, credentials and late starts."""
+    """Provide persistence operations for rosters and candidate policy state."""
 
     @staticmethod
     async def add_candidate(
@@ -205,68 +204,6 @@ class CandidateRepository:
         return int((await db.execute(query)).scalar_one() or 0)
 
     @staticmethod
-    async def add_credential(
-        db: AsyncSession,
-        credential: StudentCBTCredential,
-    ) -> StudentCBTCredential:
-        db.add(credential)
-        await db.flush()
-        return credential
-
-    @staticmethod
-    async def get_credential_by_id(
-        db: AsyncSession,
-        credential_id: UUID,
-        *,
-        lock: bool = False,
-    ) -> StudentCBTCredential | None:
-        query = select(StudentCBTCredential).where(
-            StudentCBTCredential.id == credential_id
-        )
-        if lock:
-            query = query.with_for_update(of=StudentCBTCredential)
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def get_credential_by_student_id(
-        db: AsyncSession,
-        student_id: UUID,
-        *,
-        lock: bool = False,
-    ) -> StudentCBTCredential | None:
-        query = select(StudentCBTCredential).where(
-            StudentCBTCredential.student_id == student_id
-        )
-        if lock:
-            query = query.with_for_update(of=StudentCBTCredential)
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def get_active_credential_by_student_id(
-        db: AsyncSession,
-        student_id: UUID,
-        *,
-        lock: bool = False,
-    ) -> StudentCBTCredential | None:
-        query = select(StudentCBTCredential).where(
-            StudentCBTCredential.student_id == student_id,
-            StudentCBTCredential.is_active.is_(True),
-            StudentCBTCredential.source_deleted_at.is_(None),
-        )
-        if lock:
-            query = query.with_for_update(of=StudentCBTCredential)
-        return (await db.execute(query)).scalar_one_or_none()
-
-    @staticmethod
-    async def save_credential(
-        db: AsyncSession,
-        credential: StudentCBTCredential,
-    ) -> StudentCBTCredential:
-        db.add(credential)
-        await db.flush()
-        return credential
-
-    @staticmethod
     async def add_late_start_authorization(
         db: AsyncSession,
         authorization: CandidateLateStartAuthorization,
@@ -342,10 +279,6 @@ class CandidateRepository:
         await db.flush()
         return authorization
 
-    # ========================== #
-    # MISSED EXAM DETECTION
-    # ========================== #
-
     @staticmethod
     async def list_missed_candidates_for_exam(
         db: AsyncSession,
@@ -354,22 +287,9 @@ class CandidateRepository:
         offset: int = 0,
         limit: int = 100,
     ) -> list[ExamCandidate]:
-        """
-        Return academically eligible candidates who never created an attempt
-        for this examination.
-
-        The service layer is responsible for ensuring the examination is
-        CLOSED before this query is treated as a confirmed missed-exam list.
-
-        A candidate who has ANY ExamAttempt is not considered "missed" here.
-        Interrupted, terminated, submitted, etc. are different recovery
-        scenarios.
-        """
-
         has_attempt = exists(
             select(ExamAttempt.id).where(ExamAttempt.candidate_id == ExamCandidate.id)
         )
-
         query = (
             select(ExamCandidate)
             .where(
@@ -385,7 +305,6 @@ class CandidateRepository:
             .offset(offset)
             .limit(limit)
         )
-
         return list((await db.execute(query)).scalars().all())
 
     @staticmethod
@@ -396,7 +315,6 @@ class CandidateRepository:
         has_attempt = exists(
             select(ExamAttempt.id).where(ExamAttempt.candidate_id == ExamCandidate.id)
         )
-
         query = (
             select(func.count())
             .select_from(ExamCandidate)
@@ -406,12 +324,7 @@ class CandidateRepository:
                 ~has_attempt,
             )
         )
-
         return int((await db.execute(query)).scalar_one() or 0)
-
-    # ========================== #
-    # MAKEUP AUTHORIZATION
-    # ========================== #
 
     @staticmethod
     async def add_makeup_authorization(
@@ -441,10 +354,8 @@ class CandidateRepository:
         query = select(CandidateMakeupAuthorization).where(
             CandidateMakeupAuthorization.id == authorization_id
         )
-
         if lock:
             query = query.with_for_update(of=CandidateMakeupAuthorization)
-
         return (await db.execute(query)).scalar_one_or_none()
 
     @staticmethod
@@ -454,16 +365,6 @@ class CandidateRepository:
         *,
         lock: bool = False,
     ) -> CandidateMakeupAuthorization | None:
-        """
-        Return the candidate's currently usable/unrevoked authorization.
-
-        `consumed_at` is deliberately NOT filtered here.
-
-        A consumed authorization still represents the one makeup approval
-        already used by this candidate and therefore prevents another active
-        approval from being created.
-        """
-
         query = (
             select(CandidateMakeupAuthorization)
             .where(
@@ -476,10 +377,8 @@ class CandidateRepository:
             )
             .limit(1)
         )
-
         if lock:
             query = query.with_for_update(of=CandidateMakeupAuthorization)
-
         return (await db.execute(query)).scalar_one_or_none()
 
     @staticmethod
@@ -495,7 +394,6 @@ class CandidateRepository:
                 CandidateMakeupAuthorization.id.asc(),
             )
         )
-
         return list(result.scalars().all())
 
     @staticmethod
@@ -504,10 +402,8 @@ class CandidateRepository:
         candidate_ids: Sequence[UUID],
     ) -> list[CandidateMakeupAuthorization]:
         ids = list(dict.fromkeys(candidate_ids))
-
         if not ids:
             return []
-
         result = await db.execute(
             select(CandidateMakeupAuthorization)
             .where(
@@ -519,7 +415,6 @@ class CandidateRepository:
                 CandidateMakeupAuthorization.approved_at.asc(),
             )
         )
-
         return list(result.scalars().all())
 
     @staticmethod
@@ -530,24 +425,6 @@ class CandidateRepository:
         session_id: UUID,
         term_id: UUID,
     ) -> list[tuple[CandidateMakeupAuthorization, ExamCandidate, Exam]]:
-        """
-        Return a student's currently pending makeup examinations in the same
-        order in which the original examinations were scheduled.
-
-        Pending means:
-
-            - makeup authorization exists;
-            - authorization has not been revoked;
-            - authorization has not been consumed;
-            - candidate belongs to the supplied student;
-            - original exam belongs to the supplied session and term.
-
-        The student does not choose which makeup to write.
-
-        The first row returned by this query is therefore the next makeup
-        examination that may eventually be offered to the student.
-        """
-
         result = await db.execute(
             select(
                 CandidateMakeupAuthorization,
@@ -558,10 +435,7 @@ class CandidateRepository:
                 ExamCandidate,
                 ExamCandidate.id == CandidateMakeupAuthorization.candidate_id,
             )
-            .join(
-                Exam,
-                Exam.id == ExamCandidate.exam_id,
-            )
+            .join(Exam, Exam.id == ExamCandidate.exam_id)
             .where(
                 ExamCandidate.student_id == student_id,
                 CandidateMakeupAuthorization.revoked_at.is_(None),
@@ -575,7 +449,6 @@ class CandidateRepository:
                 ExamCandidate.id.asc(),
             )
         )
-
         return list(result.tuples().all())
 
     @staticmethod
@@ -593,10 +466,7 @@ class CandidateRepository:
                 ExamCandidate,
                 ExamCandidate.id == CandidateMakeupAuthorization.candidate_id,
             )
-            .join(
-                Exam,
-                Exam.id == ExamCandidate.exam_id,
-            )
+            .join(Exam, Exam.id == ExamCandidate.exam_id)
             .where(
                 ExamCandidate.student_id == student_id,
                 CandidateMakeupAuthorization.revoked_at.is_(None),
@@ -605,7 +475,6 @@ class CandidateRepository:
                 Exam.term_id == term_id,
             )
         )
-
         return int((await db.execute(query)).scalar_one() or 0)
 
     @staticmethod
@@ -634,10 +503,7 @@ class CandidateRepository:
                 ExamCandidate,
                 ExamCandidate.id == CandidateMakeupAuthorization.candidate_id,
             )
-            .join(
-                Exam,
-                Exam.id == ExamCandidate.exam_id,
-            )
+            .join(Exam, Exam.id == ExamCandidate.exam_id)
             .join(
                 CurriculumSubject,
                 CurriculumSubject.id == Exam.curriculum_subject_id,
@@ -659,5 +525,4 @@ class CandidateRepository:
                 ExamCandidate.id.asc(),
             )
         )
-
         return list(result.tuples().all())
