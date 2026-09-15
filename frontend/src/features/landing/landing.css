@@ -68,15 +68,42 @@
   height: clamp(76px, 9vw, 104px);
   flex: 0 0 auto;
   overflow: visible;
+  transform-origin: center;
+  animation: landing-mark-weave 3.6s ease-in-out infinite;
 }
 
 .landing-mark path {
   fill: none !important;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.landing-mark path:nth-of-type(2) {
+  stroke-dasharray: 460;
+  stroke-dashoffset: 460;
+  animation: landing-thread-draw 1.35s .12s ease-out both, landing-thread-shimmer 2.8s 1.5s ease-in-out infinite;
+}
+
+.landing-mark path:nth-of-type(4) {
+  stroke-dasharray: 460;
+  stroke-dashoffset: 460;
+  animation: landing-thread-draw 1.35s .34s ease-out both, landing-thread-shimmer 2.8s 1.72s ease-in-out infinite reverse;
+}
+
+.landing-mark path:nth-of-type(1),
+.landing-mark path:nth-of-type(3) {
+  animation: landing-thread-halo 2.8s ease-in-out infinite;
 }
 
 .landing-wordmark {
   position: relative;
   justify-content: center;
+  gap: 0;
+}
+
+.landing-wordmark.weave-logo > span {
+  border-left: 0;
+  padding-left: 0;
 }
 
 .landing-wordmark .weave-logo__word,
@@ -88,17 +115,6 @@
   opacity: 0;
   animation: landing-type-char .01s linear forwards;
   animation-delay: var(--typing-delay);
-}
-
-.landing-typewriter__caret {
-  display: inline-block;
-  width: 2px;
-  height: .92em;
-  margin-left: 2px;
-  transform: translateY(.12em);
-  background: rgb(var(--color-primary));
-  opacity: .85;
-  animation: landing-caret 1s steps(1, end) infinite;
 }
 
 .landing-enter {
@@ -114,8 +130,25 @@
   to { opacity: 1; }
 }
 
-@keyframes landing-caret {
-  50% { opacity: 0; }
+@keyframes landing-mark-weave {
+  0%, 100% { transform: translateY(0) rotate(0deg) scale(1); }
+  25% { transform: translateY(-5px) rotate(-3deg) scale(1.035); }
+  50% { transform: translateY(0) rotate(0deg) scale(1); }
+  75% { transform: translateY(-5px) rotate(3deg) scale(1.035); }
+}
+
+@keyframes landing-thread-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes landing-thread-shimmer {
+  0%, 100% { stroke-width: 58; filter: saturate(1); opacity: 1; }
+  50% { stroke-width: 66; filter: saturate(1.2); opacity: .92; }
+}
+
+@keyframes landing-thread-halo {
+  0%, 100% { opacity: .55; }
+  50% { opacity: .9; }
 }
 
 @media (max-width: 640px) {
@@ -144,7 +177,8 @@
     animation: none !important;
   }
 
-  .landing-typewriter__caret {
-    display: none;
+  .landing-mark,
+  .landing-mark path {
+    animation: none !important;
   }
 }

@@ -33,7 +33,7 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
           <h1>Submission received</h1>
           <p>Your answers have been received by the school server.<br/>You can no longer change your answers.</p>
           {submitted && <Metric label="Score" value={`${submitted.raw_score} / ${submitted.raw_max_score}`} helper={`${submitted.percentage}%`} />}
-          <button className="premium-btn-primary" onClick={returnToSignIn} style={{width: '100%', marginTop: '16px'}}>Return to sign in</button>
+          <button className="premium-btn-primary" onClick={returnToSignIn} style={{width: '100%', marginTop: '16px'}}>Logout</button>
         </section>
       </main>
     )
@@ -51,6 +51,7 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
                 <span>Preparing questions</span>
               </div>
             </div>
+            <button className="premium-student-logout" type="button" onClick={returnToSignIn}>Logout</button>
           </header>
           <section className="premium-lobby-card">
             <h2>Loading exam</h2>
@@ -74,6 +75,7 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
           <div className="premium-exam-header-right">
             <div className="student-avatar" style={{fontSize: '10px'}}>(AD)</div>
             <strong style={{fontSize: '14px', color: '#0F172A'}}>{candidateName}</strong>
+            <button className="premium-student-logout" type="button" onClick={returnToSignIn}>Logout</button>
           </div>
         </header>
         <div className="premium-exam-layout">
@@ -169,8 +171,9 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
           disabled={unavailable}
           onClick={() => startAttempt({ gateway, setAttempt, dispatch, setAttemptError })}
         >
-          {noExam ? 'Waiting for an exam...' : waiting ? 'Waiting for activation...' : 'Start Exam →'}
+          {noExam ? 'Waiting for an exam...' : waiting ? 'Waiting for activation...' : 'Start Exam ->'}
         </button>
+        <button className="premium-btn-secondary" type="button" onClick={returnToSignIn} style={{width: '100%', marginTop: '12px'}}>Logout</button>
       </section>
     </main>
   )

@@ -76,7 +76,7 @@ export function appReducer(state, action) {
     case 'bootSuccess':
       return {
         ...state,
-        view: action.status.configured ? 'landing' : 'welcome',
+        view: action.view || (action.status.configured ? 'landing' : 'welcome'),
         bootError: '',
         installation: { loading: false, configured: action.status.configured, status: action.status },
       }

@@ -49,6 +49,24 @@
   gap: 12px;
 }
 
+.premium-student-logout {
+  min-height: 36px;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  background: #FFFFFF;
+  color: #334155;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.premium-student-logout:hover {
+  background: #FEF2F2;
+  border-color: #FECACA;
+  color: #DC2626;
+}
+
 .student-avatar {
   width: 36px;
   height: 36px;

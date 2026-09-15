@@ -1,6 +1,6 @@
 """align exam attempt terminal lifecycle columns with current model
 
-Revision ID: 20260915_attempt_terminal_lifecycle
+Revision ID: 20260915_attempt_terminal
 Revises: 20260915_branding_logo_cache
 Create Date: 2026-09-15
 
@@ -18,7 +18,7 @@ from collections.abc import Sequence
 from alembic import op
 
 
-revision: str = "20260915_attempt_terminal_lifecycle"
+revision: str = "20260915_attempt_terminal"
 down_revision: str | Sequence[str] | None = "20260915_branding_logo_cache"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

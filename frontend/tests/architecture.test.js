@@ -2,6 +2,8 @@ import { existsSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
+/* global process */
+
 const srcRoot = resolve(process.cwd(), 'src')
 
 const forbiddenLegacyDirectories = ['components', 'lib', 'services', 'state']

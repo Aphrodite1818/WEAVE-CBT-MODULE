@@ -2,6 +2,10 @@ import { useCallback, useEffect, useReducer, useRef } from 'react'
 import { weaveGateway } from './gateway'
 import { appReducer, createInitialState } from './state/appState'
 
+const NAV_STATE_KEY = 'weave.cbt.navigation'
+const teacherSections = new Set(['overview', 'question-banks', 'bank-detail', 'questions', 'create-question', 'exams', 'create-exam'])
+const adminSections = new Set(['dashboard', 'exams', 'question-banks', 'students', 'invigilators', 'results', 'reports', 'settings'])
+
 function toStudentResolution(session) {
   return {
     state: session.availability,
@@ -25,6 +29,19 @@ export function useAppController() {
   const [state, dispatch] = useReducer(appReducer, undefined, createInitialState)
   const pairPending = useRef(false)
 
+  const restoreSession = useCallback(async () => {
+    const savedNavigation = readNavigationState()
+    const preferredType = savedNavigation?.sessionType
+    const restorers = preferredType === 'student'
+      ? [restoreStudentSession, restoreStaffSession]
+      : [restoreStaffSession, restoreStudentSession]
+
+    for (const restore of restorers) {
+      if (await restore(dispatch, savedNavigation)) return true
+    }
+    return false
+  }, [])
+
   const boot = useCallback(async (signal) => {
     dispatch({ type: 'bootStart' })
     weaveGateway.branding.getBranding({ signal })
@@ -32,13 +49,17 @@ export function useAppController() {
       .catch(() => null)
     try {
       const status = await weaveGateway.installation.getInstallationStatus({ signal })
-      dispatch({ type: 'bootSuccess', status })
+      dispatch({ type: 'bootSuccess', status, view: status.configured ? 'boot' : undefined })
+      if (status.configured) {
+        const restored = await restoreSession()
+        if (!restored) dispatch({ type: 'view', view: 'landing' })
+      }
     } catch (error) {
       if (error.name !== 'AbortError') {
         dispatch({ type: 'bootFailure', message: error.userMessage || 'Weave could not reach the local backend.' })
       }
     }
-  }, [])
+  }, [restoreSession])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -92,7 +113,7 @@ export function useAppController() {
           dispatch({ type: 'syncFailure', message: error.userMessage || 'Could not check server readiness.' })
         }
       } else {
-        weaveGateway.auth.signOutStaff()
+        weaveGateway.auth.signOutStaff().catch(() => weaveGateway.auth.clearStaffSession())
         dispatch({ type: 'authFailure', message: 'This account has no CBT staff workspace.' })
       }
     } catch (error) {
@@ -147,11 +168,97 @@ export function useAppController() {
     state.studentResolution?.state,
   ])
 
+  useEffect(() => {
+    persistNavigationState({
+      view: state.view,
+      sessionType: state.session?.type,
+      role: state.session?.role,
+      staffSection: state.staff.section,
+      examStage: state.exam.stage,
+    })
+  }, [state.view, state.session?.type, state.session?.role, state.staff.section, state.exam.stage])
+
   const signOut = useCallback(async () => {
     if (state.session?.type === 'student') await weaveGateway.auth.logoutStudent().catch(() => null)
-    if (state.session?.type === 'staff') weaveGateway.auth.signOutStaff()
+    if (state.session?.type === 'staff') await weaveGateway.auth.signOutStaff().catch(() => weaveGateway.auth.clearStaffSession())
+    clearNavigationState()
     dispatch({ type: 'signOut' })
   }, [state.session])
 
   return { state, dispatch, boot, pair, signInStaff, signInStudent, signOut }
+}
+
+async function restoreStudentSession(dispatch) {
+  try {
+    const session = await weaveGateway.auth.getStudentStatus()
+    dispatch({ type: 'authSuccess', session, view: 'student', examStage: 'lobby' })
+    dispatch({ type: 'studentResolution', resolution: toStudentResolution(session) })
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function restoreStaffSession(dispatch, savedNavigation) {
+  try {
+    const session = await weaveGateway.auth.refreshStaff()
+    if (session.role === 'teacher') {
+      dispatch({ type: 'authSuccess', session, view: 'staff' })
+      dispatch({ type: 'staff', patch: { section: staffSectionForRole(session.role, savedNavigation?.staffSection) } })
+      return true
+    }
+    if (session.role === 'admin') {
+      dispatch({ type: 'authSuccess', session, view: 'sync-check' })
+      dispatch({ type: 'staff', patch: { section: staffSectionForRole(session.role, savedNavigation?.staffSection) } })
+      dispatch({ type: 'syncChecking' })
+      try {
+        const status = await weaveGateway.sync.getSyncStatus()
+        dispatch({ type: 'syncStatus', status })
+      } catch (error) {
+        dispatch({ type: 'syncFailure', message: error.userMessage || 'Could not check server readiness.' })
+      }
+      return true
+    }
+    await weaveGateway.auth.signOutStaff().catch(() => weaveGateway.auth.clearStaffSession())
+    return false
+  } catch {
+    weaveGateway.auth.clearStaffSession()
+    return false
+  }
+}
+
+function staffSectionForRole(role, section) {
+  if (role === 'teacher' && teacherSections.has(section)) return section
+  if (role === 'admin' && adminSections.has(section)) return section
+  return role === 'admin' ? 'dashboard' : 'overview'
+}
+
+function readNavigationState() {
+  try {
+    const raw = window.localStorage.getItem(NAV_STATE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function persistNavigationState({ view, sessionType, role, staffSection, examStage }) {
+  if (sessionType === 'staff' && view === 'staff') {
+    window.localStorage.setItem(NAV_STATE_KEY, JSON.stringify({
+      sessionType: 'staff',
+      role,
+      staffSection,
+    }))
+    return
+  }
+  if (sessionType === 'student' && view === 'student') {
+    window.localStorage.setItem(NAV_STATE_KEY, JSON.stringify({
+      sessionType: 'student',
+      examStage,
+    }))
+  }
+}
+
+function clearNavigationState() {
+  window.localStorage.removeItem(NAV_STATE_KEY)
 }

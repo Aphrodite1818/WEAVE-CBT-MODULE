@@ -65,7 +65,6 @@ export function LoginField({ label, type = 'text', value, onChange, placeholder,
 }
 
 export function LoginShell({ kind, title, subtitle, branding, children, error, loading, onSubmit, onBack }) {
-  const isStudent = kind === 'student'
   const logoSrc = getLocalBrandLogoSrc(branding)
   const tenantName = branding?.school_name?.trim() || 'School'
 

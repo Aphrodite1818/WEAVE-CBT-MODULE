@@ -5,7 +5,6 @@ import App from '../src/App'
 
 const examId = '11111111-1111-1111-1111-111111111111'
 const candidateId = '22222222-2222-2222-2222-222222222222'
-const classId = '33333333-3333-3333-3333-333333333333'
 const attemptQuestionId = '44444444-4444-4444-4444-444444444444'
 const optionId = '55555555-5555-5555-5555-555555555555'
 const bankId = '99999999-9999-9999-9999-999999999999'
@@ -53,33 +52,6 @@ const staffLogin = (role = 'teacher') => ({
     display_name: role === 'admin' ? 'Amina Yusuf' : 'Mrs. Amina Khan',
   },
 })
-
-const rosterCandidate = {
-  id: candidateId,
-  exam_id: examId,
-  enrollment_id: '66666666-6666-6666-6666-666666666666',
-  student_id: '77777777-7777-7777-7777-777777777777',
-  class_id: classId,
-  admission_number: 'BFA/24/001',
-  display_name: 'Taiwo Adewale',
-  status: 'eligible',
-  status_reason: null,
-  roster_version: 3,
-  created_at: '2026-08-22T09:00:00Z',
-  updated_at: '2026-08-22T09:00:00Z',
-}
-
-const rosterResponse = {
-  exam_id: examId,
-  exam_title: 'Mathematics CA1',
-  roster_status: 'ready',
-  roster_version: 3,
-  roster_candidate_count: 124,
-  offset: 0,
-  limit: 100,
-  total: 124,
-  candidates: [rosterCandidate],
-}
 
 const teacherBank = {
   id: bankId,
@@ -195,7 +167,7 @@ describe('Weave backend integration shell', () => {
       'POST /api/v1/student/auth/login': ({ options }) => {
         expect(JSON.parse(options.body)).toEqual({
           admission_number: 'BFA/24/001',
-          password: '123456',
+          password: 'bfa/24/001',
         })
         return jsonResponse({
           student_id: '77777777-7777-7777-7777-777777777777',
@@ -228,8 +200,8 @@ describe('Weave backend integration shell', () => {
 
     await screen.findByRole('heading', { name: /a smarter way to take exams/i })
     fireEvent.click(screen.getByRole('button', { name: /login as student/i }))
-    fireEvent.change(screen.getByLabelText(/admission number/i), { target: { value: 'BFA/24/001' } })
-    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: '123456' } })
+    fireEvent.change(screen.getByLabelText(/admission number/i), { target: { value: 'bfa/24/001' } })
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'bfa/24/001' } })
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
 
     expect(await screen.findByRole('heading', { name: /mathematics ca1/i })).toBeInTheDocument()

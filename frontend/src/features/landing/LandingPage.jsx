@@ -4,7 +4,7 @@ import { WeaveMark } from '../../shared/ui'
 import './landing.css'
 
 const WORDMARK_TEXT = 'Weave'
-const TYPEWRITER_CHAR_DELAY_MS = 95
+const TYPEWRITER_CHAR_DELAY_MS = 145
 const TYPEWRITER_PAUSE_MS = 3200
 
 function LandingWordmarkTypewriter() {
@@ -33,7 +33,6 @@ function LandingWordmarkTypewriter() {
           {character}
         </span>
       ))}
-      <span className="landing-typewriter__caret" aria-hidden="true" />
     </div>
   )
 }

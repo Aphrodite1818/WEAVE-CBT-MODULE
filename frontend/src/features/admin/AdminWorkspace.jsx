@@ -22,7 +22,7 @@ const adminNav = [
   ['settings', 'Settings', 'settings'],
 ]
 
-export function AdminWorkspace({ state, dispatch }) {
+export function AdminWorkspace({ state, dispatch, signOut }) {
   const section = state.staff.section === 'overview' ? 'dashboard' : state.staff.section
   const actor = state.session?.actor
   const adminName = actor?.display_name || state.session?.name || 'Taiwo Okafor'
@@ -59,6 +59,9 @@ export function AdminWorkspace({ state, dispatch }) {
             <strong>{adminName}</strong>
             <small>Administrator</small>
           </div>
+          <button className="logout-btn" type="button" aria-label="Sign out" onClick={signOut}>
+            <Icon name="logout" size={18} />
+          </button>
         </div>
       </aside>
 

@@ -1,7 +1,7 @@
 """allow authenticated student waiting-room sessions before exam binding
 
 Revision ID: 20260915_student_waiting_room
-Revises: 20260915_attempt_terminal_lifecycle
+Revises: 20260915_attempt_terminal
 Create Date: 2026-09-15
 """
 
@@ -14,7 +14,7 @@ from alembic import op
 
 
 revision: str = "20260915_student_waiting_room"
-down_revision: str | Sequence[str] | None = "20260915_attempt_terminal_lifecycle"
+down_revision: str | Sequence[str] | None = "20260915_attempt_terminal"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

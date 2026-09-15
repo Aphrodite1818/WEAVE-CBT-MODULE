@@ -14,7 +14,7 @@ export function StudentLoginPage({ error, loading, branding, onSubmit, onBack })
       error={error}
       loading={loading}
       onBack={onBack}
-      onSubmit={() => onSubmit({ admissionNumber: admissionNumber.trim(), password })}
+      onSubmit={() => onSubmit({ admissionNumber: admissionNumber.trim().toUpperCase(), password })}
     >
       <LoginField
         label="Admission Number"
