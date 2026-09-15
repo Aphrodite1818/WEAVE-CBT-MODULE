@@ -1,5 +1,6 @@
 import * as attempts from './attempts'
 import * as auth from './auth'
+import * as branding from './branding'
 import * as candidates from './candidates'
 import * as exams from './exams'
 import * as installation from './installation'
@@ -13,6 +14,7 @@ import * as timetable from './timetable'
 export const leafApi = {
   attempts,
   auth,
+  branding,
   candidates,
   exams,
   installation,

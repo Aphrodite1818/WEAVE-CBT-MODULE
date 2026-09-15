@@ -4,6 +4,8 @@
 
 from fastapi import APIRouter, HTTPException, Response, status
 
+from app.core.database import DbSession
+from app.domains.branding.service import branding_service
 from app.domains.node.exceptions import (
     InstallationAlreadyPairedError,
     NodeIdentityStorageError,
@@ -43,13 +45,16 @@ def get_installation_status() -> InstallationStatus:
 async def pair_installation(
     request: PairInstallationRequest,
     response: Response,
+    db: DbSession,
 ) -> PairInstallationResponse:
-    """
-    Pair this local CBT runtime with a Weave tenant.
-    """
+    """Pair this local CBT runtime with a Weave tenant."""
 
     try:
-        return await node_service.pair_installation(request)
+        result = await node_service.pair_installation(request)
+        # Branding is auxiliary. Pairing remains successful even if the
+        # post-pair branding fetch cannot reach Weave; the default theme stays active.
+        await branding_service.refresh_best_effort(db)
+        return result
 
     except InstallationAlreadyPairedError as exc:
         raise HTTPException(
@@ -58,8 +63,6 @@ async def pair_installation(
         ) from exc
 
     except WeaveRequestRejectedError as exc:
-        # Rate limiting needs one extra piece of information:
-        # Retry-After.
         if exc.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
             if exc.retry_after is not None:
                 response.headers["Retry-After"] = str(exc.retry_after)
@@ -74,15 +77,12 @@ async def pair_installation(
                 ),
             ) from exc
 
-        # Preserve normal client-side pairing rejection codes.
         if 400 <= exc.status_code < 500:
             raise HTTPException(
                 status_code=exc.status_code,
                 detail=exc.detail,
             ) from exc
 
-        # A remote Weave 5xx is not an internal failure of the
-        # local CBT API. From CBT's perspective its upstream failed.
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Weave Cloud could not complete the pairing request.",

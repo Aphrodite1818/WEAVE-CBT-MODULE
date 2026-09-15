@@ -12,6 +12,7 @@ from app.domains.attempts.router import operator_router as attempts_router
 from app.domains.attempts.router import student_router as student_attempts_router
 from app.domains.auth.router import router as auth_router
 from app.domains.auth.student_router import router as student_auth_router
+from app.domains.branding.router import router as branding_router
 from app.domains.candidates.makeup_router import router as makeup_router
 from app.domains.candidates.router import router as candidates_router
 from app.domains.exams.read_router import router as exam_read_router
@@ -53,6 +54,7 @@ app = FastAPI(
 
 for router in (
     node_router,
+    branding_router,
     auth_router,
     student_auth_router,
     sync_router,

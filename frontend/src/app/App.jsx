@@ -4,6 +4,7 @@ import { AdminWorkspace } from '../features/admin/AdminWorkspace'
 import { AuthPage } from '../features/auth/AuthPage'
 import { StudentWorkspace } from '../features/student/StudentWorkspace'
 import { TeacherWorkspace } from '../features/teacher/TeacherWorkspace'
+import { buildBrandingThemeStyle } from './theme/branding'
 import { appReducer, createInitialState, getTenant } from './state/appState'
 import { leafGateway } from './gateway'
 
@@ -14,6 +15,12 @@ export default function App() {
   useEffect(() => {
     const controller = new AbortController()
     dispatch({ type: 'bootStart' })
+
+    leafGateway.branding
+      .getBranding({ signal: controller.signal })
+      .then((branding) => dispatch({ type: 'brandingSuccess', branding }))
+      .catch(() => null)
+
     leafGateway.installation
       .getInstallationStatus({ signal: controller.signal })
       .then((status) => dispatch({ type: 'bootSuccess', status }))
@@ -26,12 +33,8 @@ export default function App() {
   }, [])
 
   const themeStyle = useMemo(
-    () => ({
-      '--tenant-accent': tenant.primaryAccent,
-      '--tenant-accent-soft': tenant.softAccent,
-      '--tenant-accent-ink': tenant.inkAccent,
-    }),
-    [tenant],
+    () => buildBrandingThemeStyle(state.branding),
+    [state.branding],
   )
 
   const signIn = async (form) => {
@@ -77,6 +80,10 @@ export default function App() {
     try {
       const status = await leafGateway.installation.pairInstallation(form)
       dispatch({ type: 'setupSuccess', status })
+      leafGateway.branding
+        .getBranding()
+        .then((branding) => dispatch({ type: 'brandingSuccess', branding }))
+        .catch(() => null)
     } catch (error) {
       dispatch({ type: 'authFailure', message: error.userMessage || 'Pairing failed.' })
     }
@@ -98,6 +105,10 @@ export default function App() {
           error={state.bootError}
           retry={() => {
             dispatch({ type: 'bootStart' })
+            leafGateway.branding
+              .getBranding()
+              .then((branding) => dispatch({ type: 'brandingSuccess', branding }))
+              .catch(() => null)
             leafGateway.installation
               .getInstallationStatus()
               .then((status) => dispatch({ type: 'bootSuccess', status }))

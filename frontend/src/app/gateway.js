@@ -2,6 +2,7 @@ import { leafApi } from '../api'
 
 export const leafGateway = {
   installation: leafApi.installation,
+  branding: leafApi.branding,
   auth: leafApi.auth,
   attempts: leafApi.attempts,
   candidates: leafApi.candidates,

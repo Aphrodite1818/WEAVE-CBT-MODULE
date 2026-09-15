@@ -17,6 +17,7 @@ from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed
 
 from app.core.database import async_session_factory, engine
+from app.domains.branding.service import branding_service
 from app.domains.node.exceptions import (
     NodeIdentityNotFoundError,
     NodeIdentityStorageError,
@@ -184,8 +185,6 @@ class SyncSupervisor:
             )
             await connection.commit()
         except Exception:
-            # Closing a broken connection releases its session advisory lock on
-            # PostgreSQL automatically.
             pass
 
     @staticmethod
@@ -197,6 +196,7 @@ class SyncSupervisor:
     async def _reconcile_once() -> int:
         async with async_session_factory() as db:
             result = await sync_service.reconcile(db)
+            await branding_service.refresh_best_effort(db)
             return result.cursor
 
     async def _sleep(self, seconds: float) -> None:

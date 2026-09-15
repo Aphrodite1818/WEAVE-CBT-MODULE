@@ -1,10 +1,9 @@
+import { createDefaultBranding, normalizeBranding } from '../theme/branding'
+
 const defaultTenant = {
-  schoolName: 'Leaf CBT',
+  schoolName: 'Weave CBT',
   nodeName: 'Local CBT node',
-  initials: 'LC',
-  primaryAccent: '#2146a3',
-  softAccent: '#eef3ff',
-  inkAccent: '#182a62',
+  initials: 'WC',
 }
 
 export const initialExam = {
@@ -25,7 +24,7 @@ export const initialStaff = {
     name: 'Teacher',
     shortName: 'Teacher',
     role: 'Teacher',
-    schoolName: 'Leaf CBT',
+    schoolName: 'Weave CBT',
     schoolLocation: 'Local node',
   },
   teacherBanks: [],
@@ -47,6 +46,7 @@ export function createInitialState() {
     bootError: '',
     connectivity: 'online',
     installation: { loading: true, configured: false, status: null },
+    branding: createDefaultBranding(),
     session: null,
     studentResolution: null,
     exam: initialExam,
@@ -55,15 +55,16 @@ export function createInitialState() {
 }
 
 export function getTenant(state) {
+  const brandingName = state.branding?.school_name
   const tenantName = state.installation?.status?.tenant_name
   const serverName = state.installation?.status?.server_name
-  if (!tenantName && !serverName) return defaultTenant
+  const schoolName = brandingName || tenantName || defaultTenant.schoolName
 
   return {
     ...defaultTenant,
-    schoolName: tenantName || defaultTenant.schoolName,
+    schoolName,
     nodeName: serverName || defaultTenant.nodeName,
-    initials: initials(tenantName || serverName || defaultTenant.schoolName),
+    initials: initials(schoolName),
   }
 }
 
@@ -80,6 +81,8 @@ export function appReducer(state, action) {
       }
     case 'bootFailure':
       return { ...state, view: 'boot', bootError: action.message, installation: { ...state.installation, loading: false } }
+    case 'brandingSuccess':
+      return { ...state, branding: normalizeBranding(action.branding) }
     case 'setupStart':
       return { ...state, authLoading: true, authError: '' }
     case 'setupSuccess':
