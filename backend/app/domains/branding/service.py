@@ -81,6 +81,16 @@ class LocalBrandingLogo:
     revision: UUID
 
 
+@dataclass(frozen=True, slots=True)
+class LogoCacheSnapshot:
+    logo_url: str | None
+    logo_revision: UUID | None
+    logo_storage_key: str | None
+    logo_mime_type: str | None
+    logo_size_bytes: int | None
+    logo_sha256: str | None
+
+
 class BrandingService:
     def __init__(
         self,
@@ -182,16 +192,22 @@ class BrandingService:
         ):
             return None
 
+        storage_key = state.logo_storage_key
+        mime_type = state.logo_mime_type
+        sha256 = state.logo_sha256
+        revision = state.logo_revision
+        await db.rollback()
+
         try:
-            content = await self.logo_storage.read(state.logo_storage_key)
+            content = await self.logo_storage.read(storage_key)
         except (FileNotFoundError, OSError, BrandingLogoStorageError):
             return None
 
         return LocalBrandingLogo(
             content=content,
-            mime_type=state.logo_mime_type,
-            sha256=state.logo_sha256,
-            revision=state.logo_revision,
+            mime_type=mime_type,
+            sha256=sha256,
+            revision=revision,
         )
 
     @staticmethod
@@ -206,21 +222,36 @@ class BrandingService:
         }
 
     @staticmethod
-    def _logo_values_from_state(state: BrandingState) -> dict[str, object | None]:
+    def _snapshot_logo_state(state: BrandingState | None) -> LogoCacheSnapshot | None:
+        if state is None:
+            return None
+        return LogoCacheSnapshot(
+            logo_url=state.logo_url,
+            logo_revision=state.logo_revision,
+            logo_storage_key=state.logo_storage_key,
+            logo_mime_type=state.logo_mime_type,
+            logo_size_bytes=state.logo_size_bytes,
+            logo_sha256=state.logo_sha256,
+        )
+
+    @staticmethod
+    def _logo_values_from_snapshot(
+        snapshot: LogoCacheSnapshot,
+    ) -> dict[str, object | None]:
         return {
-            "logo_url": state.logo_url,
-            "logo_revision": state.logo_revision,
-            "logo_storage_key": state.logo_storage_key,
-            "logo_mime_type": state.logo_mime_type,
-            "logo_size_bytes": state.logo_size_bytes,
-            "logo_sha256": state.logo_sha256,
+            "logo_url": snapshot.logo_url,
+            "logo_revision": snapshot.logo_revision,
+            "logo_storage_key": snapshot.logo_storage_key,
+            "logo_mime_type": snapshot.logo_mime_type,
+            "logo_size_bytes": snapshot.logo_size_bytes,
+            "logo_sha256": snapshot.logo_sha256,
         }
 
     async def _resolve_logo_values(
         self,
         *,
         projection: WeaveBrandingProjection,
-        existing: BrandingState | None,
+        existing: LogoCacheSnapshot | None,
     ) -> dict[str, object | None]:
         has_url = bool(projection.logo_url)
         has_revision = projection.logo_revision is not None
@@ -238,7 +269,10 @@ class BrandingService:
             and existing.logo_storage_key
             and await self.logo_storage.exists(existing.logo_storage_key)
         ):
-            return self._logo_values_from_state(existing)
+            return self._logo_values_from_snapshot(existing)
+
+        if projection.logo_revision is None:
+            raise BrandingContractError("Weave branding logo revision is missing.")
 
         try:
             cached = await self.logo_storage.cache_from_url(
@@ -256,7 +290,7 @@ class BrandingService:
                 and existing.logo_storage_key
                 and await self.logo_storage.exists(existing.logo_storage_key)
             ):
-                return self._logo_values_from_state(existing)
+                return self._logo_values_from_snapshot(existing)
             return self._empty_logo_values()
 
         return {
@@ -280,8 +314,15 @@ class BrandingService:
                 "Weave branding belongs to an unexpected tenant."
             )
 
-        existing = await BrandingRepository.get_for_tenant(db, identity.tenant_id)
+        existing_row = await BrandingRepository.get_for_tenant(db, identity.tenant_id)
+        existing = self._snapshot_logo_state(existing_row)
         old_storage_key = existing.logo_storage_key if existing is not None else None
+
+        # Do not keep a PostgreSQL transaction open while downloading the
+        # externally hosted logo. The filesystem/network work happens first;
+        # only the final local projection replacement is transactional.
+        await db.rollback()
+
         light_tokens = self.normalize_light_tokens(projection.light_tokens)
         logo_values = await self._resolve_logo_values(
             projection=projection,
@@ -301,7 +342,6 @@ class BrandingService:
             "last_synced_at": datetime.now(UTC),
         }
 
-        await db.rollback()
         try:
             async with db.begin():
                 state = await BrandingRepository.upsert(db, values=values)
@@ -311,14 +351,23 @@ class BrandingService:
                 and new_storage_key
                 and new_storage_key != old_storage_key
             ):
-                await self.logo_storage.delete(new_storage_key)
+                try:
+                    await self.logo_storage.delete(new_storage_key)
+                except (OSError, BrandingLogoStorageError):
+                    logger.warning(
+                        "Unable to remove uncommitted tenant logo cache.",
+                        exc_info=True,
+                    )
             raise
 
         if old_storage_key and old_storage_key != new_storage_key:
             try:
                 await self.logo_storage.delete(old_storage_key)
             except (OSError, BrandingLogoStorageError):
-                logger.warning("Unable to remove superseded tenant logo cache.", exc_info=True)
+                logger.warning(
+                    "Unable to remove superseded tenant logo cache.",
+                    exc_info=True,
+                )
 
         return self._response_from_state(state)
 
