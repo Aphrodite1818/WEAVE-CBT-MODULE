@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.academics.authorization import AcademicAuthorizationService
@@ -100,15 +101,33 @@ class ExamCollaborationLifecycleMixin:
         actor: LocalActor,
         exam_id: UUID,
     ) -> Exam:
-        exam = await super().return_exam_to_draft(
-            db,
-            actor=actor,
-            exam_id=exam_id,
-        )
+        """Return a submitted paper to draft and invalidate old authoring screens."""
 
-        # Returning a reviewed submission to DRAFT starts a new collaborative
-        # editing state and invalidates any screen that still holds the old token.
-        exam.authoring_version += 1
-        exam = await ExamRepository.save_exam(db, exam)
-        await db.commit()
+        cls._require_admin(actor)
+        exam = await ExamRepository.get_exam_by_id(
+            db,
+            exam_id=exam_id,
+            lock=True,
+        )
+        if exam is None:
+            raise ExamNotFound("Examination does not exist")
+        if exam.status != ExamStatus.SUBMITTED:
+            raise ExamStateError(
+                "Only examinations in SUBMITTED state can return to draft"
+            )
+
+        exam.status = ExamStatus.DRAFT
+        exam.submitted_by_actor_id = None
+        exam.submitted_at = None
+        cls._bump_authoring_version(exam)
+
+        try:
+            exam = await ExamRepository.save_exam(db, exam)
+            await db.commit()
+        except IntegrityError as exc:
+            await db.rollback()
+            raise ValueError(
+                "The examination could not return to draft because its "
+                "current state conflicts with existing examination data"
+            ) from exc
         return exam

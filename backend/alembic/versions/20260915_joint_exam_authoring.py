@@ -136,12 +136,17 @@ def upgrade() -> None:
                 END IF;
                 RETURN NEW;
             END;
-            $$;
-
+            $$
+            """
+        )
+    )
+    op.execute(
+        sa.text(
+            f"""
             CREATE TRIGGER {_SELECTION_TRIGGER}
             BEFORE INSERT ON exam_question_selections
             FOR EACH ROW
-            EXECUTE FUNCTION {_SELECTION_FUNCTION}();
+            EXECUTE FUNCTION {_SELECTION_FUNCTION}()
             """
         )
     )
@@ -165,12 +170,17 @@ def upgrade() -> None:
                 END IF;
                 RETURN NEW;
             END;
-            $$;
-
+            $$
+            """
+        )
+    )
+    op.execute(
+        sa.text(
+            f"""
             CREATE TRIGGER {_FROZEN_TRIGGER}
             BEFORE INSERT ON exam_questions
             FOR EACH ROW
-            EXECUTE FUNCTION {_FROZEN_FUNCTION}();
+            EXECUTE FUNCTION {_FROZEN_FUNCTION}()
             """
         )
     )
