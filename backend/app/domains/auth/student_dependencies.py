@@ -1,4 +1,4 @@
-"""FastAPI dependency for opaque student examination sessions."""
+"""FastAPI dependencies for opaque student waiting-room and exam sessions."""
 
 from __future__ import annotations
 
@@ -34,7 +34,23 @@ async def get_current_student_session(
         ) from exc
 
 
+async def get_current_student_exam_session(
+    context: Annotated[StudentSessionContext, Depends(get_current_student_session)],
+) -> StudentSessionContext:
+    if not context.is_exam_bound:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No examination is currently ready for this student.",
+        )
+    return context
+
+
 CurrentStudentSession = Annotated[
     StudentSessionContext,
     Depends(get_current_student_session),
+]
+
+CurrentStudentExamSession = Annotated[
+    StudentSessionContext,
+    Depends(get_current_student_exam_session),
 ]
