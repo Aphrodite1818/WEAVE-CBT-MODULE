@@ -99,7 +99,7 @@ class WeaveAcademicLevelSnapshot(SyncContractBase):
     name: str
     category: str
     position: int
-    specialization_required_from_term_position : int | None = None 
+    specialization_required_from_term_position: int | None = None
 
 
 class WeaveArmLabelSnapshot(SyncContractBase):
@@ -152,7 +152,6 @@ class WeaveCurriculumSubjectDepartmentSnapshot(SyncContractBase):
     id: UUID
     curriculum_subject_id: UUID
     department_id: UUID
-
 
 
 class WeaveAssessmentSchemeSnapshot(SyncContractBase):
@@ -222,7 +221,7 @@ class WeaveAcademicBootstrap(SyncContractBase):
     subjects: list[WeaveSubjectSnapshot]
     curricula: list[WeaveCurriculumSnapshot]
     curriculum_subjects: list[WeaveCurriculumSubjectSnapshot]
-    offerings: list[WeaveCurriculumSubjectDepartmentSnapshot]
+    curriculum_subject_departments: list[WeaveCurriculumSubjectDepartmentSnapshot]
     assessment_schemes: list[WeaveAssessmentSchemeSnapshot]
     assessment_components: list[WeaveAssessmentComponentSnapshot]
     admins: list[WeaveAdminSnapshot]
