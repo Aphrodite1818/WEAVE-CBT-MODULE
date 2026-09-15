@@ -18,7 +18,7 @@ from app.domains.attempts.schemas import (
 )
 from app.domains.attempts.service import AttemptService, AttemptStateError
 from app.domains.auth.dependencies import CurrentLocalActor
-from app.domains.auth.student_dependencies import CurrentStudentSession
+from app.domains.auth.student_dependencies import CurrentStudentExamSession
 from app.domains.exams.exceptions import ExamNotFound, ExamStateError
 
 
@@ -39,7 +39,7 @@ def _http_error(exc: Exception) -> HTTPException:
 @student_router.post("/current/start", response_model=AttemptResponse)
 async def start_current_attempt(
     db: DbSession,
-    context: CurrentStudentSession,
+    context: CurrentStudentExamSession,
 ) -> AttemptResponse:
     try:
         return await AttemptService.start_current(db, context=context)
@@ -50,7 +50,7 @@ async def start_current_attempt(
 @student_router.get("/current", response_model=AttemptResponse)
 async def get_current_attempt(
     db: DbSession,
-    context: CurrentStudentSession,
+    context: CurrentStudentExamSession,
 ) -> AttemptResponse:
     try:
         return await AttemptService.get_current(db, context=context)
@@ -66,7 +66,7 @@ async def save_current_answer(
     attempt_question_id: UUID,
     payload: AttemptAnswerMutation,
     db: DbSession,
-    context: CurrentStudentSession,
+    context: CurrentStudentExamSession,
 ) -> AttemptAnswerResponse:
     try:
         return await AttemptService.mutate_answer(
@@ -84,7 +84,7 @@ async def save_current_answer(
 @student_router.post("/current/submit", response_model=AttemptSubmissionResponse)
 async def submit_current_attempt(
     db: DbSession,
-    context: CurrentStudentSession,
+    context: CurrentStudentExamSession,
 ) -> AttemptSubmissionResponse:
     try:
         return await AttemptService.submit_current(db, context=context)
