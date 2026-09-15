@@ -2,6 +2,25 @@ import { useCallback, useEffect, useReducer, useRef } from 'react'
 import { weaveGateway } from './gateway'
 import { appReducer, createInitialState } from './state/appState'
 
+function toStudentResolution(session) {
+  return {
+    state: session.availability,
+    statusMessage: session.status_message,
+    exam: session.exam_id ? {
+      id: session.exam_id,
+      title: session.exam_title,
+      scheduledStartAt: session.scheduled_start_at,
+      activatedAt: session.activated_at,
+    } : null,
+    candidate: {
+      id: session.candidate_id || null,
+      name: session.display_name,
+      studentId: session.student_id,
+    },
+    isMakeup: session.is_makeup,
+  }
+}
+
 export function useAppController() {
   const [state, dispatch] = useReducer(appReducer, undefined, createInitialState)
   const pairPending = useRef(false)
@@ -85,18 +104,48 @@ export function useAppController() {
     dispatch({ type: 'authStart' })
     try {
       const session = await weaveGateway.auth.loginStudent({ admissionNumber, password })
-      const resolution = {
-        state: session.availability,
-        exam: { id: session.exam_id, title: session.exam_title, scheduledStartAt: session.scheduled_start_at },
-        candidate: { id: session.candidate_id, name: session.display_name, studentId: session.student_id },
-        isMakeup: session.is_makeup,
-      }
       dispatch({ type: 'authSuccess', session, view: 'student', examStage: 'lobby' })
-      dispatch({ type: 'studentResolution', resolution })
+      dispatch({ type: 'studentResolution', resolution: toStudentResolution(session) })
     } catch (error) {
       dispatch({ type: 'authFailure', message: error.userMessage || 'Student sign in failed.' })
     }
   }, [])
+
+  useEffect(() => {
+    const waitingState = state.studentResolution?.state
+    const shouldPoll = (
+      state.session?.type === 'student'
+      && state.view === 'student'
+      && state.exam.stage === 'lobby'
+      && (waitingState === 'no_exam' || waitingState === 'waiting_for_activation')
+    )
+    if (!shouldPoll) return undefined
+
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const session = await weaveGateway.auth.getStudentStatus()
+        if (!cancelled) {
+          dispatch({ type: 'studentResolution', resolution: toStudentResolution(session) })
+        }
+      } catch (error) {
+        if (!cancelled && error.status === 401) {
+          dispatch({ type: 'signOut' })
+        }
+      }
+    }
+
+    const interval = window.setInterval(refresh, 5000)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [
+    state.session?.type,
+    state.view,
+    state.exam.stage,
+    state.studentResolution?.state,
+  ])
 
   const signOut = useCallback(async () => {
     if (state.session?.type === 'student') await weaveGateway.auth.logoutStudent().catch(() => null)
