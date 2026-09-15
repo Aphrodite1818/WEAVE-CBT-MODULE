@@ -1,4 +1,4 @@
-"""Durable opaque student examination sessions."""
+"""Durable opaque student waiting-room and examination sessions."""
 
 from __future__ import annotations
 
@@ -23,18 +23,18 @@ STUDENT_SESSION_REASON_MAX_LENGTH = 500
 
 
 class StudentExamSession(Base):
-    """One opaque browser session bound to one student/candidate/exam."""
+    """Opaque student session that may be waiting-room-only or exam-bound."""
 
     __tablename__ = "student_exam_sessions"
 
     student_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
-    candidate_id: Mapped[UUID] = mapped_column(
+    candidate_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("exam_candidates.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
-    exam_id: Mapped[UUID] = mapped_column(
-        ForeignKey("exams.id", ondelete="RESTRICT"), nullable=False, index=True
+    exam_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("exams.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     makeup_authorization_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("candidate_make_up_authorizations.id", ondelete="RESTRICT"),
@@ -72,11 +72,22 @@ class StudentExamSession(Base):
             "revoked_at IS NULL OR revocation_reason IS NOT NULL",
             name="ck_student_exam_sessions_revocation_reason_required",
         ),
+        CheckConstraint(
+            "(candidate_id IS NULL AND exam_id IS NULL) OR "
+            "(candidate_id IS NOT NULL AND exam_id IS NOT NULL)",
+            name="ck_student_exam_sessions_binding_pair",
+        ),
+        CheckConstraint(
+            "makeup_authorization_id IS NULL OR candidate_id IS NOT NULL",
+            name="ck_student_exam_sessions_makeup_requires_binding",
+        ),
         Index(
             "uq_student_exam_sessions_one_active_candidate",
             "candidate_id",
             unique=True,
-            postgresql_where=sql_text("revoked_at IS NULL"),
+            postgresql_where=sql_text(
+                "revoked_at IS NULL AND candidate_id IS NOT NULL"
+            ),
         ),
         Index("ix_student_exam_sessions_student_expiry", "student_id", "expires_at"),
     )
