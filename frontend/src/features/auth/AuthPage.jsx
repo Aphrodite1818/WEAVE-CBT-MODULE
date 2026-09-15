@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { FormField, Notice, SegmentedControl, TenantIdentity, WeaveLogo } from '../../components/ui'
+import { FormField, Notice, SegmentedControl, WeaveLogo } from '../../shared/ui'
 import './auth.css'
 
-export function AuthPage({ mode, tenant, connectivity, error, loading, setMode, onSubmit }) {
+export function AuthPage({ mode, connectivity, error, loading, setMode, onSubmit }) {
   const [identifier, setIdentifier] = useState('')
   const [secret, setSecret] = useState('')
   const offlineStudent = connectivity === 'weave-offline' && mode === 'student'
@@ -10,15 +10,12 @@ export function AuthPage({ mode, tenant, connectivity, error, loading, setMode, 
   return (
     <main className="premium-auth-shell">
       <div className="premium-auth-container">
-        
-        {/* Left Side: Illustration & Branding */}
         <div className="premium-auth-left">
           <div className="premium-auth-brand">
             <WeaveLogo />
             {mode === 'student' && <span className="premium-auth-pill">Student Access</span>}
             {mode === 'staff' && <span className="premium-auth-pill">Staff Access</span>}
           </div>
-          
           <div className="premium-auth-hero">
             <h1>Focused Minds<br/>Brighter Futures</h1>
             <p>A secure and seamless exam experience.</p>
@@ -27,12 +24,9 @@ export function AuthPage({ mode, tenant, connectivity, error, loading, setMode, 
             </div>
           </div>
         </div>
-        
-        {/* Right Side / Floating Card: Sign in Form */}
         <div className="premium-auth-right">
           <div className="premium-signin-card">
             <h2>Sign in to start your exam</h2>
-            
             <SegmentedControl
               label="Sign in type"
               value={mode}
@@ -42,7 +36,6 @@ export function AuthPage({ mode, tenant, connectivity, error, loading, setMode, 
               ]}
               onChange={setMode}
             />
-            
             <form
               className="premium-form-grid"
               onSubmit={(event) => {
@@ -60,7 +53,6 @@ export function AuthPage({ mode, tenant, connectivity, error, loading, setMode, 
                   onChange={setIdentifier}
                 />
               </div>
-              
               <div className="premium-form-group">
                 <label>{mode === 'student' ? 'Access Code / Password' : 'Password'}</label>
                 <FormField
@@ -71,23 +63,19 @@ export function AuthPage({ mode, tenant, connectivity, error, loading, setMode, 
                   onChange={setSecret}
                 />
               </div>
-              
               {offlineStudent && <Notice tone="success">Offline student authentication is available locally.</Notice>}
               {mode === 'staff' && connectivity === 'weave-offline' && (
                 <Notice tone="warning">Staff sign-in is paused until Weave connectivity returns.</Notice>
               )}
               {error && <Notice tone="danger">{error}</Notice>}
-              
               <button className="premium-btn-primary full-width" type="submit" disabled={loading}>
                 {loading ? 'Checking...' : 'Sign In'}
               </button>
             </form>
-            
             <div className="premium-forgot-link">
               <button type="button">Forgot access code?</button>
             </div>
           </div>
-          
           <div className="premium-auth-footer">
             <span>WEAVE CBT</span>
             <span>Secure &middot; Reliable &middot; Built for Schools</span>

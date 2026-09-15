@@ -1,5 +1,5 @@
-import { Icon } from '../../lib/icons'
-import { StatusBadge } from '../../components/ui'
+import { Icon } from '../../shared/icons/Icon'
+import { StatusBadge } from '../../shared/ui'
 
 export function BankIcon({ name }) {
   const iconName = name === 'flask' ? 'flask' : name === 'math' ? 'math' : name === 'leaf' ? 'leafIcon' : 'book'
@@ -16,10 +16,7 @@ export function QuestionRows({ questions, banks }) {
         return (
           <div className="question-row" key={question.id}>
             <Icon name="questions" size={18} />
-            <span>
-              <strong>{question.prompt}</strong>
-              <small>{bank?.name} - {question.type} - {question.updated}</small>
-            </span>
+            <span><strong>{question.prompt}</strong><small>{bank?.name} - {question.type} - {question.updated}</small></span>
             {question.image && <StatusBadge>Image</StatusBadge>}
             <StatusBadge tone={question.status === 'Ready' ? 'success' : 'warning'}>{question.status}</StatusBadge>
           </div>

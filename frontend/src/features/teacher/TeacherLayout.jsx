@@ -1,5 +1,5 @@
-import { Icon } from '../../lib/icons'
-import { WeaveLogo } from '../../components/ui'
+import { Icon } from '../../shared/icons/Icon'
+import { WeaveLogo } from '../../shared/ui'
 
 function teacherNavActive(current, section) {
   if (section === 'question-banks') return current === 'question-banks' || current === 'bank-detail'
@@ -35,39 +35,23 @@ export function TeacherLayout({ state, dispatch, signOut, children }) {
         <WeaveLogo />
         <div className="teacher-profile">
           <span className="teacher-avatar">{initials(teacherName)}</span>
-          <div>
-            <strong>{teacherName}</strong>
-            <small>{teacherRole}</small>
-          </div>
+          <div><strong>{teacherName}</strong><small>{teacherRole}</small></div>
         </div>
         <div className="school-card">
           <span><Icon name="school" size={20} /></span>
-          <div>
-            <strong>{schoolName}</strong>
-            <small>{serverName}</small>
-          </div>
+          <div><strong>{schoolName}</strong><small>{serverName}</small></div>
         </div>
         <nav>
           {nav.map(([section, icon, label]) => (
-            <button
-              key={section}
-              className={teacherNavActive(state.staff.section, section) ? 'active' : ''}
-              onClick={() => dispatch({ type: 'staff', patch: { section } })}
-            >
-              <Icon name={icon} size={18} />
-              {label}
+            <button key={section} className={teacherNavActive(state.staff.section, section) ? 'active' : ''} onClick={() => dispatch({ type: 'staff', patch: { section } })}>
+              <Icon name={icon} size={18} />{label}
             </button>
           ))}
         </nav>
-        <button className="sidebar-signout" onClick={signOut}>
-          <Icon name="logout" size={18} />
-          Sign out
-        </button>
+        <button className="sidebar-signout" onClick={signOut}><Icon name="logout" size={18} />Sign out</button>
       </aside>
       <section className="teacher-main">
-        <header className="teacher-topbar">
-          <strong>{pageTitle}</strong>
-        </header>
+        <header className="teacher-topbar"><strong>{pageTitle}</strong></header>
         <div className="teacher-content">{children}</div>
       </section>
     </main>

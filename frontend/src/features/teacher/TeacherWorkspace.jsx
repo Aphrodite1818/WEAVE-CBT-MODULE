@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { leafGateway } from '../../services/leafGateway'
+import { leafGateway } from '../../app/gateway'
 import { TeacherLayout } from './TeacherLayout'
 import { OverviewPage } from './OverviewPage'
 import { BankDetailPage, QuestionBanksPage } from './QuestionBanksPage'
@@ -12,12 +12,12 @@ export function TeacherWorkspace({ state, dispatch, signOut, gateway = leafGatew
   return (
     <TeacherLayout state={state} dispatch={dispatch} signOut={signOut}>
       {state.staff.section === 'overview' && <OverviewPage state={state} dispatch={dispatch} teacherData={teacherData} />}
-      {state.staff.section === 'question-banks' && <QuestionBanksPage state={state} dispatch={dispatch} teacherData={teacherData} />}
+      {state.staff.section === 'question-banks' && <QuestionBanksPage dispatch={dispatch} teacherData={teacherData} />}
       {state.staff.section === 'bank-detail' && <BankDetailPage state={state} dispatch={dispatch} teacherData={teacherData} />}
-      {state.staff.section === 'questions' && <QuestionsPage state={state} dispatch={dispatch} teacherData={teacherData} />}
+      {state.staff.section === 'questions' && <QuestionsPage dispatch={dispatch} teacherData={teacherData} />}
       {state.staff.section === 'create-question' && <CreateQuestionPage state={state} dispatch={dispatch} teacherData={teacherData} gateway={gateway} />}
-      {state.staff.section === 'exams' && <ExamsPage state={state} dispatch={dispatch} teacherData={teacherData} />}
-      {state.staff.section === 'create-exam' && <CreateExamPage state={state} dispatch={dispatch} teacherData={teacherData} />}
+      {state.staff.section === 'exams' && <ExamsPage />}
+      {state.staff.section === 'create-exam' && <CreateExamPage />}
     </TeacherLayout>
   )
 }

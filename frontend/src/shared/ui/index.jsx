@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Icon } from '../lib/icons'
+import { Icon } from '../icons/Icon'
 
 export function WeaveLogo({ inverse = false, size = 'normal' }) {
   return (

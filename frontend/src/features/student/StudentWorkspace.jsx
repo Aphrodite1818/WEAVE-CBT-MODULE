@@ -1,21 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Metric, Notice, StatusBadge } from '../../components/ui'
-import { Icon } from '../../lib/icons'
+import { Metric, Notice, StatusBadge } from '../../shared/ui'
 import './student.css'
 
 export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnToSignIn }) {
   const [attempt, setAttempt] = useState(null)
   const [attemptError, setAttemptError] = useState('')
-  const [savingByQuestion, setSavingByQuestion] = useState({})
+  const [, setSavingByQuestion] = useState({})
   const [submitted, setSubmitted] = useState(null)
   const questions = useMemo(() => attempt?.questions || [], [attempt])
   const current = questions[exam.index] || questions[0]
-  const answeredCount = useMemo(
-    () => questions.filter((question) => question.selected_option_ids.length > 0).length,
-    [questions],
-  )
   const candidateName = resolution?.candidate?.name || 'Amina Okafor'
-  const initials = candidateName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
 
   useEffect(() => {
     if (exam.stage !== 'active') return undefined
@@ -51,9 +45,7 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
         <main className="premium-exam-shell">
           <header className="premium-exam-header">
             <div className="premium-exam-header-left">
-              <div className="leaf-logo">
-                <strong><span style={{color: '#2563EB'}}>W</span> Weave</strong> CBT
-              </div>
+              <div className="leaf-logo"><strong><span style={{color: '#2563EB'}}>W</span> Weave</strong> CBT</div>
               <div className="premium-exam-title">
                 <strong>{resolution?.exam?.title || 'Current examination'}</strong>
                 <span>Preparing questions</span>
@@ -73,9 +65,7 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
       <main className="premium-exam-shell">
         <header className="premium-exam-header">
           <div className="premium-exam-header-left">
-            <div className="leaf-logo">
-              <strong><span style={{color: '#2563EB'}}>W</span> Weave</strong> CBT
-            </div>
+            <div className="leaf-logo"><strong><span style={{color: '#2563EB'}}>W</span> Weave</strong> CBT</div>
             <div className="premium-exam-title">
               <strong>{attempt.exam_title}</strong>
               <span>{attempt.is_makeup ? 'Makeup examination' : 'Normal examination'}</span>
@@ -86,44 +76,35 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
             <strong style={{fontSize: '14px', color: '#0F172A'}}>{candidateName}</strong>
           </div>
         </header>
-        
         <div className="premium-exam-layout">
           <aside className="premium-exam-sidebar">
             <div className="premium-timer-box">
               <span>Time remaining</span>
               <strong>{formatRemaining(attempt.remaining_seconds)}</strong>
             </div>
-            
             <div className="premium-question-nav">
               <h3>Questions</h3>
               <div className="premium-nav-grid">
-                {questions.map((q, idx) => (
-                  <button 
-                    key={q.id}
-                    className={`nav-btn ${idx === exam.index ? 'current' : ''} ${q.selected_option_ids.length > 0 && idx !== exam.index ? 'answered' : ''}`}
-                    onClick={() => dispatch({ type: 'exam', patch: { index: idx } })}
+                {questions.map((question, index) => (
+                  <button
+                    key={question.id}
+                    className={`nav-btn ${index === exam.index ? 'current' : ''} ${question.selected_option_ids.length > 0 && index !== exam.index ? 'answered' : ''}`}
+                    onClick={() => dispatch({ type: 'exam', patch: { index } })}
                   >
-                    {idx + 1}
+                    {index + 1}
                   </button>
                 ))}
               </div>
             </div>
           </aside>
-          
           <div className="premium-exam-content">
             <div className="premium-question-header">
               <h2>Question {exam.index + 1} of {questions.length}</h2>
-              <label className="premium-mark-review">
-                <input type="checkbox" /> Mark for review
-              </label>
+              <label className="premium-mark-review"><input type="checkbox" /> Mark for review</label>
             </div>
-            
-            <div className="premium-question-prompt">
-              {current.prompt || "What is the value of x in the equation 2x + 3 = 11?"}
-            </div>
-            
+            <div className="premium-question-prompt">{current.prompt || 'What is the value of x in the equation 2x + 3 = 11?'}</div>
             <div className="premium-options-list">
-              {current.options.map((option, idx) => (
+              {current.options.map((option, index) => (
                 <label key={option.id} className={`premium-option ${current.selected_option_ids.includes(option.id) ? 'selected' : ''}`}>
                   <input
                     type="radio"
@@ -131,35 +112,22 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
                     checked={current.selected_option_ids.includes(option.id)}
                     onChange={() => saveAnswer({ question: current, optionId: option.id, gateway, setAttempt, setSavingByQuestion, setAttemptError })}
                   />
-                  <div className="premium-option-letter">{['A', 'B', 'C', 'D', 'E'][idx % 5]}</div>
+                  <div className="premium-option-letter">{['A', 'B', 'C', 'D', 'E'][index % 5]}</div>
                   <div className="premium-option-text">{option.text || option.position}</div>
                 </label>
               ))}
             </div>
-            
             {attemptError && <div style={{marginTop: '24px'}}><Notice tone="danger">{attemptError}</Notice></div>}
-            
             <div className="premium-exam-footer">
-              <button 
-                className="premium-btn-secondary" 
-                onClick={() => dispatch({ type: 'exam', patch: { index: Math.max(0, exam.index - 1) } })}
-                disabled={exam.index === 0}
-              >
+              <button className="premium-btn-secondary" onClick={() => dispatch({ type: 'exam', patch: { index: Math.max(0, exam.index - 1) } })} disabled={exam.index === 0}>
                 &lt; Previous
               </button>
-              
               {exam.index < questions.length - 1 ? (
-                <button 
-                  className="premium-btn-primary" 
-                  onClick={() => dispatch({ type: 'exam', patch: { index: exam.index + 1 } })}
-                >
+                <button className="premium-btn-primary" onClick={() => dispatch({ type: 'exam', patch: { index: exam.index + 1 } })}>
                   Save and next &gt;
                 </button>
               ) : (
-                <button 
-                  className="premium-btn-primary" 
-                  onClick={() => submitAttempt({ gateway, setSubmitted, dispatch, setAttemptError })}
-                >
+                <button className="premium-btn-primary" onClick={() => submitAttempt({ gateway, setSubmitted, dispatch, setAttemptError })}>
                   Submit exam
                 </button>
               )}
@@ -179,12 +147,7 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
         <p>Check the details below before you begin.</p>
         <Notice>Weave resolved your examination from the local CBT backend.</Notice>
         {attemptError && <Notice tone="danger">{attemptError}</Notice>}
-        <button
-          className="premium-btn-primary"
-          style={{width: '100%', marginTop: '24px'}}
-          disabled={unavailable}
-          onClick={() => startAttempt({ gateway, setAttempt, dispatch, setAttemptError })}
-        >
+        <button className="premium-btn-primary" style={{width: '100%', marginTop: '24px'}} disabled={unavailable} onClick={() => startAttempt({ gateway, setAttempt, dispatch, setAttemptError })}>
           Start Exam &rarr;
         </button>
       </section>
@@ -210,9 +173,7 @@ async function saveAnswer({ question, optionId, gateway, setAttempt, setSavingBy
   setSavingByQuestion((current) => ({ ...current, [question.id]: 'Saving...' }))
   setAttempt((currentAttempt) => ({
     ...currentAttempt,
-    questions: currentAttempt.questions.map((item) =>
-      item.id === question.id ? { ...item, selected_option_ids: selectedOptionIds, mutation_sequence: mutationSequence } : item,
-    ),
+    questions: currentAttempt.questions.map((item) => item.id === question.id ? { ...item, selected_option_ids: selectedOptionIds, mutation_sequence: mutationSequence } : item),
   }))
 
   try {
@@ -224,11 +185,7 @@ async function saveAnswer({ question, optionId, gateway, setAttempt, setSavingBy
     setAttempt((currentAttempt) => ({
       ...currentAttempt,
       remaining_seconds: saved.remaining_seconds,
-      questions: currentAttempt.questions.map((item) =>
-        item.id === question.id
-          ? { ...item, selected_option_ids: saved.selected_option_ids, mutation_sequence: saved.mutation_sequence, is_flagged: saved.is_flagged }
-          : item,
-      ),
+      questions: currentAttempt.questions.map((item) => item.id === question.id ? { ...item, selected_option_ids: saved.selected_option_ids, mutation_sequence: saved.mutation_sequence, is_flagged: saved.is_flagged } : item),
     }))
     setSavingByQuestion((current) => ({ ...current, [question.id]: 'Saved' }))
   } catch (error) {
