@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { BrowserRouter } from 'react-router-dom'
 
 import App from '../src/App'
 
@@ -10,7 +11,7 @@ const optionId = '55555555-5555-5555-5555-555555555555'
 const bankId = '99999999-9999-9999-9999-999999999999'
 
 function renderApp() {
-  render(<App />)
+  render(<BrowserRouter><App /></BrowserRouter>)
 }
 
 function jsonResponse(body, status = 200) {
@@ -78,6 +79,7 @@ const teacherQuestion = {
 
 describe('Weave backend integration shell', () => {
   beforeEach(() => {
+    window.history.pushState({}, '', '/')
     window.localStorage.clear()
     vi.restoreAllMocks()
   })

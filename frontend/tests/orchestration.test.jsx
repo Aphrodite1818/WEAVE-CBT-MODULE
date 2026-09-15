@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { BrowserRouter } from 'react-router-dom'
 import App from '../src/App'
 
 const paired = { configured: true, tenant_name: 'Brightfield Academy', server_name: 'Main CBT Lab' }
@@ -31,6 +32,10 @@ async function openSetup() {
   fireEvent.click(screen.getByRole('button', { name: /get started/i }))
 }
 
+function renderApp() {
+  render(<BrowserRouter><App /></BrowserRouter>)
+}
+
 async function submitCode() {
   await openSetup()
   fireEvent.change(screen.getByLabelText(/pairing code/i), { target: { value: 'CBT12345' } })
@@ -46,25 +51,37 @@ async function openStaff() {
 }
 
 describe('Weave setup and first sync orchestration', () => {
-  beforeEach(() => { window.localStorage.clear(); vi.restoreAllMocks() })
+  beforeEach(() => {
+    window.history.pushState({}, '', '/')
+    window.localStorage.clear()
+    vi.restoreAllMocks()
+  })
 
   it('uses installation status to show welcome only on an unpaired server', async () => {
     routes({ 'GET /api/v1/installation/status': () => reply(unpaired) })
-    render(<App />)
+    renderApp()
     expect(await screen.findByRole('heading', { name: /welcome to/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /login as staff/i })).not.toBeInTheDocument()
   })
 
+  it('keeps an unpaired setup subroute instead of returning to the welcome screen', async () => {
+    window.history.pushState({}, '', '/setup/pairing-code')
+    routes({ 'GET /api/v1/installation/status': () => reply(unpaired) })
+    renderApp()
+    expect(await screen.findByRole('heading', { name: /enter pairing code/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /get started/i })).not.toBeInTheDocument()
+  })
+
   it('skips setup on a configured server even after a new render', async () => {
     routes()
-    render(<App />)
+    renderApp()
     expect(await screen.findByRole('heading', { name: /a smarter way to take exams/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /get started/i })).not.toBeInTheDocument()
   })
 
   it('collects a code before any pairing request and then collects the server name', async () => {
     const fetchMock = routes({ 'GET /api/v1/installation/status': () => reply(unpaired) })
-    render(<App />)
+    renderApp()
     await submitCode()
     expect(screen.getByRole('heading', { name: /set a server name/i })).toBeInTheDocument()
     expect(fetchMock.mock.calls.some(([url]) => url === '/api/v1/installation/pair')).toBe(false)
@@ -72,7 +89,7 @@ describe('Weave setup and first sync orchestration', () => {
 
   it('requires the backend code length despite the OTP visual treatment', async () => {
     const fetchMock = routes({ 'GET /api/v1/installation/status': () => reply(unpaired) })
-    render(<App />)
+    renderApp()
     await openSetup()
     fireEvent.change(screen.getByLabelText(/pairing code/i), { target: { value: '123456' } })
     fireEvent.click(screen.getByRole('button', { name: /continue/i }))
@@ -86,7 +103,7 @@ describe('Weave setup and first sync orchestration', () => {
       'GET /api/v1/installation/status': () => reply(unpaired),
       'POST /api/v1/installation/pair': () => new Promise((resolve) => { finish = resolve }),
     })
-    render(<App />)
+    renderApp()
     await submitCode()
     fireEvent.change(screen.getByLabelText(/server name/i), { target: { value: 'Main CBT Lab' } })
     fireEvent.click(screen.getByRole('button', { name: /complete setup/i }))
@@ -101,7 +118,7 @@ describe('Weave setup and first sync orchestration', () => {
 
   it('keeps values and offers retry after pairing fails', async () => {
     routes({ 'GET /api/v1/installation/status': () => reply(unpaired), 'POST /api/v1/installation/pair': () => reply({ detail: 'Invalid pairing code' }, 400) })
-    render(<App />)
+    renderApp()
     await submitCode()
     fireEvent.change(screen.getByLabelText(/server name/i), { target: { value: 'Main CBT Lab' } })
     fireEvent.click(screen.getByRole('button', { name: /complete setup/i }))
@@ -116,7 +133,7 @@ describe('Weave setup and first sync orchestration', () => {
       'GET /api/v1/installation/status': () => reply(++statusReads === 1 ? unpaired : paired),
       'POST /api/v1/installation/pair': () => reply({ detail: 'Already paired' }, 409),
     })
-    render(<App />)
+    renderApp()
     await submitCode()
     fireEvent.change(screen.getByLabelText(/server name/i), { target: { value: 'Main CBT Lab' } })
     fireEvent.click(screen.getByRole('button', { name: /complete setup/i }))
@@ -126,14 +143,14 @@ describe('Weave setup and first sync orchestration', () => {
 
   it('continues with default Weave blue when branding fails', async () => {
     routes({ 'GET /api/v1/branding': () => reply({ detail: 'Unavailable' }, 503) })
-    const { container } = render(<App />)
+    const { container } = render(<BrowserRouter><App /></BrowserRouter>)
     expect(await screen.findByRole('heading', { name: /a smarter way to take exams/i })).toBeInTheDocument()
     expect(container.firstChild.style.getPropertyValue('--color-primary')).toBe('29 78 216')
   })
 
   it('applies local school branding and uses the local logo endpoint', async () => {
     routes()
-    const { container } = render(<App />)
+    const { container } = render(<BrowserRouter><App /></BrowserRouter>)
     await screen.findByRole('heading', { name: /a smarter way to take exams/i })
     await waitFor(() => expect(container.firstChild.style.getPropertyValue('--color-primary')).toBe('4 120 87'))
     expect(screen.getByAltText(/brightfield academy logo/i).getAttribute('src')).toBe('/api/v1/branding/logo?v=logo-revision')
@@ -141,7 +158,7 @@ describe('Weave setup and first sync orchestration', () => {
 
   it('routes landing actions to separate staff and student pages with no role selector', async () => {
     routes()
-    render(<App />)
+    renderApp()
     await screen.findByRole('heading', { name: /a smarter way to take exams/i })
     fireEvent.click(screen.getByRole('button', { name: /login as student/i }))
     expect(screen.getByRole('heading', { name: /student login/i })).toBeInTheDocument()
@@ -155,7 +172,7 @@ describe('Weave setup and first sync orchestration', () => {
 
   it('checks backend sync status only after admin sign in', async () => {
     const fetchMock = routes({ 'POST /api/v1/auth/login': () => reply(admin), 'GET /api/v1/sync/status': () => reply(incomplete) })
-    render(<App />)
+    renderApp()
     await openStaff()
     expect(await screen.findByRole('heading', { name: /preparing your cbt server/i })).toBeInTheDocument()
     expect(fetchMock.mock.calls.some(([url]) => url === '/api/v1/sync/status')).toBe(true)
@@ -164,7 +181,7 @@ describe('Weave setup and first sync orchestration', () => {
 
   it('lets teachers enter their workspace without an admin sync request', async () => {
     const fetchMock = routes({ 'POST /api/v1/auth/login': () => reply(teacher), 'GET /api/v1/questions/banks/authorable': () => reply([]) })
-    render(<App />)
+    renderApp()
     await openStaff()
     expect(await screen.findByRole('button', { name: /question banks/i })).toBeInTheDocument()
     expect(fetchMock.mock.calls.some(([url]) => url === '/api/v1/sync/status')).toBe(false)
@@ -176,7 +193,7 @@ describe('Weave setup and first sync orchestration', () => {
       'GET /api/v1/sync/status': () => reply({ ...incomplete, last_error: 'School connection unavailable' }),
       'POST /api/v1/sync/reconcile': () => reply(incomplete),
     })
-    render(<App />)
+    renderApp()
     await openStaff()
     expect(await screen.findByText(/school connection unavailable/i)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /retry synchronization/i }))
@@ -191,7 +208,7 @@ describe('Weave setup and first sync orchestration', () => {
       'POST /api/v1/auth/login': () => reply(admin),
       'GET /api/v1/sync/status': () => reply(++reads === 1 ? incomplete : complete),
     })
-    render(<App />)
+    renderApp()
     await openStaff()
     expect(await screen.findByRole('heading', { name: /preparing your cbt server/i })).toBeInTheDocument()
     expect(screen.queryByRole('navigation', { name: /admin navigation/i })).not.toBeInTheDocument()
