@@ -9,7 +9,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AcademicAuthorizationError, AcademicScopeError
-from app.domains.academics.models import AcademicClass, CurriculumSubject
+from app.domains.academics.models import CurriculumSubject
 from app.domains.academics.repository import AcademicRepository
 from app.domains.academics.service import AcademicEligibilityService
 from app.domains.auth.models import LocalActor
@@ -25,7 +25,7 @@ class AcademicAuthorizationService:
         actor: LocalActor,
         curriculum_subject_id: UUID,
     ) -> None:
-        """Require authoring access to one live CurriculumSubject."""
+        """Require general authoring access to one live CurriculumSubject."""
 
         if not actor.is_active:
             raise AcademicAuthorizationError("Active local actor is required")
@@ -71,6 +71,67 @@ class AcademicAuthorizationService:
         if not has_assignment:
             raise AcademicAuthorizationError(
                 "Teacher does not have an active assignment for this curriculum subject"
+            )
+
+    @classmethod
+    async def require_can_author_curriculum_subject_for_term(
+        cls,
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        curriculum_subject_id: UUID,
+        academic_term_id: UUID,
+    ) -> None:
+        """Require permission to help author a level-wide subject exam for one term.
+
+        An exam is not owned by one class. AcademicEligibilityService determines the
+        full set of classes that may take the subject in the selected term.
+
+        Administrators may author when the subject has at least one academically
+        eligible class for the term.
+
+        A teacher may participate in joint authoring when they hold a current
+        assignment for the subject in at least one of those academically eligible
+        classes. Their personal assignment does not reduce the exam audience.
+        """
+
+        await cls.require_can_author_curriculum_subject(
+            db,
+            actor=actor,
+            curriculum_subject_id=curriculum_subject_id,
+        )
+
+        eligible_classes = await AcademicEligibilityService.list_eligible_classes(
+            db,
+            curriculum_subject_id=curriculum_subject_id,
+            academic_term_id=academic_term_id,
+        )
+
+        if not eligible_classes:
+            raise AcademicScopeError(
+                "Curriculum subject has no academically eligible classes "
+                "for the selected academic term"
+            )
+
+        if actor.role == "admin":
+            return
+
+        teacher_membership_id = cls._teacher_membership_id(actor)
+        assigned_classes = (
+            await AcademicRepository.list_teacher_classes_for_curriculum_subject(
+                db,
+                teacher_membership_id=teacher_membership_id,
+                curriculum_subject_id=curriculum_subject_id,
+            )
+        )
+
+        eligible_class_ids = {classroom.id for classroom in eligible_classes}
+        if not any(
+            classroom.id in eligible_class_ids for classroom in assigned_classes
+        ):
+            raise AcademicAuthorizationError(
+                "Teacher does not have an active assignment in any academically "
+                "eligible class for this curriculum subject and term"
             )
 
     @staticmethod
@@ -172,78 +233,6 @@ class AcademicAuthorizationService:
             db,
             teacher_membership_id=teacher_membership_id,
         )
-
-    @staticmethod
-    async def list_actor_targetable_classes(
-        db: AsyncSession,
-        *,
-        actor: LocalActor,
-        curriculum_subject_id: UUID,
-        academic_term_id: UUID,
-    ) -> list[AcademicClass]:
-        """Return academically eligible classes the actor may target for a subject.
-
-        AcademicEligibilityService owns the curriculum/specialization rules.
-        Authorization then narrows that academic scope according to actor authority:
-
-        - administrators may target every academically eligible class;
-        - teachers may target only academically eligible classes for which they
-          also hold a current effective Weave teacher assignment.
-        """
-
-        if not actor.is_active:
-            raise AcademicAuthorizationError("Active local actor is required")
-
-        curriculum_subject = await AcademicRepository.get_curriculum_subject_by_id(
-            db,
-            curriculum_subject_id,
-        )
-
-        if curriculum_subject is None:
-            raise AcademicScopeError(
-                "Curriculum subject does not exist or is no longer available"
-            )
-
-        if not curriculum_subject.is_active:
-            raise AcademicScopeError("Curriculum subject is inactive")
-
-        if actor.role not in {"admin", "teacher"}:
-            raise AcademicAuthorizationError(
-                "Only administrators and teachers can access this academic scope"
-            )
-
-        eligible_classes = await AcademicEligibilityService.list_eligible_classes(
-            db,
-            curriculum_subject_id=curriculum_subject_id,
-            academic_term_id=academic_term_id,
-        )
-
-        if actor.role == "admin":
-            return eligible_classes
-
-        teacher_membership_id = AcademicAuthorizationService._teacher_membership_id(
-            actor
-        )
-
-        await AcademicAuthorizationService._require_live_teacher(
-            db,
-            teacher_membership_id=teacher_membership_id,
-        )
-
-        assigned_classes = (
-            await AcademicRepository.list_teacher_classes_for_curriculum_subject(
-                db,
-                teacher_membership_id=teacher_membership_id,
-                curriculum_subject_id=curriculum_subject_id,
-            )
-        )
-        assigned_class_ids = {classroom.id for classroom in assigned_classes}
-
-        return [
-            classroom
-            for classroom in eligible_classes
-            if classroom.id in assigned_class_ids
-        ]
 
     @staticmethod
     def _teacher_membership_id(actor: LocalActor) -> UUID:
