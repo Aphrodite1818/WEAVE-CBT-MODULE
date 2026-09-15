@@ -17,16 +17,19 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
 from app import model_registry  # noqa: E402,F401
 from app.core.database import Base  # noqa: E402
+from app.domains.academics.models import CurriculumSubjectDepartment  # noqa: E402
 from app.domains.academics.repository import AcademicRepository  # noqa: E402
 from app.domains.node.identity_store import node_identity_store  # noqa: E402
+from app.domains.sync.invalidation import SyncInvalidationRepository  # noqa: E402
 from app.domains.sync.repository import SyncRepository  # noqa: E402
 from app.domains.sync.service import ENTITY_MODELS, ENTITY_SCHEMAS, SyncService  # noqa: E402
 from app.integrations.weave.exceptions import WeaveRequestRejectedError  # noqa: E402
 from app.integrations.weave.schemas import (  # noqa: E402
     SYNC_SCHEMA_VERSION,
     WeaveAcademicBootstrap,
-    WeaveSubjectOfferingSnapshot,
+    WeaveCurriculumSubjectDepartmentSnapshot,
     WeaveSyncChange,
+    WeaveTeacherAssignmentSnapshot,
 )
 
 
@@ -36,49 +39,61 @@ class _FakeAsyncSession:
 
 
 class SyncContractTests(unittest.TestCase):
-    def test_bootstrap_v3_parses_exact_top_level_shape(self) -> None:
+    def _bootstrap_payload(self) -> dict:
         tenant_id = uuid4()
         server_id = uuid4()
-        payload = WeaveAcademicBootstrap.model_validate(
-            {
-                "metadata": {
-                    "schema_version": SYNC_SCHEMA_VERSION,
-                    "snapshot_id": str(uuid4()),
-                    "generated_at": "2026-08-18T00:10:46Z",
-                    "cursor": 134,
-                },
-                "school": {
-                    "id": str(tenant_id),
-                    "name": "Debright college",
-                    "institution_type": "SECONDARY_SCHOOL",
-                    "timezone": "Africa/Lagos",
-                },
-                "server": {"id": str(server_id), "name": "Debright server 1"},
-                "sessions": [],
-                "terms": [],
-                "levels": [],
-                "arm_labels": [],
-                "departments": [],
-                "classes": [],
-                "class_term_departments": [],
-                "subjects": [],
-                "curricula": [],
-                "curriculum_subjects": [],
-                "offerings": [],
-                "assessment_schemes": [],
-                "assessment_components": [],
-                "admins": [],
-                "teachers": [],
-                "teacher_assignments": [],
-                "student_enrollments": [],
-            }
-        )
-        self.assertEqual(payload.metadata.schema_version, 3)
-        self.assertEqual(payload.metadata.cursor, 134)
-        self.assertEqual(payload.school.id, tenant_id)
-        self.assertEqual(payload.server.id, server_id)
+        return {
+            "metadata": {
+                "schema_version": SYNC_SCHEMA_VERSION,
+                "snapshot_id": str(uuid4()),
+                "generated_at": "2026-09-15T00:10:46Z",
+                "cursor": 134,
+            },
+            "school": {
+                "id": str(tenant_id),
+                "name": "Debright college",
+                "institution_type": "SECONDARY_SCHOOL",
+                "timezone": "Africa/Lagos",
+            },
+            "server": {"id": str(server_id), "name": "Debright server 1"},
+            "sessions": [],
+            "terms": [],
+            "levels": [],
+            "arm_labels": [],
+            "departments": [],
+            "classes": [],
+            "class_term_departments": [],
+            "subjects": [],
+            "curricula": [],
+            "curriculum_subjects": [],
+            "curriculum_subject_departments": [],
+            "assessment_schemes": [],
+            "assessment_components": [],
+            "admins": [],
+            "teachers": [],
+            "teacher_assignments": [],
+            "student_enrollments": [],
+        }
 
-    def test_incremental_dispatch_covers_every_weave_v3_entity(self) -> None:
+    def test_bootstrap_v5_parses_exact_top_level_shape(self) -> None:
+        raw = self._bootstrap_payload()
+        payload = WeaveAcademicBootstrap.model_validate(raw)
+
+        self.assertEqual(payload.metadata.schema_version, 5)
+        self.assertEqual(payload.metadata.cursor, 134)
+        self.assertEqual(payload.school.id, raw["school"]["id"])
+        self.assertEqual(payload.server.id, raw["server"]["id"])
+        self.assertEqual(payload.curriculum_subject_departments, [])
+
+    def test_bootstrap_rejects_legacy_offerings_field(self) -> None:
+        raw = self._bootstrap_payload()
+        raw["offerings"] = []
+        del raw["curriculum_subject_departments"]
+
+        with self.assertRaises(ValidationError):
+            WeaveAcademicBootstrap.model_validate(raw)
+
+    def test_incremental_dispatch_covers_every_weave_v5_entity(self) -> None:
         expected = {
             "academic_level",
             "department",
@@ -90,7 +105,7 @@ class SyncContractTests(unittest.TestCase):
             "subject",
             "curriculum",
             "curriculum_subject",
-            "subject_offering",
+            "curriculum_subject_department",
             "assessment_scheme",
             "assessment_component",
             "admin",
@@ -100,6 +115,49 @@ class SyncContractTests(unittest.TestCase):
         }
         self.assertEqual(set(ENTITY_MODELS), expected)
         self.assertEqual(set(ENTITY_SCHEMAS), expected)
+        self.assertIs(
+            ENTITY_MODELS["curriculum_subject_department"],
+            CurriculumSubjectDepartment,
+        )
+
+    def test_curriculum_subject_department_has_only_current_v5_scope(self) -> None:
+        row = WeaveCurriculumSubjectDepartmentSnapshot.model_validate(
+            {
+                "id": str(uuid4()),
+                "curriculum_subject_id": str(uuid4()),
+                "department_id": str(uuid4()),
+            }
+        )
+        self.assertIsNotNone(row.department_id)
+
+        with self.assertRaises(ValidationError):
+            WeaveCurriculumSubjectDepartmentSnapshot.model_validate(
+                {
+                    "id": str(uuid4()),
+                    "curriculum_subject_id": str(uuid4()),
+                    "department_id": str(uuid4()),
+                    "academic_term_id": str(uuid4()),
+                }
+            )
+
+    def test_teacher_assignment_rejects_removed_is_active_flag(self) -> None:
+        raw = {
+            "id": str(uuid4()),
+            "teacher_membership_id": str(uuid4()),
+            "class_id": str(uuid4()),
+            "curriculum_subject_id": str(uuid4()),
+            "effective_from": "2026-09-01",
+            "effective_to": None,
+            "is_active": True,
+        }
+        with self.assertRaises(ValidationError):
+            WeaveTeacherAssignmentSnapshot.model_validate(raw)
+
+    def test_model_registry_contains_v5_scope_without_subject_offerings(self) -> None:
+        tables = set(Base.metadata.tables)
+        self.assertIn("curriculum_subject_departments", tables)
+        self.assertNotIn("subject_offerings", tables)
+        self.assertNotIn("subject_offering_eligibilities", tables)
 
     def test_deleted_change_requires_null_tombstone(self) -> None:
         change = WeaveSyncChange.model_validate(
@@ -111,149 +169,103 @@ class SyncContractTests(unittest.TestCase):
                 "operation": "deleted",
                 "schema_version": SYNC_SCHEMA_VERSION,
                 "payload": None,
-                "occurred_at": "2026-08-18T00:11:00Z",
+                "occurred_at": "2026-09-15T00:11:00Z",
             }
         )
         self.assertEqual(change.operation, "deleted")
 
-    def test_offering_contract_rejects_legacy_candidate_array(self) -> None:
-        with self.assertRaises(ValidationError):
-            WeaveSubjectOfferingSnapshot.model_validate(
-                {
-                    "id": str(uuid4()),
-                    "curriculum_subject_id": str(uuid4()),
-                    "academic_term_id": str(uuid4()),
-                    "department_id": None,
-                    "eligible_enrollment_ids": [str(uuid4())],
-                }
-            )
-
-    def test_model_registry_contains_v3_schema_without_eligibility_table(self) -> None:
-        tables = set(Base.metadata.tables)
-        self.assertNotIn("subject_offering_eligibilities", tables)
-        expected = {
-            "academic_sessions",
-            "academic_terms",
-            "academic_levels",
-            "academic_classes",
-            "curricula",
-            "curriculum_subjects",
-            "subject_offerings",
-            "academic_teachers",
-            "teacher_assignments",
-            "student_enrollments",
-            "sync_states",
-            "exams",
-            "exam_attempts",
-            "exam_results",
-        }
-        self.assertTrue(expected <= tables, expected - tables)
-
 
 class SyncApplyTests(unittest.IsolatedAsyncioTestCase):
-    async def test_replacements_tombstone_old_rows_before_any_live_upsert(self) -> None:
+    async def test_curriculum_subject_department_delta_uses_v5_projection(self) -> None:
         service = SyncService()
         now = datetime.now(UTC)
-        class_id = uuid4()
-        curriculum_subject_id = uuid4()
-        student_id = uuid4()
-        old_assignment = uuid4()
-        new_assignment = uuid4()
-        old_enrollment = uuid4()
-        new_enrollment = uuid4()
-
-        changes = [
-            WeaveSyncChange(
-                event_id=uuid4(),
-                cursor=1,
-                entity_type="teacher_assignment",
-                entity_id=old_assignment,
-                operation="deleted",
-                schema_version=SYNC_SCHEMA_VERSION,
-                payload=None,
-                occurred_at=now,
-            ),
-            WeaveSyncChange(
-                event_id=uuid4(),
-                cursor=2,
-                entity_type="student_enrollment",
-                entity_id=old_enrollment,
-                operation="deleted",
-                schema_version=SYNC_SCHEMA_VERSION,
-                payload=None,
-                occurred_at=now,
-            ),
-            WeaveSyncChange(
-                event_id=uuid4(),
-                cursor=3,
-                entity_type="student_enrollment",
-                entity_id=new_enrollment,
-                operation="created",
-                schema_version=SYNC_SCHEMA_VERSION,
-                payload={
-                    "id": str(new_enrollment),
-                    "student_id": str(student_id),
-                    "admission_number": "STD-001",
-                    "first_name": "Ada",
-                    "last_name": "Lovelace",
-                    "academic_level_id": str(uuid4()),
-                    "class_id": str(class_id),
-                    "academic_session_id": str(uuid4()),
-                    "is_current": True,
-                    "student_status": "active",
-                },
-                occurred_at=now,
-            ),
-            WeaveSyncChange(
-                event_id=uuid4(),
-                cursor=4,
-                entity_type="teacher_assignment",
-                entity_id=new_assignment,
-                operation="created",
-                schema_version=SYNC_SCHEMA_VERSION,
-                payload={
-                    "id": str(new_assignment),
-                    "teacher_membership_id": str(uuid4()),
-                    "class_id": str(class_id),
-                    "curriculum_subject_id": str(curriculum_subject_id),
-                    "is_active": True,
-                    "effective_from": now.date().isoformat(),
-                    "effective_to": None,
-                },
-                occurred_at=now,
-            ),
-        ]
-
-        calls: list[tuple[str, str]] = []
-
-        async def tombstone(_db, model, _ids, **_kwargs):
-            calls.append(("tombstone", model.__tablename__))
-
-        async def upsert(_db, model, _rows, **_kwargs):
-            calls.append(("upsert", model.__tablename__))
+        entity_id = uuid4()
+        change = WeaveSyncChange(
+            event_id=uuid4(),
+            cursor=1,
+            entity_type="curriculum_subject_department",
+            entity_id=entity_id,
+            operation="created",
+            schema_version=SYNC_SCHEMA_VERSION,
+            payload={
+                "id": str(entity_id),
+                "curriculum_subject_id": str(uuid4()),
+                "department_id": str(uuid4()),
+            },
+            occurred_at=now,
+        )
 
         with (
             patch.object(
                 AcademicRepository,
+                "bulk_upsert_projections",
+                new=AsyncMock(),
+            ) as upsert,
+            patch.object(
+                AcademicRepository,
                 "bulk_tombstone_projections",
-                new=tombstone,
+                new=AsyncMock(),
             ),
+            patch.object(
+                SyncInvalidationRepository,
+                "mark_pre_execution_rosters_stale",
+                new=AsyncMock(),
+            ) as invalidate,
+        ):
+            await service._apply_delta_page(object(), [change])  # type: ignore[arg-type]
+
+        upsert.assert_awaited_once()
+        self.assertIs(upsert.await_args.args[1], CurriculumSubjectDepartment)
+        invalidate.assert_not_awaited()
+
+    async def test_student_enrollment_change_invalidates_ready_pre_execution_rosters(
+        self,
+    ) -> None:
+        service = SyncService()
+        now = datetime.now(UTC)
+        entity_id = uuid4()
+        change = WeaveSyncChange(
+            event_id=uuid4(),
+            cursor=1,
+            entity_type="student_enrollment",
+            entity_id=entity_id,
+            operation="updated",
+            schema_version=SYNC_SCHEMA_VERSION,
+            payload={
+                "id": str(entity_id),
+                "student_id": str(uuid4()),
+                "admission_number": "STD-001",
+                "first_name": "Ada",
+                "last_name": "Lovelace",
+                "academic_level_id": str(uuid4()),
+                "class_id": str(uuid4()),
+                "academic_session_id": str(uuid4()),
+                "is_current": True,
+                "student_status": "active",
+            },
+            occurred_at=now,
+        )
+
+        with (
             patch.object(
                 AcademicRepository,
                 "bulk_upsert_projections",
-                new=upsert,
+                new=AsyncMock(),
             ),
+            patch.object(
+                AcademicRepository,
+                "bulk_tombstone_projections",
+                new=AsyncMock(),
+            ),
+            patch.object(
+                SyncInvalidationRepository,
+                "mark_pre_execution_rosters_stale",
+                new=AsyncMock(return_value=1),
+            ) as invalidate,
         ):
-            await service._apply_delta_page(object(), changes)  # type: ignore[arg-type]
+            await service._apply_delta_page(object(), [change])  # type: ignore[arg-type]
 
-        first_upsert = next(
-            index for index, call in enumerate(calls) if call[0] == "upsert"
-        )
-        self.assertTrue(all(call[0] == "tombstone" for call in calls[:first_upsert]))
-        self.assertIn(("tombstone", "teacher_assignments"), calls)
-        self.assertIn(("tombstone", "student_enrollments"), calls)
-        self.assertIn(("upsert", "teacher_assignments"), calls)
-        self.assertIn(("upsert", "student_enrollments"), calls)
+        invalidate.assert_awaited_once()
 
     async def test_cursor_expiry_forces_authoritative_bootstrap(self) -> None:
         cursor = 40
