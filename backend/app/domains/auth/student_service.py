@@ -12,7 +12,6 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import StoredCredentialHashError, verify_candidate_pin
 from app.domains.academics.models import StudentEnrollment
 from app.domains.academics.repository import AcademicRepository
 from app.domains.auth.student_models import StudentExamSession
@@ -29,6 +28,7 @@ from app.domains.exams.models import Exam, ExamRosterStatus, ExamStatus
 
 STUDENT_SESSION_TOKEN_BYTES = 48
 STUDENT_SESSION_LIFETIME_HOURS = 8
+INVALID_STUDENT_LOGIN = "Invalid admission number or password"
 
 
 class StudentAuthenticationError(ValueError):
@@ -202,31 +202,61 @@ class StudentAuthService:
             session.revocation_reason = "Superseded by a new student login"
         await StudentAuthRepository.save_sessions(db, sessions)
 
+    @staticmethod
+    def _verify_admission_password(
+        *,
+        submitted_admission_number: str,
+        submitted_password: str,
+        stored_admission_number: str,
+    ) -> None:
+        """Verify the deterministic student credential without storing a password.
+
+        The visible admission-number field must use uppercase. The password is
+        derived only from the authoritative synced admission number by applying
+        ``lower()``. We deliberately do not compare the password against the
+        admission number supplied in the same request because that would only
+        prove the two submitted fields are internally consistent.
+        """
+
+        admission_number = submitted_admission_number.strip()
+        stored_admission = stored_admission_number.strip()
+
+        if not admission_number or admission_number != admission_number.upper():
+            raise StudentAuthenticationError(INVALID_STUDENT_LOGIN)
+
+        expected_admission = stored_admission.upper()
+        expected_password = stored_admission.lower()
+
+        if not secrets.compare_digest(admission_number, expected_admission):
+            raise StudentAuthenticationError(INVALID_STUDENT_LOGIN)
+        if not secrets.compare_digest(submitted_password, expected_password):
+            raise StudentAuthenticationError(INVALID_STUDENT_LOGIN)
+
     @classmethod
     async def login(
         cls,
         db: AsyncSession,
         *,
         admission_number: str,
-        pin: str,
+        password: str,
     ) -> StudentLoginResult:
-        enrollment = await cls._get_current_enrollment(db, admission_number)
-        if enrollment is None:
-            raise StudentAuthenticationError("Invalid admission number or CBT PIN")
+        submitted_admission = admission_number.strip()
 
-        credential = await CandidateRepository.get_active_credential_by_student_id(
-            db, enrollment.student_id
+        # Reject non-uppercase admission input before resolving exam authority.
+        # Lookup remains case-insensitive so synced source formatting cannot
+        # accidentally create duplicate identities.
+        if not submitted_admission or submitted_admission != submitted_admission.upper():
+            raise StudentAuthenticationError(INVALID_STUDENT_LOGIN)
+
+        enrollment = await cls._get_current_enrollment(db, submitted_admission)
+        if enrollment is None:
+            raise StudentAuthenticationError(INVALID_STUDENT_LOGIN)
+
+        cls._verify_admission_password(
+            submitted_admission_number=submitted_admission,
+            submitted_password=password,
+            stored_admission_number=enrollment.admission_number,
         )
-        if credential is None:
-            raise StudentAuthenticationError("Invalid admission number or CBT PIN")
-        try:
-            valid_pin = await verify_candidate_pin(pin, credential.pin_hash)
-        except StoredCredentialHashError as exc:
-            raise StudentAuthenticationError(
-                "Student CBT credential is invalid; administrator intervention is required"
-            ) from exc
-        if not valid_pin:
-            raise StudentAuthenticationError("Invalid admission number or CBT PIN")
 
         (
             candidate,
@@ -234,6 +264,15 @@ class StudentAuthService:
             makeup_authorization_id,
             availability,
         ) = await cls._resolve_candidate(db, enrollment=enrollment)
+
+        # The session grants authority to exactly this student sitting exactly
+        # this candidate record for exactly this exam. It is not a general
+        # student login that can be reused to jump to a different exam.
+        if candidate.student_id != enrollment.student_id or candidate.exam_id != exam.id:
+            raise StudentAuthenticationError(
+                "Resolved examination candidate is inconsistent with student identity"
+            )
+
         now = datetime.now(UTC)
         expires_at = now + timedelta(hours=STUDENT_SESSION_LIFETIME_HOURS)
         raw_token = secrets.token_urlsafe(STUDENT_SESSION_TOKEN_BYTES)
@@ -300,6 +339,7 @@ class StudentAuthService:
         )
         if (
             candidate is None
+            or candidate.id != session.candidate_id
             or candidate.student_id != session.student_id
             or candidate.exam_id != session.exam_id
         ):
