@@ -61,7 +61,7 @@ class StudentAuthContractTests(unittest.TestCase):
             status_message="No examination is currently available for you.",
             is_makeup=False,
         )
-        self.assertEqual(payload.availability, StudentExamAvailability.NO_EXAM)
+        self.assertEqual(payload.availability, StudentExamAvailability.NO_EXAM.value)
         self.assertIsNone(payload.exam_id)
         self.assertIsNone(payload.candidate_id)
 
