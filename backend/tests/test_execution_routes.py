@@ -17,6 +17,7 @@ class ExecutionRouteTests(unittest.TestCase):
     def test_student_auth_routes_exist(self):
         paths = {route.path for route in student_auth_router.routes}
         self.assertIn("/student/auth/login", paths)
+        self.assertIn("/student/auth/status", paths)
         self.assertIn("/student/auth/logout", paths)
 
     def test_student_attempt_routes_exist(self):
