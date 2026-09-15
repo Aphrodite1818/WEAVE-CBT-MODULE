@@ -26,7 +26,7 @@ export function LoginField({ label, type = 'text', icon, value, onChange, placeh
     <label className="login-field">
       <span>{label}</span>
       <span className="login-field__control">
-        <Pictogram name={icon} size={21} />
+        <Pictogram name={icon} size={20} />
         <input
           type={resolvedType}
           value={value}
@@ -47,8 +47,8 @@ export function LoginField({ label, type = 'text', icon, value, onChange, placeh
 
 export function LoginShell({ kind, title, subtitle, children, error, loading, onSubmit, onBack }) {
   const isStudent = kind === 'student'
-  const motto = isStudent ? <>Same dreams.<br />Brighter futures.</> : <>Same mission.<br />Greater impact.</>
   const benefits = benefitSets[kind] || benefitSets.student
+  const artSrc = isStudent ? '/visuals/student-login.webp' : '/visuals/staff-login.webp'
 
   return (
     <main className={`weave-login-page weave-login-page--${kind}`}>
@@ -64,7 +64,7 @@ export function LoginShell({ kind, title, subtitle, children, error, loading, on
 
         <div className="weave-login-layout">
           <section className="weave-login-card">
-            <div className="weave-login-card__icon"><Pictogram name={isStudent ? 'student' : 'staff'} size={31} /></div>
+            <div className="weave-login-card__icon"><Pictogram name={isStudent ? 'student' : 'staff'} size={30} /></div>
             <h1>{title}</h1>
             <p>{subtitle}</p>
             <form onSubmit={(event) => { event.preventDefault(); onSubmit() }}>
@@ -72,24 +72,21 @@ export function LoginShell({ kind, title, subtitle, children, error, loading, on
               {error && <Notice tone="danger">{error}</Notice>}
               <button className="weave-login-submit" type="submit" disabled={loading}>
                 {loading ? 'Checking...' : 'Sign In'}
-                {!loading && <Pictogram name="arrow" size={21} />}
+                {!loading && <Pictogram name="arrow" size={20} />}
               </button>
             </form>
             <div className="weave-login-trust"><Pictogram name="shield" size={18} /> {isStudent ? 'Your exams. Your future. Our support.' : 'Secure access for school staff'}</div>
           </section>
 
           <section className="weave-login-art" aria-label={isStudent ? 'Student exam illustration' : 'School staff illustration'}>
-            <div className="weave-login-art__wash" />
-            <p className="product-script weave-login-motto">{motto}</p>
-            <img src="/student-hero.jpg" alt="" aria-hidden="true" />
-            {!isStudent && <div className="weave-login-art__staff-badge" aria-hidden="true"><Pictogram name="staff" size={34} /><span>Educators enable brighter futures</span></div>}
+            <img src={artSrc} alt="" aria-hidden="true" />
           </section>
         </div>
 
         <section className="weave-login-benefits" aria-label="Weave CBT benefits">
           {benefits.map(([icon, heading, helper]) => (
             <div key={heading}>
-              <span><Pictogram name={icon} size={23} /></span>
+              <span><Pictogram name={icon} size={22} /></span>
               <strong>{heading}</strong>
               <small>{helper}</small>
             </div>
