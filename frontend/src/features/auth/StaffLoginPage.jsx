@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { LoginField, LoginShell } from './LoginShell'
 
-export function StaffLoginPage({ error, loading, onSubmit, onBack }) {
+export function StaffLoginPage({ error, loading, branding, onSubmit, onBack }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
   return (
     <LoginShell
       kind="staff"
+      branding={branding}
       title="Staff Login"
       subtitle="Access your CBT staff account"
       error={error}
@@ -18,7 +19,6 @@ export function StaffLoginPage({ error, loading, onSubmit, onBack }) {
       <LoginField
         label="Email Address"
         type="email"
-        icon="mail"
         autoComplete="username"
         value={email}
         onChange={setEmail}
@@ -27,7 +27,6 @@ export function StaffLoginPage({ error, loading, onSubmit, onBack }) {
       <LoginField
         label="Password"
         type="password"
-        icon="lock"
         autoComplete="current-password"
         value={password}
         onChange={setPassword}

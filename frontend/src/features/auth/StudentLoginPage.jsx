@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { LoginField, LoginShell } from './LoginShell'
 
-export function StudentLoginPage({ error, loading, onSubmit, onBack }) {
+export function StudentLoginPage({ error, loading, branding, onSubmit, onBack }) {
   const [admissionNumber, setAdmissionNumber] = useState('')
   const [password, setPassword] = useState('')
 
   return (
     <LoginShell
       kind="student"
+      branding={branding}
       title="Student Login"
       subtitle="Access your CBT exam account"
       error={error}
@@ -17,7 +18,6 @@ export function StudentLoginPage({ error, loading, onSubmit, onBack }) {
     >
       <LoginField
         label="Admission Number"
-        icon="student"
         autoComplete="username"
         value={admissionNumber}
         onChange={setAdmissionNumber}
@@ -26,7 +26,6 @@ export function StudentLoginPage({ error, loading, onSubmit, onBack }) {
       <LoginField
         label="Password"
         type="password"
-        icon="lock"
         autoComplete="current-password"
         value={password}
         onChange={setPassword}

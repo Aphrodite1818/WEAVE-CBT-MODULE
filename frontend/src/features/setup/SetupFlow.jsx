@@ -1,16 +1,61 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { RiGraduationCapLine } from '@remixicon/react'
 import { Pictogram } from '../../shared/icons/Pictogram'
-import { Notice, WeaveLogo } from '../../shared/ui'
+import { Notice, WeaveMark } from '../../shared/ui'
 import './setup.css'
 
 function SetupHeader() {
   return (
     <header className="setup-header">
-      <div className="setup-header__brand">
-        <WeaveLogo />
-        <small>Exams made simple.</small>
+      <div className="setup-logo" role="img" aria-label="Weave">
+        <WeaveMark />
+        <strong>Weave</strong>
       </div>
     </header>
+  )
+}
+
+const welcomeDescription = "This CBT server needs to be connected to your school's Weave account before it can be used."
+const lockupDescription = 'EXAMS\nMADE\nSIMPLE'
+const TYPEWRITER_CHAR_DELAY_MS = 32
+const TYPEWRITER_PAUSE_MS = 2500
+const LOCKUP_TYPEWRITER_PAUSE_MS = 1800
+
+function TypewriterText({ text, className, as: Tag = 'p', charDelayMs = TYPEWRITER_CHAR_DELAY_MS, pauseMs = TYPEWRITER_PAUSE_MS }) {
+  const [loopKey, setLoopKey] = useState(0)
+  const visibleText = text.replace(/\n/g, '')
+
+  useEffect(() => {
+    const typingMs = visibleText.length * charDelayMs + 10
+    let timeoutId
+    const loop = () => {
+      setLoopKey((key) => key + 1)
+      timeoutId = setTimeout(loop, typingMs + pauseMs)
+    }
+    timeoutId = setTimeout(loop, typingMs + pauseMs)
+    return () => clearTimeout(timeoutId)
+  }, [visibleText, charDelayMs, pauseMs])
+
+  let charIndex = 0
+
+  return (
+    <Tag key={loopKey} className={className} aria-label={visibleText}>
+      {Array.from(text).map((character, index) => {
+        if (character === '\n') return <br key={`br-${index}`} aria-hidden="true" />
+        const delay = charIndex * (charDelayMs / 1000)
+        charIndex += 1
+        return (
+          <span
+            key={`${character}-${index}`}
+            aria-hidden="true"
+            className="setup-typewriter__char"
+            style={{ '--typing-delay': `${delay}s` }}
+          >
+            {character}
+          </span>
+        )
+      })}
+    </Tag>
   )
 }
 
@@ -41,41 +86,40 @@ export function SetupFlow({ view, error, installation, dispatch, onPair }) {
 
   return (
     <main className={`setup-shell setup-shell--${view}`}>
-      <SetupHeader />
+      {view === 'welcome' && <SetupHeader />}
 
       {view === 'welcome' && (
         <section className="setup-welcome setup-enter">
           <div className="setup-welcome__copy">
-            <span className="product-kicker">EXAMS MADE SIMPLE</span>
             <h1>Welcome to<br />Weave <em>CBT</em></h1>
-            <p>This CBT server needs to be connected to your school’s Weave account before it can be used.</p>
+            <TypewriterText text={welcomeDescription} className="setup-typewriter" />
             <button className="setup-primary setup-primary--welcome" onClick={() => dispatch({ type: 'view', view: 'pairing-code' })}>
               Get Started <Pictogram name="arrow" size={19} />
             </button>
-            <div className="setup-paired-note">
-              <Pictogram name="link" size={17} />
-              <span><b>Already paired on this device?</b><small>The app will move to the landing page automatically.</small></span>
-            </div>
           </div>
 
-          <div className="setup-welcome__visual">
-            <div className="setup-feature-pills" aria-hidden="true">
-              <span><Pictogram name="shield" size={19} /><b>Secure</b></span>
-              <span><Pictogram name="sync" size={19} /><b>Offline Ready</b></span>
-              <span><Pictogram name="server" size={19} /><b>Reliable</b></span>
-            </div>
-            <img className="setup-reference-art setup-reference-art--welcome" src="/visuals/setup-welcome.webp" alt="" aria-hidden="true" />
+          <div className="setup-welcome__blue-panel" aria-hidden="true">
+            <RiGraduationCapLine className="setup-cap-icon setup-cap-icon--top" />
+            <TypewriterText
+              as="div"
+              text={lockupDescription}
+              className="setup-blue-lockup setup-typewriter setup-typewriter--lockup"
+              pauseMs={LOCKUP_TYPEWRITER_PAUSE_MS}
+            />
+            <RiGraduationCapLine className="setup-cap-icon setup-cap-icon--bottom" />
           </div>
         </section>
       )}
 
       {view === 'pairing-code' && (
-        <section className="setup-stage setup-stage--code setup-enter">
-          <button className="setup-back setup-back--top" onClick={() => dispatch({ type: 'view', view: 'welcome' })}>
-            <Pictogram name="back" size={18} /> Back
-          </button>
+        <>
+          <div className="setup-stage-nav">
+            <button className="setup-primary setup-primary--nav" type="button" onClick={() => dispatch({ type: 'view', view: 'welcome' })}>
+              <Pictogram name="back" size={18} /> Back
+            </button>
+          </div>
+          <section className="setup-stage setup-stage--code setup-enter">
           <div className="setup-card setup-card--code">
-            <div className="setup-icon"><Pictogram name="link" size={30} /></div>
             <h1>Enter Pairing Code</h1>
             <p>Use the pairing code from your Weave school account to connect this server.</p>
             <form onSubmit={(event) => { event.preventDefault(); nextCode() }}>
@@ -103,16 +147,19 @@ export function SetupFlow({ view, error, installation, dispatch, onPair }) {
             </form>
             <small id="pairing-code-help" className="setup-help">Enter or paste the code from your Weave school account.</small>
           </div>
-        </section>
+          </section>
+        </>
       )}
 
       {view === 'server-name' && (
-        <section className="setup-stage setup-stage--server setup-enter">
-          <button className="setup-back setup-back--top" onClick={() => dispatch({ type: 'view', view: 'pairing-code' })}>
-            <Pictogram name="back" size={18} /> Back
-          </button>
-          <div className="setup-server-grid">
-            <div className="setup-card setup-card--server">
+        <>
+          <div className="setup-stage-nav">
+            <button className="setup-primary setup-primary--nav" type="button" onClick={() => dispatch({ type: 'view', view: 'pairing-code' })}>
+              <Pictogram name="back" size={18} /> Back
+            </button>
+          </div>
+          <section className="setup-stage setup-stage--server setup-enter">
+            <div className="setup-card setup-card--code">
               <div className="setup-icon"><Pictogram name="server" size={30} /></div>
               <h1>Set a server name</h1>
               <p>Give this CBT server a name to easily identify it in your Weave account.</p>
@@ -133,18 +180,30 @@ export function SetupFlow({ view, error, installation, dispatch, onPair }) {
                 <button className="setup-primary" type="submit">Complete Setup <Pictogram name="arrow" size={19} /></button>
               </form>
             </div>
-            <aside className="setup-server-art" aria-hidden="true">
-              <div className="setup-server-tip"><Pictogram name="link" size={18} /><span>Easily identify this server in your Weave dashboard.</span></div>
-              <img src="/visuals/setup-school.webp" alt="" />
-            </aside>
-          </div>
-        </section>
+          </section>
+        </>
       )}
 
       {view === 'pairing' && (
         <section className="setup-stage setup-stage--pairing setup-enter" aria-live="polite">
           <div className="setup-pairing-card">
-            <img className="setup-reference-art setup-reference-art--pairing" src="/visuals/setup-pairing.webp" alt="" aria-hidden="true" />
+            {!error && (
+              <div className="setup-sync-visual" aria-hidden="true">
+                <div className="setup-sync-orbit">
+                  <span className="setup-sync-orbit__ring" />
+                  <span className="setup-sync-orbit__ring setup-sync-orbit__ring--two" />
+                  <div className="setup-sync-orbit__icon"><Pictogram name="sync" size={34} /></div>
+                </div>
+                <div className="setup-sync-flow">
+                  <span className="setup-sync-node"><Pictogram name="server" size={22} /></span>
+                  <span className="setup-sync-track">
+                    <i /><i /><i /><i /><i />
+                  </span>
+                  <span className="setup-sync-node"><Pictogram name="school" size={22} /></span>
+                </div>
+                <div className="setup-sync-rail"><span /></div>
+              </div>
+            )}
             <h1>{error ? 'Pairing needs attention' : 'Pairing with Weave...'}</h1>
             <p>{error ? 'The server is still unpaired. Review the message and retry with the same details.' : 'Verifying your code and connecting this server to your school account.'}</p>
             {error ? (
@@ -182,7 +241,6 @@ export function SetupFlow({ view, error, installation, dispatch, onPair }) {
         </section>
       )}
 
-      <footer className="setup-footer"><span><b>WEAVE CBT</b> • EXAMS MADE SIMPLE</span><span>LOCAL TODAY. BRIGHTER TOMORROW.</span></footer>
     </main>
   )
 }

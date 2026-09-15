@@ -33,7 +33,7 @@ function CreateQuestionView({ onCancel }) {
         <div className="form-card" style={{maxWidth: '800px'}}>
           <div className="form-group full">
             <label style={{display:'flex', justifyContent:'space-between'}}><span>Question stem</span><span style={{display:'flex', alignItems:'center', gap:'8px', fontWeight:'normal'}}><input type="radio" name="qtype" defaultChecked /> Multiple choice</span></label>
-            <div style={{border:'1px solid #E2E8F0', borderRadius:'8px', overflow:'hidden'}}><div style={{background:'#F8FAFC', padding:'8px 12px', borderBottom:'1px solid #E2E8F0', display:'flex', gap:'12px', color:'#64748B'}}><Icon name="math" size={18} /><Icon name="link" size={18} /></div><textarea placeholder="Type your question here..." style={{border:'none', borderRadius:'0', minHeight:'120px'}}></textarea></div>
+            <div style={{border:'1px solid #E2E8F0', borderRadius:'8px', overflow:'hidden'}}><div style={{background:'#F8FAFC', padding:'8px 12px', borderBottom:'1px solid #E2E8F0', display:'flex', gap:'12px', color:'#64748B'}}><Icon name="math" size={18} /></div><textarea placeholder="Type your question here..." style={{border:'none', borderRadius:'0', minHeight:'120px'}}></textarea></div>
           </div>
           <div className="form-group full" style={{marginTop:'24px'}}>
             <label>Answer options</label>
