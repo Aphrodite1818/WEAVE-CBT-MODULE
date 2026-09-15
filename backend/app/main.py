@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI
 
 from app.core.database import check_database_connection, dispose_database_engine
+from app.core.integration_errors import register_weave_integration_error_handlers
 from app.core.redis import close_redis_client
 from app.core.settings import settings
 from app.domains.attempts.router import operator_router as attempts_router
@@ -51,6 +52,7 @@ app = FastAPI(
     version=settings.APP_VERSION,
     lifespan=lifespan,
 )
+register_weave_integration_error_handlers(app)
 
 for router in (
     node_router,
