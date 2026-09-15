@@ -1,11 +1,38 @@
 import { useState } from 'react'
-import { LoginShell } from './LoginShell'
+import { LoginField, LoginShell } from './LoginShell'
 
-export function StaffLoginPage({ error, loading, onSubmit, onBack, branding }) {
+export function StaffLoginPage({ error, loading, onSubmit, onBack }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  return <LoginShell title="Staff Login" subtitle="Welcome back. Access your school’s CBT workspace." imageAlt="Weave CBT student illustration" error={error} loading={loading} onBack={onBack} branding={branding} onSubmit={() => onSubmit({ email: email.trim(), password })}>
-    <label htmlFor="staff-email">Email</label><input id="staff-email" type="email" autoComplete="username" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Enter your email" />
-    <label htmlFor="staff-password">Password</label><input id="staff-password" type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" />
-  </LoginShell>
+
+  return (
+    <LoginShell
+      kind="staff"
+      title="Staff Login"
+      subtitle="Access your CBT staff account"
+      error={error}
+      loading={loading}
+      onBack={onBack}
+      onSubmit={() => onSubmit({ email: email.trim(), password })}
+    >
+      <LoginField
+        label="Email Address"
+        type="email"
+        icon="mail"
+        autoComplete="username"
+        value={email}
+        onChange={setEmail}
+        placeholder="you@school.edu.ng"
+      />
+      <LoginField
+        label="Password"
+        type="password"
+        icon="lock"
+        autoComplete="current-password"
+        value={password}
+        onChange={setPassword}
+        placeholder="Enter your password"
+      />
+    </LoginShell>
+  )
 }
