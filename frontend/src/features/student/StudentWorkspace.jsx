@@ -9,7 +9,7 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
   const [submitted, setSubmitted] = useState(null)
   const questions = useMemo(() => attempt?.questions || [], [attempt])
   const current = questions[exam.index] || questions[0]
-  const candidateName = resolution?.candidate?.name || 'Amina Okafor'
+  const candidateName = resolution?.candidate?.name || 'Student'
 
   useEffect(() => {
     if (exam.stage !== 'active') return undefined
@@ -138,17 +138,38 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
     )
   }
 
-  const unavailable = resolution?.state === 'waiting_for_activation'
+  const state = resolution?.state || 'no_exam'
+  const noExam = state === 'no_exam'
+  const waiting = state === 'waiting_for_activation'
+  const unavailable = noExam || waiting
+  const ready = state === 'ready' || state === 'makeup'
+  const title = noExam
+    ? 'No exam available yet'
+    : resolution?.exam?.title || 'Current examination'
+  const statusLabel = noExam
+    ? 'Waiting room'
+    : waiting
+      ? 'Waiting for activation'
+      : state === 'makeup'
+        ? 'Makeup exam ready'
+        : 'Exam ready'
+
   return (
     <main className="premium-exam-shell" style={{justifyContent: 'center', alignItems: 'center'}}>
       <section className="premium-lobby-card">
-        <StatusBadge tone={unavailable ? 'warning' : 'success'}>{resolution?.state?.replaceAll('_', ' ') || 'Resolved'}</StatusBadge>
-        <h1>{resolution?.exam?.title || 'Current examination'}</h1>
-        <p>Check the details below before you begin.</p>
-        <Notice>Weave resolved your examination from the local CBT backend.</Notice>
+        <StatusBadge tone={unavailable ? 'warning' : 'success'}>{statusLabel}</StatusBadge>
+        <h1>{title}</h1>
+        <p>{resolution?.statusMessage || (noExam ? 'Stay on this page. Weave will update automatically when an exam becomes available.' : 'Check the details below before you begin.')}</p>
+        {unavailable && <Notice>Weave is checking the local CBT server automatically. You do not need to sign in again.</Notice>}
+        {ready && <Notice>Your examination has been resolved from the local CBT server and is ready to open.</Notice>}
         {attemptError && <Notice tone="danger">{attemptError}</Notice>}
-        <button className="premium-btn-primary" style={{width: '100%', marginTop: '24px'}} disabled={unavailable} onClick={() => startAttempt({ gateway, setAttempt, dispatch, setAttemptError })}>
-          Start Exam &rarr;
+        <button
+          className="premium-btn-primary"
+          style={{width: '100%', marginTop: '24px'}}
+          disabled={unavailable}
+          onClick={() => startAttempt({ gateway, setAttempt, dispatch, setAttemptError })}
+        >
+          {noExam ? 'Waiting for an exam...' : waiting ? 'Waiting for activation...' : 'Start Exam →'}
         </button>
       </section>
     </main>
