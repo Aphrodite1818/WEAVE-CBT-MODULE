@@ -42,40 +42,23 @@ class OutputBase(BaseModel):
 
 
 class ExamCreate(InputBase):
-    """
-    Create a new revision-1 examination in DRAFT state.
-
-    Lifecycle fields such as status, revision number, creator,
-    roster state and component maximum are determined by ExamService.
-    """
+    """Create a new revision-1 examination in DRAFT state."""
 
     session_id: UUID
     term_id: UUID
     curriculum_subject_id: UUID
-
     assessment_scheme_id: UUID
     assessment_component_id: UUID
-
     question_bank_id: UUID
-
     question_selection_mode: ExamQuestionSelectionMode = (
         ExamQuestionSelectionMode.RANDOM
     )
-
     question_count: int = Field(gt=0)
-
-    title: str = Field(
-        min_length=1,
-        max_length=255,
-    )
-
+    title: str = Field(min_length=1, max_length=255)
     instructions: str | None = None
-
     duration_minutes: int = Field(gt=0)
-
     shuffle_questions: bool = True
     shuffle_options: bool = True
-
     scheduled_start_at: datetime | None = None
     latest_normal_start_at: datetime | None = None
 
@@ -89,7 +72,6 @@ class ExamCreate(InputBase):
             raise ValueError(
                 "latest_normal_start_at cannot be earlier than scheduled_start_at"
             )
-
         return self
 
 
@@ -99,47 +81,27 @@ class ExamCreate(InputBase):
 
 
 class ExamUpdate(InputBase):
-    """
-    PATCH payload for a DRAFT examination.
+    """PATCH payload for a DRAFT examination."""
 
-    Omitted fields remain unchanged.
-
-    ExamService still determines whether each requested change is legal
-    for the exam's current lifecycle and academic configuration.
-    """
+    # The client version last read. Version 1 is the backwards-compatible
+    # initial draft value; after any authoring mutation clients must use the
+    # authoring_version returned by the server.
+    expected_authoring_version: int = Field(default=1, ge=1)
 
     session_id: UUID | None = None
     term_id: UUID | None = None
-
     assessment_scheme_id: UUID | None = None
     assessment_component_id: UUID | None = None
-
-    title: str | None = Field(
-        default=None,
-        min_length=1,
-        max_length=255,
-    )
-
+    title: str | None = Field(default=None, min_length=1, max_length=255)
     instructions: str | None = None
-
-    duration_minutes: int | None = Field(
-        default=None,
-        gt=0,
-    )
-
+    duration_minutes: int | None = Field(default=None, gt=0)
     shuffle_questions: bool | None = None
     shuffle_options: bool | None = None
-
     scheduled_start_at: datetime | None = None
     latest_normal_start_at: datetime | None = None
 
     @model_validator(mode="after")
     def validate_patch_contract(self) -> ExamUpdate:
-        """
-        Required exam fields may be omitted during PATCH but may not
-        explicitly be cleared with null.
-        """
-
         non_nullable_fields = {
             "session_id",
             "term_id",
@@ -150,12 +112,8 @@ class ExamUpdate(InputBase):
             "shuffle_questions",
             "shuffle_options",
         }
-
         for field_name in non_nullable_fields:
-            if (
-                field_name in self.model_fields_set
-                and getattr(self, field_name) is None
-            ):
+            if field_name in self.model_fields_set and getattr(self, field_name) is None:
                 raise ValueError(f"{field_name} cannot be null")
 
         if (
@@ -168,7 +126,6 @@ class ExamUpdate(InputBase):
             raise ValueError(
                 "latest_normal_start_at cannot be earlier than scheduled_start_at"
             )
-
         return self
 
 
@@ -178,61 +135,44 @@ class ExamUpdate(InputBase):
 
 
 class ExamQuestionConfiguration(InputBase):
-    """
-    Configure the question-selection strategy of a DRAFT exam.
-
-    RANDOM:
-        CBT chooses question_count questions from question_bank_id
-        when the exam is sealed.
-
-    MANUAL:
-        A separate service incrementally manages the source questions
-        selected for the exam.
-
-    clear_existing_manual_selections is an explicit acknowledgement for
-    destructive configuration changes. It must be true when changing the
-    question bank or leaving MANUAL mode would invalidate existing manual
-    selections.
-    """
-
     question_bank_id: UUID
     question_selection_mode: ExamQuestionSelectionMode
     question_count: int = Field(gt=0)
     clear_existing_manual_selections: bool = False
+    expected_authoring_version: int = Field(default=1, ge=1)
 
 
 class ManualQuestionAdd(InputBase):
     question_ids: list[UUID] = Field(min_length=1)
+    expected_authoring_version: int = Field(default=1, ge=1)
 
     @field_validator("question_ids")
     @classmethod
-    def validate_unique_question_ids(
-        cls,
-        value: list[UUID],
-    ) -> list[UUID]:
+    def validate_unique_question_ids(cls, value: list[UUID]) -> list[UUID]:
         if len(value) != len(set(value)):
             raise ValueError("question_ids cannot contain duplicate questions")
-
         return value
 
 
 class ManualQuestionReorder(InputBase):
     question_ids: list[UUID] = Field(min_length=1)
+    expected_authoring_version: int = Field(default=1, ge=1)
 
     @field_validator("question_ids")
     @classmethod
-    def validate_unique_question_ids(
-        cls,
-        value: list[UUID],
-    ) -> list[UUID]:
+    def validate_unique_question_ids(cls, value: list[UUID]) -> list[UUID]:
         if len(value) != len(set(value)):
             raise ValueError("question_ids cannot contain duplicate questions")
-
         return value
 
 
 class ManualQuestionRemove(InputBase):
     question_id: UUID
+    expected_authoring_version: int = Field(default=1, ge=1)
+
+
+class ExamAuthoringAction(InputBase):
+    expected_authoring_version: int = Field(default=1, ge=1)
 
 
 class ExamInvigilatorAssignment(InputBase):
@@ -273,10 +213,10 @@ class ExamResponse(OutputBase):
     roster_status: ExamRosterStatus
     roster_version: int
     roster_candidate_count: int
+    authoring_version: int = 1
     revision_number: int
     revision_of_exam_id: UUID | None
     created_by_actor_id: UUID
-
     submitted_by_actor_id: UUID | None
     submitted_at: datetime | None
     sealed_by_actor_id: UUID | None
@@ -288,8 +228,17 @@ class ExamResponse(OutputBase):
     cancelled_by_actor_id: UUID | None
     cancelled_at: datetime | None
     cancellation_reason: str | None
-
     component_maximum_score: Decimal | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ExamQuestionSelectionResponse(OutputBase):
+    id: UUID
+    exam_id: UUID
+    question_id: UUID
+    position: int
+    added_by_actor_id: UUID
     created_at: datetime
     updated_at: datetime
 

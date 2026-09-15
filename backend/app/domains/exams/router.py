@@ -14,10 +14,12 @@ from app.domains.exams.exceptions import (
 )
 from app.domains.exams.schemas import (
     AcademicTeacherResponse,
+    ExamAuthoringAction,
     ExamCreate,
     ExamInvigilatorAssignment,
     ExamInvigilatorResponse,
     ExamQuestionConfiguration,
+    ExamQuestionSelectionResponse,
     ExamReasonPayload,
     ExamResponse,
     ExamResumePayload,
@@ -29,34 +31,19 @@ from app.domains.exams.schemas import (
 from app.domains.exams.service import ExamService
 
 
-router = APIRouter(
-    prefix="/exams",
-    tags=["Exams"],
-)
+router = APIRouter(prefix="/exams", tags=["Exams"])
 
 
 def _domain_http_error(exc: Exception) -> HTTPException:
     if isinstance(exc, ExamNotFound):
-        return HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        )
-
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     if isinstance(exc, (AcademicAuthorizationError, ExamAuthorizationError)):
-        return HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(exc),
-        )
-
+        return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     if isinstance(exc, (AcademicScopeError, ExamStateError)):
-        return HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        )
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
     detail = str(exc)
     lowered = detail.lower()
-
     if "does not exist" in lowered:
         code = status.HTTP_404_NOT_FOUND
     elif any(
@@ -73,43 +60,33 @@ def _domain_http_error(exc: Exception) -> HTTPException:
         code = status.HTTP_409_CONFLICT
     else:
         code = status.HTTP_400_BAD_REQUEST
-
     return HTTPException(status_code=code, detail=detail)
 
 
-@router.post(
-    "",
-    response_model=ExamResponse,
-    status_code=status.HTTP_201_CREATED,
+DOMAIN_ERRORS = (
+    AcademicAuthorizationError,
+    AcademicScopeError,
+    ExamAuthorizationError,
+    ExamNotFound,
+    ExamStateError,
+    ValueError,
 )
+
+
+@router.post("", response_model=ExamResponse, status_code=status.HTTP_201_CREATED)
 async def create_exam(
     payload: ExamCreate,
     db: DbSession,
     actor: CurrentLocalActor,
 ) -> ExamResponse:
     try:
-        exam = await ExamService.create_exam(
-            db,
-            actor=actor,
-            payload=payload,
-        )
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+        exam = await ExamService.create_exam(db, actor=actor, payload=payload)
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
-
     return ExamResponse.model_validate(exam)
 
 
-@router.patch(
-    "/{exam_id}",
-    response_model=ExamResponse,
-)
+@router.patch("/{exam_id}", response_model=ExamResponse)
 async def update_exam(
     exam_id: UUID,
     payload: ExamUpdate,
@@ -123,23 +100,12 @@ async def update_exam(
             payload=payload,
             exam_id=exam_id,
         )
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
-
     return ExamResponse.model_validate(exam)
 
 
-@router.put(
-    "/{exam_id}/questions/configuration",
-    response_model=ExamResponse,
-)
+@router.put("/{exam_id}/questions/configuration", response_model=ExamResponse)
 async def configure_exam_questions(
     exam_id: UUID,
     payload: ExamQuestionConfiguration,
@@ -153,46 +119,33 @@ async def configure_exam_questions(
             exam_id=exam_id,
             payload=payload,
         )
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
-
     return ExamResponse.model_validate(exam)
 
 
-@router.post(
-    "/{exam_id}/submit",
-    response_model=ExamResponse,
-)
+@router.post("/{exam_id}/submit", response_model=ExamResponse)
 async def submit_exam(
     exam_id: UUID,
     db: DbSession,
     actor: CurrentLocalActor,
+    payload: ExamAuthoringAction | None = None,
 ) -> ExamResponse:
     try:
-        exam = await ExamService.submit_exam(db, actor=actor, exam_id=exam_id)
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+        exam = await ExamService.submit_exam(
+            db,
+            actor=actor,
+            exam_id=exam_id,
+            expected_authoring_version=(
+                payload.expected_authoring_version if payload is not None else 1
+            ),
+        )
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
     return ExamResponse.model_validate(exam)
 
 
-@router.post(
-    "/{exam_id}/return-to-draft",
-    response_model=ExamResponse,
-)
+@router.post("/{exam_id}/return-to-draft", response_model=ExamResponse)
 async def return_exam_to_draft(
     exam_id: UUID,
     db: DbSession,
@@ -204,44 +157,30 @@ async def return_exam_to_draft(
             actor=actor,
             exam_id=exam_id,
         )
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
     return ExamResponse.model_validate(exam)
 
 
-@router.delete(
-    "/{exam_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
+@router.delete("/{exam_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_draft_exam(
     exam_id: UUID,
     db: DbSession,
     actor: CurrentLocalActor,
+    expected_authoring_version: int = 1,
 ) -> None:
     try:
-        await ExamService.delete_draft_exam(db, actor=actor, exam_id=exam_id)
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+        await ExamService.delete_draft_exam(
+            db,
+            actor=actor,
+            exam_id=exam_id,
+            expected_authoring_version=expected_authoring_version,
+        )
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
 
 
-@router.post(
-    "/{exam_id}/seal",
-    response_model=ExamResponse,
-)
+@router.post("/{exam_id}/seal", response_model=ExamResponse)
 async def seal_exam(
     exam_id: UUID,
     db: DbSession,
@@ -249,14 +188,7 @@ async def seal_exam(
 ) -> ExamResponse:
     try:
         exam = await ExamService.seal_exam(db, actor=actor, exam_id=exam_id)
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
     return ExamResponse.model_validate(exam)
 
@@ -273,22 +205,12 @@ async def create_revision(
 ) -> ExamResponse:
     try:
         exam = await ExamService.create_revision(db, actor=actor, exam_id=exam_id)
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
     return ExamResponse.model_validate(exam)
 
 
-@router.post(
-    "/{exam_id}/activate",
-    response_model=ExamResponse,
-)
+@router.post("/{exam_id}/activate", response_model=ExamResponse)
 async def activate_exam(
     exam_id: UUID,
     db: DbSession,
@@ -296,22 +218,12 @@ async def activate_exam(
 ) -> ExamResponse:
     try:
         exam = await ExamService.activate_exam(db, actor=actor, exam_id=exam_id)
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
     return ExamResponse.model_validate(exam)
 
 
-@router.post(
-    "/{exam_id}/suspend",
-    response_model=ExamResponse,
-)
+@router.post("/{exam_id}/suspend", response_model=ExamResponse)
 async def suspend_exam(
     exam_id: UUID,
     payload: ExamReasonPayload,
@@ -325,22 +237,12 @@ async def suspend_exam(
             exam_id=exam_id,
             reason=payload.reason,
         )
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
     return ExamResponse.model_validate(exam)
 
 
-@router.post(
-    "/{exam_id}/resume",
-    response_model=ExamResponse,
-)
+@router.post("/{exam_id}/resume", response_model=ExamResponse)
 async def resume_exam(
     exam_id: UUID,
     payload: ExamResumePayload,
@@ -354,22 +256,12 @@ async def resume_exam(
             exam_id=exam_id,
             reason=payload.reason,
         )
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
     return ExamResponse.model_validate(exam)
 
 
-@router.post(
-    "/{exam_id}/close",
-    response_model=ExamResponse,
-)
+@router.post("/{exam_id}/close", response_model=ExamResponse)
 async def close_exam(
     exam_id: UUID,
     db: DbSession,
@@ -377,22 +269,12 @@ async def close_exam(
 ) -> ExamResponse:
     try:
         exam = await ExamService.close_exam(db, actor=actor, exam_id=exam_id)
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
     return ExamResponse.model_validate(exam)
 
 
-@router.post(
-    "/{exam_id}/cancel",
-    response_model=ExamResponse,
-)
+@router.post("/{exam_id}/cancel", response_model=ExamResponse)
 async def cancel_exam(
     exam_id: UUID,
     payload: ExamReasonPayload,
@@ -406,14 +288,7 @@ async def cancel_exam(
             exam_id=exam_id,
             reason=payload.reason,
         )
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
     return ExamResponse.model_validate(exam)
 
@@ -428,14 +303,7 @@ async def list_available_invigilators(
 ) -> list[AcademicTeacherResponse]:
     try:
         teachers = await ExamService.list_available_invigilators(db, actor=actor)
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
     return [AcademicTeacherResponse.model_validate(teacher) for teacher in teachers]
 
@@ -450,19 +318,8 @@ async def list_exam_invigilators(
     actor: CurrentLocalActor,
 ) -> list[ExamInvigilatorResponse]:
     try:
-        rows = await ExamService.list_invigilators(
-            db,
-            actor=actor,
-            exam_id=exam_id,
-        )
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+        rows = await ExamService.list_invigilators(db, actor=actor, exam_id=exam_id)
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
     return [ExamInvigilatorResponse.model_validate(row) for row in rows]
 
@@ -484,14 +341,7 @@ async def assign_exam_invigilators(
             exam_id=exam_id,
             teacher_ids=payload.teacher_ids,
         )
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
     return [ExamInvigilatorResponse.model_validate(row) for row in rows]
 
@@ -513,22 +363,32 @@ async def remove_exam_invigilators(
             exam_id=exam_id,
             teacher_ids=payload.teacher_ids,
         )
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
     return [ExamInvigilatorResponse.model_validate(row) for row in rows]
 
 
-@router.post(
+@router.get(
     "/{exam_id}/manual-questions",
-    response_model=ExamResponse,
+    response_model=list[ExamQuestionSelectionResponse],
 )
+async def list_manual_questions(
+    exam_id: UUID,
+    db: DbSession,
+    actor: CurrentLocalActor,
+) -> list[ExamQuestionSelectionResponse]:
+    try:
+        rows = await ExamService.list_manual_question_selections(
+            db,
+            actor=actor,
+            exam_id=exam_id,
+        )
+    except DOMAIN_ERRORS as exc:
+        raise _domain_http_error(exc) from exc
+    return [ExamQuestionSelectionResponse.model_validate(row) for row in rows]
+
+
+@router.post("/{exam_id}/manual-questions", response_model=ExamResponse)
 async def add_manual_questions(
     exam_id: UUID,
     payload: ManualQuestionAdd,
@@ -542,23 +402,12 @@ async def add_manual_questions(
             exam_id=exam_id,
             payload=payload,
         )
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
-
     return ExamResponse.model_validate(exam)
 
 
-@router.post(
-    "/{exam_id}/manual-questions/remove",
-    response_model=ExamResponse,
-)
+@router.post("/{exam_id}/manual-questions/remove", response_model=ExamResponse)
 async def remove_manual_question(
     exam_id: UUID,
     payload: ManualQuestionRemove,
@@ -572,23 +421,12 @@ async def remove_manual_question(
             exam_id=exam_id,
             payload=payload,
         )
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
-
     return ExamResponse.model_validate(exam)
 
 
-@router.post(
-    "/{exam_id}/manual-questions/reorder",
-    response_model=ExamResponse,
-)
+@router.post("/{exam_id}/manual-questions/reorder", response_model=ExamResponse)
 async def reorder_manual_questions(
     exam_id: UUID,
     payload: ManualQuestionReorder,
@@ -602,14 +440,6 @@ async def reorder_manual_questions(
             exam_id=exam_id,
             payload=payload,
         )
-    except (
-        AcademicAuthorizationError,
-        AcademicScopeError,
-        ExamAuthorizationError,
-        ExamNotFound,
-        ExamStateError,
-        ValueError,
-    ) as exc:
+    except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
-
     return ExamResponse.model_validate(exam)

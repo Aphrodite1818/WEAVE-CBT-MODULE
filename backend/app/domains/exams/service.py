@@ -11,6 +11,7 @@ from app.core.exceptions import AcademicAuthorizationError
 from app.domains.academics.authorization import AcademicAuthorizationService
 from app.domains.auth.models import LocalActor
 from app.domains.exams.authoring_service import ExamService as _AuthoringExamService
+from app.domains.exams.collaboration_service import ExamCollaborationLifecycleMixin
 from app.domains.exams.exceptions import ExamAuthorizationError, ExamNotFound
 from app.domains.exams.lifecycle_service import ExamLifecycleServiceMixin
 from app.domains.exams.models import Exam
@@ -19,8 +20,12 @@ from app.domains.exams.schemas import ExamCreate, ExamUpdate
 from app.domains.exams.timetable_service import ExamTimetableService
 
 
-class ExamService(ExamLifecycleServiceMixin, _AuthoringExamService):
-    """Combined authoring/lifecycle facade with timetable integrity guards."""
+class ExamService(
+    ExamCollaborationLifecycleMixin,
+    ExamLifecycleServiceMixin,
+    _AuthoringExamService,
+):
+    """Combined authoring/lifecycle facade with collaboration and timetable guards."""
 
     @classmethod
     async def _before_create_exam_save(
@@ -85,11 +90,7 @@ class ExamService(ExamLifecycleServiceMixin, _AuthoringExamService):
         actor: LocalActor,
         payload: ExamCreate,
     ) -> Exam:
-        return await super().create_exam(
-            db,
-            actor=actor,
-            payload=payload,
-        )
+        return await super().create_exam(db, actor=actor, payload=payload)
 
     @classmethod
     async def update_exam(
@@ -127,11 +128,7 @@ class ExamService(ExamLifecycleServiceMixin, _AuthoringExamService):
             duration_minutes=exam.duration_minutes,
             exclude_exam_id=exam.id,
         )
-        return await super().seal_exam(
-            db,
-            actor=actor,
-            exam_id=exam_id,
-        )
+        return await super().seal_exam(db, actor=actor, exam_id=exam_id)
 
     @classmethod
     async def activate_exam(
@@ -141,11 +138,7 @@ class ExamService(ExamLifecycleServiceMixin, _AuthoringExamService):
         actor: LocalActor,
         exam_id: UUID,
     ) -> Exam:
-        return await super().activate_exam(
-            db,
-            actor=actor,
-            exam_id=exam_id,
-        )
+        return await super().activate_exam(db, actor=actor, exam_id=exam_id)
 
     @classmethod
     async def resume_exam(
@@ -180,6 +173,19 @@ class ExamService(ExamLifecycleServiceMixin, _AuthoringExamService):
         if actor.role != "teacher":
             raise ExamAuthorizationError("You are not allowed to view this examination")
         if exam.created_by_actor_id == actor.id:
+            # A lead who has since lost the academic assignment should not retain
+            # authoring visibility merely from historical provenance.
+            try:
+                await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+                    db,
+                    actor=actor,
+                    curriculum_subject_id=exam.curriculum_subject_id,
+                    academic_term_id=exam.term_id,
+                )
+            except AcademicAuthorizationError as exc:
+                raise ExamAuthorizationError(
+                    "You are not allowed to view this examination"
+                ) from exc
             return exam
 
         teacher_membership_id: UUID | None = None
@@ -200,10 +206,11 @@ class ExamService(ExamLifecycleServiceMixin, _AuthoringExamService):
                 return exam
 
         try:
-            await AcademicAuthorizationService.require_can_author_curriculum_subject(
+            await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
                 db,
                 actor=actor,
                 curriculum_subject_id=exam.curriculum_subject_id,
+                academic_term_id=exam.term_id,
             )
         except AcademicAuthorizationError as exc:
             raise ExamAuthorizationError(

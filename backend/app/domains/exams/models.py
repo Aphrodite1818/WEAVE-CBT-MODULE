@@ -19,7 +19,6 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    func,
     text as sql_text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -39,36 +38,7 @@ ROSTER_ERROR_MAX_LENGTH = 1024
 
 
 class ExamStatus(str, PyEnum):
-    """
-    Lifecycle state of a local CBT examination.
-
-    DRAFT
-        Examination is still being authored and may be edited.
-
-    SUBMITTED
-        Authoring is complete and the examination is awaiting
-        administrative review/sealing.
-
-    SEALED
-        Examination content is frozen and cannot be edited in place.
-
-    ACTIVE
-        Candidates may begin or continue the examination according
-        to candidate-specific start rules.
-
-    SUSPENDED
-        Examination-wide execution has temporarily stopped.
-
-        Candidate clocks must not continue consuming active writing
-        time while the sitting is suspended.
-
-    CLOSED
-        The sitting has ended normally.
-
-    CANCELLED
-        The examination/sitting was invalidated but remains stored
-        for audit and historical purposes.
-    """
+    """Lifecycle state of a local CBT examination."""
 
     DRAFT = "draft"
     SUBMITTED = "submitted"
@@ -80,32 +50,7 @@ class ExamStatus(str, PyEnum):
 
 
 class ExamRosterStatus(str, PyEnum):
-    """
-    Materialization state of the examination candidate roster.
-
-    Candidate generation is intentionally performed by a worker rather
-    than inside an API request.
-
-    NOT_PREPARED
-        No roster generation has been requested yet.
-
-    PENDING
-        Roster generation has been queued.
-
-    BUILDING
-        A worker is currently materializing eligible candidates.
-
-    READY
-        Roster has been successfully materialized and is suitable
-        for activation.
-
-    STALE
-        Synchronized academic data changed after the roster was built
-        and the roster requires reconciliation.
-
-    FAILED
-        The latest generation/reconciliation attempt failed.
-    """
+    """Materialization state of the examination candidate roster."""
 
     NOT_PREPARED = "not_prepared"
     PENDING = "pending"
@@ -116,35 +61,14 @@ class ExamRosterStatus(str, PyEnum):
 
 
 class ExamQuestionSelectionMode(str, PyEnum):
-    """
-    Defines how questions are chosen for an examination.
-
-    RANDOM
-        The author specifies how many questions should be used.
-        At sealing, CBT randomly selects that number of questions
-        from the selected question bank.
-
-    MANUAL
-        The author explicitly selects the exact questions to use.
-        Those draft selections are stored in ExamQuestionSelection
-        and frozen into ExamQuestion rows when the exam is sealed.
-    """
+    """Defines how questions are chosen for an examination."""
 
     RANDOM = "random"
     MANUAL = "manual"
 
 
 class ExamSuspensionSource(str, PyEnum):
-    """
-    Origin of an examination-wide suspension.
-
-    ADMIN
-        Explicitly initiated by an authorized administrator.
-
-    SYSTEM
-        Created by system/recovery logic, for example following
-        detection of a server-wide outage.
-    """
+    """Origin of an examination-wide suspension."""
 
     ADMIN = "admin"
     SYSTEM = "system"
@@ -156,84 +80,30 @@ class ExamSuspensionSource(str, PyEnum):
 
 
 class Exam(Base):
-    """
-    Locally owned CBT examination.
-
-    An examination is scoped to:
-        Academic Session
-        Academic Term
-        Curriculum Subject
-        Assessment Component
-        Question Bank
-
-    CurriculumSubject already represents the academic level + subject
-    relationship.
-
-    Example:
-        JSS1 Mathematics
-        First Term
-        CA 1
-
-    Questions may be selected in two ways:
-
-        RANDOM
-            Author selects a question bank and question count.
-            CBT randomly chooses the requested number of questions
-            when the examination is sealed.
-
-        MANUAL
-            Author selects the exact questions to use.
-            Those draft selections are stored separately until sealing.
-
-    The exam itself is therefore NOT manually scoped to one class.
-
-    Concrete class delivery scope is derived from synchronized academic
-    eligibility and materialized in ExamTargetClass.
-
-    Important scoring rule:
-
-        Every frozen ExamQuestion contributes exactly one raw mark.
-
-        raw_max_score = number of ExamQuestion rows
-
-    The assessment component maximum synchronized from Weave is frozen
-    on the examination for later result normalization.
-    """
+    """Locally owned, level-wide CBT examination."""
 
     __tablename__ = "exams"
 
     session_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "academic_sessions.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("academic_sessions.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
 
     term_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "academic_terms.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("academic_terms.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
 
     curriculum_subject_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "curriculum_subjects.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("curriculum_subjects.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
 
     question_bank_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "question_banks.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("question_banks.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
@@ -253,33 +123,16 @@ class Exam(Base):
         index=True,
     )
 
-    # Number of questions that must ultimately form the sealed paper.
-    #
-    # RANDOM:
-    #     randomly choose this many questions from the question bank.
-    #
-    # MANUAL:
-    #     exactly this many ExamQuestionSelection rows must exist before
-    #     submission/sealing.
-    question_count: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-    )
+    question_count: Mapped[int] = mapped_column(Integer, nullable=False)
 
     assessment_scheme_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "assessment_schemes.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("assessment_schemes.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
 
     assessment_component_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "assessment_components.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("assessment_components.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
@@ -289,15 +142,9 @@ class Exam(Base):
         nullable=False,
     )
 
-    instructions: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
-    )
+    instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    duration_minutes: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-    )
+    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
 
     shuffle_questions: Mapped[bool] = mapped_column(
         Boolean,
@@ -374,9 +221,16 @@ class Exam(Base):
         nullable=True,
     )
 
-    roster_error: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
+    roster_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Monotonic collaboration version for the mutable draft paper. Every
+    # successful authoring mutation increments this value. Clients send the
+    # version they last read so stale screens cannot overwrite newer work.
+    authoring_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default=sql_text("1"),
     )
 
     revision_number: Mapped[int] = mapped_column(
@@ -387,29 +241,22 @@ class Exam(Base):
     )
 
     revision_of_exam_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey(
-            "exams.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("exams.id", ondelete="RESTRICT"),
         nullable=True,
         unique=True,
         index=True,
     )
 
+    # The creator is the coordinating/lead author for this revision. It is
+    # provenance plus coordination authority, not the academic audience.
     created_by_actor_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "local_actors.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("local_actors.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
 
     submitted_by_actor_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey(
-            "local_actors.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("local_actors.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )
@@ -420,10 +267,7 @@ class Exam(Base):
     )
 
     sealed_by_actor_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey(
-            "local_actors.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("local_actors.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )
@@ -434,10 +278,7 @@ class Exam(Base):
     )
 
     activated_by_actor_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey(
-            "local_actors.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("local_actors.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )
@@ -448,10 +289,7 @@ class Exam(Base):
     )
 
     closed_by_actor_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey(
-            "local_actors.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("local_actors.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )
@@ -462,10 +300,7 @@ class Exam(Base):
     )
 
     cancelled_by_actor_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey(
-            "local_actors.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("local_actors.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )
@@ -475,18 +310,8 @@ class Exam(Base):
         nullable=True,
     )
 
-    cancellation_reason: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
-    )
+    cancellation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Frozen assessment-component maximum.
-    #
-    # Example:
-    # CA1 is worth 10 marks when the exam is sealed.
-    #
-    # Even if Weave later changes the component configuration,
-    # this examination remains normalized against 10.
     component_maximum_score: Mapped[Decimal | None] = mapped_column(
         Numeric(8, 2),
         nullable=True,
@@ -509,12 +334,13 @@ class Exam(Base):
             "question_count > 0",
             name="ck_exams_question_count_positive",
         ),
+        # One shared paper exists for one term + level-subject + assessment
+        # component + revision. The title is presentation, not identity.
         Index(
-            "uq_exams_scope_title_revision",
+            "uq_exams_scope_revision",
             "term_id",
             "curriculum_subject_id",
             "assessment_component_id",
-            func.lower(title),
             "revision_number",
             unique=True,
         ),
@@ -523,15 +349,16 @@ class Exam(Base):
             name="ck_exams_duration_positive",
         ),
         CheckConstraint(
+            "authoring_version >= 1",
+            name="ck_exams_authoring_version_positive",
+        ),
+        CheckConstraint(
             "revision_number >= 1",
             name="ck_exams_revision_positive",
         ),
         CheckConstraint(
-            "("
-            "revision_of_exam_id IS NULL AND revision_number = 1"
-            ") OR ("
-            "revision_of_exam_id IS NOT NULL AND revision_number > 1"
-            ")",
+            "(revision_of_exam_id IS NULL AND revision_number = 1) OR "
+            "(revision_of_exam_id IS NOT NULL AND revision_number > 1)",
             name="ck_exams_revision_lineage_shape",
         ),
         CheckConstraint(
@@ -548,9 +375,8 @@ class Exam(Base):
             name="ck_exams_roster_error_length",
         ),
         CheckConstraint(
-            "latest_normal_start_at IS NULL "
-            "OR scheduled_start_at IS NULL "
-            "OR latest_normal_start_at >= scheduled_start_at",
+            "latest_normal_start_at IS NULL OR scheduled_start_at IS NULL OR "
+            "latest_normal_start_at >= scheduled_start_at",
             name="ck_exams_valid_normal_start_window",
         ),
         CheckConstraint(
@@ -612,63 +438,31 @@ class Exam(Base):
 
 
 class ExamQuestionSelection(Base):
-    """
-    Question explicitly selected by an examination author while the exam
-    is still being authored.
-
-    This table is used only for MANUAL question selection.
-
-    It does NOT represent the final executable paper.
-
-    Example:
-
-        question bank contains:
-            Q1
-            Q2
-            Q3
-            ...
-            Q100
-
-        author manually chooses:
-            Q4
-            Q7
-            Q11
-            Q35
-
-        these choices are stored here.
-
-    When the examination is sealed, ExamService loads these source
-    questions and freezes them into ExamQuestion and ExamQuestionOption.
-
-    `position` records the author's intended canonical order.
-
-    This matters when shuffle_questions=False.
-    """
+    """One source question selected for a MANUAL shared draft paper."""
 
     __tablename__ = "exam_question_selections"
 
     exam_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "exams.id",
-            ondelete="CASCADE",
-        ),
+        ForeignKey("exams.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
     question_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "questions.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("questions.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
 
-    position: Mapped[int] = mapped_column(
-        Integer,
+    # Preserve who contributed this question to the shared paper. This is
+    # different from who originally authored the source Question row.
+    added_by_actor_id: Mapped[UUID] = mapped_column(
+        ForeignKey("local_actors.id", ondelete="RESTRICT"),
         nullable=False,
+        index=True,
     )
+
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
 
     __table_args__ = (
         UniqueConstraint(
@@ -699,47 +493,24 @@ class ExamQuestionSelection(Base):
 
 
 class ExamTargetClass(Base):
-    """
-    Concrete class delivery target derived from synchronized academics.
-
-    These records are NOT classes manually selected by the examination
-    author.
-
-    They represent the materialized/frozen class scope that was
-    academically eligible for the examination.
-
-    Under sync v5 the frozen class itself is the eligibility provenance;
-    there is no term-scoped SubjectOffering entity.
-
-    teacher_assignment_id may preserve relevant Weave authorization
-    provenance.
-    """
+    """Concrete class delivery target derived from synchronized academics."""
 
     __tablename__ = "exam_target_classes"
 
     exam_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "exams.id",
-            ondelete="CASCADE",
-        ),
+        ForeignKey("exams.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
     class_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "academic_classes.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("academic_classes.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
 
     teacher_assignment_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey(
-            "teacher_assignments.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("teacher_assignments.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )
@@ -768,29 +539,18 @@ class ExamTargetClass(Base):
 
 
 class ExamInvigilator(Base):
-    """
-    Teacher assigned to supervise an examination.
-
-    Invigilation is an execution responsibility and does not by itself
-    grant examination authoring or administrative lifecycle authority.
-    """
+    """Teacher assigned to supervise an examination."""
 
     __tablename__ = "exam_invigilators"
 
     exam_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "exams.id",
-            ondelete="CASCADE",
-        ),
+        ForeignKey("exams.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
     teacher_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "academic_teachers.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("academic_teachers.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
@@ -815,29 +575,12 @@ class ExamInvigilator(Base):
 
 
 class ExamSuspension(Base):
-    """
-    Durable history of an examination-wide suspension.
-
-    This is separate from candidate-specific AttemptInterruption.
-
-    Examples:
-
-        - entire examination hall loses network connectivity;
-        - local CBT server loses power;
-        - administrator deliberately pauses the sitting.
-
-    Multiple suspension/resume cycles may occur during one examination,
-    therefore suspension history must not be represented by only one pair
-    of timestamps on Exam.
-    """
+    """Durable history of an examination-wide suspension."""
 
     __tablename__ = "exam_suspensions"
 
     exam_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "exams.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("exams.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
@@ -860,18 +603,12 @@ class ExamSuspension(Base):
     )
 
     suspended_by_actor_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey(
-            "local_actors.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("local_actors.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )
 
-    reason: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
 
     resumed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
@@ -879,18 +616,12 @@ class ExamSuspension(Base):
     )
 
     resumed_by_actor_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey(
-            "local_actors.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("local_actors.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )
 
-    resume_reason: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
-    )
+    resume_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         CheckConstraint(
@@ -919,40 +650,30 @@ class ExamSuspension(Base):
 
 
 class ExamQuestion(Base):
-    """
-    Immutable question snapshot belonging to a sealed examination.
-
-    The source Question may later be edited without changing this frozen
-    examination snapshot.
-
-    Every ExamQuestion contributes exactly ONE raw mark.
-
-    There is deliberately no `points` column.
-    """
+    """Immutable question snapshot belonging to a sealed examination."""
 
     __tablename__ = "exam_questions"
 
     exam_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "exams.id",
-            ondelete="CASCADE",
-        ),
+        ForeignKey("exams.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
     source_question_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "questions.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("questions.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
 
-    source_question_version: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
+    source_question_version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Null for RANDOM papers because no teacher explicitly selected the source
+    # question. For MANUAL papers this preserves the draft contributor.
+    added_by_actor_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("local_actors.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
     )
 
     question_type: Mapped[QuestionType] = mapped_column(
@@ -967,30 +688,14 @@ class ExamQuestion(Base):
         nullable=False,
     )
 
-    # Canonical frozen-paper position.
-    #
-    # Candidate-specific shuffled position belongs in
-    # AttemptQuestionAllocation.
-    position: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    prompt: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-    )
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
 
-    instruction: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
-    )
+    instruction: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     image_asset_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey(
-            "media_assets.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("media_assets.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )
@@ -1028,38 +733,19 @@ class ExamQuestion(Base):
 
 
 class ExamQuestionOption(Base):
-    """
-    Immutable answer-option snapshot for a frozen ExamQuestion.
-
-    Correctness is stored locally because the CBT must be able to score
-    the examination without any internet dependency.
-
-    `position` is the canonical option order.
-
-    Candidate-specific shuffled option order is stored later in
-    AttemptOptionAllocation.
-    """
+    """Immutable answer-option snapshot for a frozen ExamQuestion."""
 
     __tablename__ = "exam_question_options"
 
     exam_question_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "exam_questions.id",
-            ondelete="CASCADE",
-        ),
+        ForeignKey("exam_questions.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    position: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    text: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-    )
+    text: Mapped[str] = mapped_column(Text, nullable=False)
 
     is_correct: Mapped[bool] = mapped_column(
         Boolean,

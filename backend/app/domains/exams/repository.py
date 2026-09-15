@@ -45,7 +45,6 @@ class ExamRepository:
 
     @staticmethod
     async def delete_exam(db: AsyncSession, exam: Exam) -> None:
-        """Delete an exam only after the service has proved deletion is legal."""
         await db.delete(exam)
         await db.flush()
 
@@ -82,15 +81,19 @@ class ExamRepository:
         term_id: UUID,
         curriculum_subject_id: UUID,
         assessment_component_id: UUID,
-        title: str,
+        title: str | None = None,
         revision_number: int,
         lock: bool = False,
     ) -> Exam | None:
+        """Return one shared paper revision for its academic assessment scope.
+
+        title is accepted for compatibility with older callers but is deliberately
+        not part of exam identity.
+        """
         query = select(Exam).where(
             Exam.term_id == term_id,
             Exam.curriculum_subject_id == curriculum_subject_id,
             Exam.assessment_component_id == assessment_component_id,
-            func.lower(Exam.title) == title.lower(),
             Exam.revision_number == revision_number,
         )
         if lock:
@@ -104,7 +107,7 @@ class ExamRepository:
         term_id: UUID,
         curriculum_subject_id: UUID,
         assessment_component_id: UUID,
-        title: str,
+        title: str | None = None,
         lock: bool = False,
     ) -> Exam | None:
         query = (
@@ -113,7 +116,6 @@ class ExamRepository:
                 Exam.term_id == term_id,
                 Exam.curriculum_subject_id == curriculum_subject_id,
                 Exam.assessment_component_id == assessment_component_id,
-                func.lower(Exam.title) == title.lower(),
             )
             .order_by(Exam.revision_number.desc(), Exam.created_at.desc())
             .limit(1)
@@ -146,7 +148,7 @@ class ExamRepository:
         term_id: UUID,
         curriculum_subject_id: UUID,
         assessment_component_id: UUID,
-        title: str,
+        title: str | None = None,
     ) -> list[Exam]:
         result = await db.execute(
             select(Exam)
@@ -154,7 +156,6 @@ class ExamRepository:
                 Exam.term_id == term_id,
                 Exam.curriculum_subject_id == curriculum_subject_id,
                 Exam.assessment_component_id == assessment_component_id,
-                func.lower(Exam.title) == title.lower(),
             )
             .order_by(Exam.revision_number.asc())
         )
@@ -286,11 +287,7 @@ class ExamRepository:
         teacher_id: UUID,
         **filters,
     ) -> list[Exam]:
-        return await cls.list_exams(
-            db,
-            invigilator_teacher_id=teacher_id,
-            **filters,
-        )
+        return await cls.list_exams(db, invigilator_teacher_id=teacher_id, **filters)
 
     @classmethod
     async def list_exams_for_class(
@@ -353,10 +350,7 @@ class ExamRepository:
         return list(result.scalars().all())
 
     @staticmethod
-    async def count_question_selections(
-        db: AsyncSession,
-        exam_id: UUID,
-    ) -> int:
+    async def count_question_selections(db: AsyncSession, exam_id: UUID) -> int:
         value = await db.scalar(
             select(func.count())
             .select_from(ExamQuestionSelection)
@@ -373,10 +367,7 @@ class ExamRepository:
         await db.flush()
 
     @staticmethod
-    async def clear_question_selections(
-        db: AsyncSession,
-        exam_id: UUID,
-    ) -> None:
+    async def clear_question_selections(db: AsyncSession, exam_id: UUID) -> None:
         await db.execute(
             delete(ExamQuestionSelection).where(
                 ExamQuestionSelection.exam_id == exam_id
@@ -389,9 +380,7 @@ class ExamRepository:
         db: AsyncSession,
         question_id: UUID,
     ) -> bool:
-        frozen_reference = exists().where(
-            ExamQuestion.source_question_id == question_id
-        )
+        frozen_reference = exists().where(ExamQuestion.source_question_id == question_id)
         draft_reference = exists().where(
             ExamQuestionSelection.question_id == question_id
         )
@@ -447,10 +436,7 @@ class ExamRepository:
         return list(result.scalars().all())
 
     @staticmethod
-    async def clear_target_classes(
-        db: AsyncSession,
-        exam_id: UUID,
-    ) -> None:
+    async def clear_target_classes(db: AsyncSession, exam_id: UUID) -> None:
         await db.execute(
             delete(ExamTargetClass).where(ExamTargetClass.exam_id == exam_id)
         )
@@ -533,10 +519,7 @@ class ExamRepository:
         await db.flush()
 
     @staticmethod
-    async def clear_invigilators(
-        db: AsyncSession,
-        exam_id: UUID,
-    ) -> None:
+    async def clear_invigilators(db: AsyncSession, exam_id: UUID) -> None:
         await db.execute(
             delete(ExamInvigilator).where(ExamInvigilator.exam_id == exam_id)
         )
@@ -682,10 +665,7 @@ class ExamRepository:
         return list(result.scalars().all())
 
     @staticmethod
-    async def count_exam_questions(
-        db: AsyncSession,
-        exam_id: UUID,
-    ) -> int:
+    async def count_exam_questions(db: AsyncSession, exam_id: UUID) -> int:
         value = await db.scalar(
             select(func.count())
             .select_from(ExamQuestion)
@@ -752,45 +732,6 @@ class ExamRepository:
         term_id: UUID,
         level_id: UUID,
     ) -> bool:
-        """
-        Return True when the academic level still has at least one unfinished
-        schedule examination in the supplied academic session and term
-
-        This is used by makeup eligibility logic
-
-        Makeup examintaion must not become available while the level's normal
-        scheduled examination cycle is still running
-
-        Only the latest leaf revision of an examination lineage is considered
-
-        Example:
-            Mathematics revision 1 -> CANCELLED
-            Mathematics revision 2 -> CLOSED
-
-
-        revision 1 is ignored because it has a child revision
-
-        Terminal states:
-            CLOSED
-                Examination completed normally
-            CANCELLED
-                Examination was invalidated and should not block the end of the
-                normal examination cycle
-
-
-        Every other scheduled state is considered unfinished:
-            DRAFT
-            SUBMITTED
-            SEALED
-            ACTIVE
-            SUSPENDED
-
-
-        Unscheduled examinations are deliberately ignored. This method answers
-        whether the level still has unfinished examinations in its actual normal
-        timetable, not whether unreleated draft exam records exist
-        """
-
         child_exam = aliased(Exam)
         has_newer_revision = (
             select(child_exam.id)
@@ -813,12 +754,7 @@ class ExamRepository:
                 Exam.term_id == term_id,
                 Curriculum.academic_level_id == level_id,
                 Exam.scheduled_start_at.is_not(None),
-                Exam.status.notin_(
-                    (
-                        ExamStatus.CLOSED,
-                        ExamStatus.CANCELLED,
-                    )
-                ),
+                Exam.status.notin_((ExamStatus.CLOSED, ExamStatus.CANCELLED)),
                 ~has_newer_revision,
             )
             .exists()
