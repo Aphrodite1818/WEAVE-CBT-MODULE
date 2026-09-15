@@ -170,6 +170,27 @@ describe('Weave setup and first sync orchestration', () => {
     expect(screen.queryByText(/admin or teacher/i)).not.toBeInTheDocument()
   })
 
+  it('opens each login form with a clean credential and error context', async () => {
+    routes({ 'POST /api/v1/student/auth/login': () => reply({ detail: 'Invalid student credential' }, 401) })
+    renderApp()
+    await screen.findByRole('button', { name: /login as student/i })
+
+    fireEvent.click(screen.getByRole('button', { name: /login as student/i }))
+    fireEvent.change(screen.getByLabelText(/admission number/i), { target: { value: 'BFA/24/001' } })
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'student-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
+    expect(await screen.findByText(/invalid student credential/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /back to home/i }))
+    fireEvent.click(screen.getByRole('button', { name: /login as staff/i }))
+
+    expect(screen.queryByText(/invalid student credential/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/email/i)).toHaveValue('')
+    expect(screen.getByLabelText(/^password$/i)).toHaveValue('')
+    expect(screen.getByLabelText(/email/i)).toHaveAttribute('autocomplete', 'off')
+    expect(screen.getByLabelText(/^password$/i)).toHaveAttribute('autocomplete', 'new-password')
+  })
+
   it('checks backend sync status only after admin sign in', async () => {
     const fetchMock = routes({ 'POST /api/v1/auth/login': () => reply(admin), 'GET /api/v1/sync/status': () => reply(incomplete) })
     renderApp()

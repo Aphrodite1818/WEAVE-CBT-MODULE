@@ -47,12 +47,13 @@ function LoginTypewriterText({ text, className, as: Tag = 'p', pauseMs = LOCKUP_
   )
 }
 
-export function LoginField({ label, type = 'text', value, onChange, placeholder, autoComplete, required = true }) {
+export function LoginField({ label, type = 'text', value, onChange, placeholder, autoComplete = 'off', name, required = true }) {
   return (
     <label className="login-field">
       <span>{label}</span>
       <input
         className="login-field__input"
+        name={name}
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -103,7 +104,11 @@ export function LoginShell({ kind, title, subtitle, branding, children, error, l
               <h1>{title}</h1>
               <p>{subtitle}</p>
             </header>
-            <form className="weave-login-form" onSubmit={(event) => { event.preventDefault(); onSubmit() }}>
+            <form
+              className="weave-login-form"
+              autoComplete="off"
+              onSubmit={(event) => { event.preventDefault(); onSubmit() }}
+            >
               <div className="weave-login-form__fields">{children}</div>
               {error && <Notice tone="danger">{error}</Notice>}
               <button className="weave-login-submit" type="submit" disabled={loading}>

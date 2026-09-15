@@ -18,15 +18,17 @@ export function StudentLoginPage({ error, loading, branding, onSubmit, onBack })
     >
       <LoginField
         label="Admission Number"
-        autoComplete="username"
+        name="student_admission_number"
+        autoComplete="off"
         value={admissionNumber}
         onChange={setAdmissionNumber}
         placeholder="Enter your admission number"
       />
       <LoginField
         label="Password"
+        name="student_password"
         type="password"
-        autoComplete="current-password"
+        autoComplete="new-password"
         value={password}
         onChange={setPassword}
         placeholder="Enter your password"

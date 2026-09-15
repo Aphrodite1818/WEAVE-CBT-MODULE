@@ -125,7 +125,7 @@ export function appReducer(state, action) {
     case 'studentResolution':
       return { ...state, studentResolution: action.resolution, view: 'student' }
     case 'view':
-      return { ...state, view: action.view }
+      return { ...state, view: action.view, authLoading: false, authError: '' }
     case 'staff':
       return { ...state, staff: { ...state.staff, ...action.patch } }
     case 'exam':
