@@ -15,6 +15,7 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 from app.core.exceptions import AcademicAuthorizationError  # noqa: E402
 from app.domains.academics.authorization import AcademicAuthorizationService  # noqa: E402
 from app.domains.academics.repository import AcademicRepository  # noqa: E402
+from app.domains.academics.service import AcademicEligibilityService  # noqa: E402
 
 
 class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
@@ -175,6 +176,100 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                     class_id=class_id,
                     curriculum_subject_id=subject_id,
                 )
+
+    async def test_admin_targetable_classes_use_term_eligibility(self) -> None:
+        subject_id = uuid4()
+        term_id = uuid4()
+        eligible_class = SimpleNamespace(id=uuid4(), display_name="SS2 Science A")
+        actor = SimpleNamespace(
+            id=uuid4(),
+            role="admin",
+            is_active=True,
+            weave_membership_id=None,
+        )
+
+        with (
+            patch.object(
+                AcademicRepository,
+                "get_curriculum_subject_by_id",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=subject_id, is_active=True)
+                ),
+            ),
+            patch.object(
+                AcademicEligibilityService,
+                "list_eligible_classes",
+                new=AsyncMock(return_value=[eligible_class]),
+            ) as list_eligible,
+        ):
+            classes = await AcademicAuthorizationService.list_actor_targetable_classes(
+                object(),  # type: ignore[arg-type]
+                actor=actor,  # type: ignore[arg-type]
+                curriculum_subject_id=subject_id,
+                academic_term_id=term_id,
+            )
+
+        self.assertEqual(classes, [eligible_class])
+        list_eligible.assert_awaited_once_with(
+            ANY,
+            curriculum_subject_id=subject_id,
+            academic_term_id=term_id,
+        )
+
+    async def test_teacher_targetable_classes_intersect_eligibility_and_assignment(
+        self,
+    ) -> None:
+        membership_id = uuid4()
+        subject_id = uuid4()
+        term_id = uuid4()
+        eligible_assigned = SimpleNamespace(id=uuid4(), display_name="SS2 Science A")
+        eligible_unassigned = SimpleNamespace(id=uuid4(), display_name="SS2 Science B")
+        assigned_but_ineligible = SimpleNamespace(id=uuid4(), display_name="SS2 Arts A")
+        actor = SimpleNamespace(
+            id=uuid4(),
+            role="teacher",
+            is_active=True,
+            weave_membership_id=str(membership_id),
+        )
+
+        with (
+            patch.object(
+                AcademicRepository,
+                "get_curriculum_subject_by_id",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=subject_id, is_active=True)
+                ),
+            ),
+            patch.object(
+                AcademicEligibilityService,
+                "list_eligible_classes",
+                new=AsyncMock(
+                    return_value=[eligible_assigned, eligible_unassigned]
+                ),
+            ),
+            patch.object(
+                AcademicRepository,
+                "get_teacher_by_membership_id",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=membership_id, status="active")
+                ),
+            ),
+            patch.object(
+                AcademicRepository,
+                "list_teacher_classes_for_curriculum_subject",
+                new=AsyncMock(
+                    return_value=[eligible_assigned, assigned_but_ineligible]
+                ),
+            ),
+        ):
+            classes = await AcademicAuthorizationService.list_actor_targetable_classes(
+                object(),  # type: ignore[arg-type]
+                actor=actor,  # type: ignore[arg-type]
+                curriculum_subject_id=subject_id,
+                academic_term_id=term_id,
+            )
+
+        self.assertEqual(classes, [eligible_assigned])
 
 
 if __name__ == "__main__":
