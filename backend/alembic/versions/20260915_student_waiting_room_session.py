@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 
 
@@ -51,7 +52,7 @@ def upgrade() -> None:
         "student_exam_sessions",
         ["candidate_id"],
         unique=True,
-        postgresql_where=op.inline_literal(
+        postgresql_where=sa.text(
             "revoked_at IS NULL AND candidate_id IS NOT NULL"
         ),
     )
@@ -94,5 +95,5 @@ def downgrade() -> None:
         "student_exam_sessions",
         ["candidate_id"],
         unique=True,
-        postgresql_where=op.inline_literal("revoked_at IS NULL"),
+        postgresql_where=sa.text("revoked_at IS NULL"),
     )
