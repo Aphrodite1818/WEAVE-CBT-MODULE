@@ -39,6 +39,7 @@ from app.domains.academics.models import (
     TeacherAssignment,
 )
 from app.domains.academics.repository import AcademicRepository
+from app.domains.auth.service import LocalAuthService
 from app.domains.node.identity_store import node_identity_store
 from app.domains.sync.invalidation import SyncInvalidationRepository
 from app.domains.sync.repository import SyncRepository
@@ -198,6 +199,14 @@ class SyncService:
         # that has been prepared but has not started execution must be rebuilt.
         await SyncInvalidationRepository.mark_pre_execution_rosters_stale(db)
 
+        # Weave omits staff who are no longer authorized from the active
+        # bootstrap. Reconcile local trust only after the authoritative
+        # projection has been fully installed.
+        await LocalAuthService.reconcile_synced_staff_trust(
+            db,
+            revalidated_at=payload.metadata.generated_at,
+        )
+
     async def bootstrap(
         self,
         db: AsyncSession,
@@ -344,6 +353,15 @@ class SyncService:
 
         if any(change.entity_type == "student_enrollment" for change in effective):
             await SyncInvalidationRepository.mark_pre_execution_rosters_stale(db)
+
+        staff_changes = [
+            change for change in effective if change.entity_type in {"admin", "teacher"}
+        ]
+        if staff_changes:
+            await LocalAuthService.reconcile_synced_staff_trust(
+                db,
+                revalidated_at=max(change.occurred_at for change in staff_changes),
+            )
 
     async def reconcile(self, db: AsyncSession) -> SyncReconcileResponse:
         """Recover every durable Weave change after the local committed cursor."""
