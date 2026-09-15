@@ -14,7 +14,11 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 from app import model_registry  # noqa: E402,F401
 from app.core.database import Base  # noqa: E402
 from app.domains.auth.student_models import StudentExamSession  # noqa: E402
-from app.domains.auth.student_schemas import StudentLoginRequest  # noqa: E402
+from app.domains.auth.student_schemas import (  # noqa: E402
+    StudentExamAvailability,
+    StudentLoginRequest,
+    StudentLoginResponse,
+)
 
 
 class StudentAuthContractTests(unittest.TestCase):
@@ -38,11 +42,28 @@ class StudentAuthContractTests(unittest.TestCase):
     def test_no_student_password_or_pin_verifier_is_stored(self) -> None:
         self.assertNotIn("student_cbt_credentials", Base.metadata.tables)
 
-    def test_exam_session_is_bound_to_student_candidate_and_exam(self) -> None:
-        columns = set(StudentExamSession.__table__.c.keys())
-        self.assertTrue({"student_id", "candidate_id", "exam_id", "token_hash"} <= columns)
-        self.assertNotIn("password", columns)
-        self.assertNotIn("pin_hash", columns)
+    def test_waiting_room_session_can_exist_before_exam_binding(self) -> None:
+        candidate = StudentExamSession.__table__.c.candidate_id
+        exam = StudentExamSession.__table__.c.exam_id
+        self.assertTrue(candidate.nullable)
+        self.assertTrue(exam.nullable)
+        self.assertNotIn("password", StudentExamSession.__table__.c)
+        self.assertNotIn("pin_hash", StudentExamSession.__table__.c)
+
+    def test_no_exam_is_a_successful_login_availability_state(self) -> None:
+        payload = StudentLoginResponse(
+            student_id="77777777-7777-7777-7777-777777777777",
+            candidate_id=None,
+            exam_id=None,
+            exam_title=None,
+            display_name="Ada Okafor",
+            availability=StudentExamAvailability.NO_EXAM,
+            status_message="No examination is currently available for you.",
+            is_makeup=False,
+        )
+        self.assertEqual(payload.availability, StudentExamAvailability.NO_EXAM)
+        self.assertIsNone(payload.exam_id)
+        self.assertIsNone(payload.candidate_id)
 
 
 if __name__ == "__main__":
