@@ -114,7 +114,7 @@ class ExamService:
         Create a new revision-1 examination in DRAFT state.
 
         This operation validates:
-        - the actor may author the curriculum subject
+        - the actor may author the level-wide curriculum subject for the term
         - the session exists
         - the term belongs to that session
         - the assessment scheme exists
@@ -126,20 +126,13 @@ class ExamService:
 
         This operation intentionally does NOT:
         - select or freeze questions
-        - resolve target classes
+        - resolve or freeze target classes
         - build the candidate roster
         - freeze the assessment component maximum
         - submit or seal the examination
 
         Those operations belong to later lifecycle methods.
         """
-
-        # check if actor has authoring rights
-        await AcademicAuthorizationService.require_can_author_curriculum_subject(
-            db,
-            actor=actor,
-            curriculum_subject_id=payload.curriculum_subject_id,
-        )
 
         # grab the session the author is trying to author for
         session = await AcademicRepository.get_session_by_id(
@@ -169,6 +162,17 @@ class ExamService:
             raise AcademicScopeError(
                 "Academic term does not belong to the selected academic session"
             )
+
+        # The exam is level-wide, not class-owned. A teacher may start or join
+        # this paper only when they teach the subject in at least one class that
+        # is academically eligible for the selected term. Their own classes do
+        # not become the exam audience.
+        await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+            db,
+            actor=actor,
+            curriculum_subject_id=payload.curriculum_subject_id,
+            academic_term_id=term.id,
+        )
 
         # validate assessment scheme and component
         assessment_scheme = await AcademicRepository.get_assessment_scheme_by_id(

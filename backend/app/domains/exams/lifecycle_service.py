@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import AcademicAuthorizationError, AcademicScopeError
 from app.domains.academics.authorization import AcademicAuthorizationService
 from app.domains.academics.repository import AcademicRepository
+from app.domains.academics.service import AcademicEligibilityService
 from app.domains.auth.models import LocalActor
 from app.domains.exams.authoring_service import _normalize_optional_text
 from app.domains.exams.exceptions import ExamNotFound, ExamStateError
@@ -551,36 +552,22 @@ class ExamLifecycleServiceMixin:
             questions=questions,
         )
 
-        classes = await AcademicRepository.list_classes_for_curriculum_subject(
+        # The examination remains level-wide. At sealing, freeze the classes
+        # that are academically eligible for this subject in this exact term.
+        # Teacher assignments are authoring authority, not delivery scope.
+        eligible_classes = await AcademicEligibilityService.list_eligible_classes(
             db,
             curriculum_subject_id=exam.curriculum_subject_id,
+            academic_term_id=exam.term_id,
         )
-        target_classes: list[ExamTargetClass] = []
-        for classroom in classes:
-            offering = await AcademicRepository.get_offering_for_class_scope(
-                db,
-                academic_term_id=exam.term_id,
-                curriculum_subject_id=exam.curriculum_subject_id,
+        target_classes = [
+            ExamTargetClass(
+                exam_id=exam.id,
                 class_id=classroom.id,
+                teacher_assignment_id=None,
             )
-            if offering is None:
-                continue
-
-            assignment = await AcademicRepository.get_active_assignment_for_class_curriculum_subject(
-                db,
-                classroom.id,
-                exam.curriculum_subject_id,
-            )
-            target_classes.append(
-                ExamTargetClass(
-                    exam_id=exam.id,
-                    class_id=classroom.id,
-                    subject_offering_id=offering.id,
-                    teacher_assignment_id=(
-                        assignment.id if assignment is not None else None
-                    ),
-                )
-            )
+            for classroom in eligible_classes
+        ]
 
         if not target_classes:
             raise AcademicScopeError(

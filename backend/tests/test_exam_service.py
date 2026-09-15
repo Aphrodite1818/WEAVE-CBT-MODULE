@@ -136,9 +136,9 @@ class ExamServiceTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(
                 AcademicAuthorizationService,
-                "require_can_author_curriculum_subject",
+                "require_can_author_curriculum_subject_for_term",
                 new=AsyncMock(),
-            ),
+            ) as authorize,
             patch.object(
                 AcademicRepository,
                 "get_session_by_id",
@@ -203,6 +203,12 @@ class ExamServiceTests(unittest.IsolatedAsyncioTestCase):
                     payload=payload,
                 )
 
+        authorize.assert_awaited_once_with(
+            db,
+            actor=current_actor,
+            curriculum_subject_id=subject_id,
+            academic_term_id=term_id,
+        )
         count_questions.assert_awaited_once_with(
             db,
             bank_id,

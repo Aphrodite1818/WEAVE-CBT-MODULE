@@ -22,6 +22,7 @@ from app.domains.academics.authorization import (  # noqa: E402
     AcademicAuthorizationService,
 )
 from app.domains.academics.repository import AcademicRepository  # noqa: E402
+from app.domains.academics.service import AcademicEligibilityService  # noqa: E402
 from app.domains.exams.exceptions import ExamStateError  # noqa: E402
 from app.domains.exams.models import (  # noqa: E402
     ExamQuestionSelectionMode,
@@ -417,7 +418,6 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
             is_correct=True,
         )
         classroom = SimpleNamespace(id=uuid4())
-        offering = SimpleNamespace(id=uuid4())
         frozen_id = uuid4()
         order: list[str] = []
 
@@ -484,20 +484,10 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value={source_question.id: [source_option]}),
             ),
             patch.object(
-                AcademicRepository,
-                "list_classes_for_curriculum_subject",
+                AcademicEligibilityService,
+                "list_eligible_classes",
                 new=AsyncMock(return_value=[classroom]),
-            ),
-            patch.object(
-                AcademicRepository,
-                "get_offering_for_class_scope",
-                new=AsyncMock(return_value=offering),
-            ),
-            patch.object(
-                AcademicRepository,
-                "get_active_assignment_for_class_curriculum_subject",
-                new=AsyncMock(return_value=None),
-            ),
+            ) as list_eligible_classes,
             patch.object(
                 ExamRepository,
                 "add_exam_questions",
@@ -519,7 +509,7 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
                 ExamRepository,
                 "add_target_classes",
                 new=AsyncMock(),
-            ),
+            ) as add_target_classes,
             patch.object(
                 ExamRepository,
                 "save_exam",
@@ -539,6 +529,15 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
 
         acquire_sync_lock.assert_awaited_once_with(db)
         self.assertLess(order.index("sync_lock"), order.index("authorize"))
+        list_eligible_classes.assert_awaited_once_with(
+            db,
+            curriculum_subject_id=current_exam.curriculum_subject_id,
+            academic_term_id=current_exam.term_id,
+        )
+        frozen_targets = add_target_classes.await_args.args[1]
+        self.assertEqual(len(frozen_targets), 1)
+        self.assertEqual(frozen_targets[0].class_id, classroom.id)
+        self.assertIsNone(frozen_targets[0].teacher_assignment_id)
         self.assertEqual(result.status, ExamStatus.SEALED)
         self.assertEqual(result.roster_status, ExamRosterStatus.PENDING)
         self.assertEqual(result.component_maximum_score, Decimal("10.00"))
@@ -574,7 +573,6 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
             is_correct=True,
         )
         classroom = SimpleNamespace(id=uuid4())
-        offering = SimpleNamespace(id=uuid4())
         integrity_error = IntegrityError("insert", {}, Exception("boom"))
 
         with (
@@ -630,19 +628,9 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value={source_question.id: [option]}),
             ),
             patch.object(
-                AcademicRepository,
-                "list_classes_for_curriculum_subject",
+                AcademicEligibilityService,
+                "list_eligible_classes",
                 new=AsyncMock(return_value=[classroom]),
-            ),
-            patch.object(
-                AcademicRepository,
-                "get_offering_for_class_scope",
-                new=AsyncMock(return_value=offering),
-            ),
-            patch.object(
-                AcademicRepository,
-                "get_active_assignment_for_class_curriculum_subject",
-                new=AsyncMock(return_value=None),
             ),
             patch.object(
                 ExamRepository,
