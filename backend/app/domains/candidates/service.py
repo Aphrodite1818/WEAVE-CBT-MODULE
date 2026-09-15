@@ -418,30 +418,48 @@ class CandidateService:
 
     @staticmethod
     def _display_name(enrollment: StudentEnrollment) -> str:
-        """Build the candidate name stored in the frozen roster snapshot"""
+        """Build the candidate name stored in the frozen roster snapshot."""
 
         parts = [
             enrollment.first_name.strip() if enrollment.first_name else "",
             enrollment.last_name.strip() if enrollment.last_name else "",
         ]
-
         display_name = " ".join(part for part in parts if part)
-
         return display_name or enrollment.admission_number
+
+    @staticmethod
+    async def _eligible_enrollments_for_frozen_classes(
+        db: AsyncSession,
+        *,
+        exam: Exam,
+        target_classes: list,
+    ) -> dict[UUID, StudentEnrollment]:
+        """Return current active students inside the classes frozen at sealing.
+
+        ExamTargetClass is the approved academic audience snapshot. Candidate
+        membership is derived only from current active enrollment in those
+        classes for the exam's academic session. The removed subject-offering
+        contract has no role in candidate eligibility.
+        """
+
+        class_ids = [target.class_id for target in target_classes]
+        enrollments = await AcademicRepository.list_current_enrollments_for_classes(
+            db,
+            class_ids,
+            academic_session_id=exam.session_id,
+        )
+
+        return {
+            enrollment.student_id: enrollment
+            for enrollment in enrollments
+            if enrollment.class_id is not None
+        }
 
     @classmethod
     async def prepare_roster(cls, db: AsyncSession, *, exam_id: UUID):
-        """
-        Materialize the initial candidate roster for one sealed exam
-        The frozen ExamTargetClass rows define the classes that may
-        participate. Synchronized StudentEnrollment rows determine the
-        individual students currently eligible inside those classes
-
-        This method is intended to be called by a background worker
-        """
+        """Materialize the initial candidate roster for one sealed exam."""
 
         exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id, lock=True)
-
         if exam is None:
             raise ExamNotFound("Examination does not exist")
 
@@ -458,33 +476,16 @@ class CandidateService:
             )
 
         await SyncRepository.acquire_apply_lock(db)
-
         target_classes = await ExamRepository.list_target_classes_for_exam(db, exam.id)
-
         if not target_classes:
             raise CandidateRosterError("Examination has no target classes")
 
         next_roster_version = exam.roster_version + 1
-
-        enrollments_by_student: dict[UUID, StudentEnrollment] = {}
-
-        for target in target_classes:
-            if target.subject_offering_id is None:
-                raise CandidateRosterError(
-                    "Examination target class is missing its subject offering"
-                )
-
-            enrollments = (
-                await AcademicRepository.list_eligible_enrollments_for_offering(
-                    db, target.subject_offering_id, class_id=target.class_id
-                )
-            )
-
-            for enrollment in enrollments:
-                if enrollment.class_id is None:
-                    continue
-
-                enrollments_by_student[enrollment.student_id] = enrollment
+        enrollments_by_student = await cls._eligible_enrollments_for_frozen_classes(
+            db,
+            exam=exam,
+            target_classes=target_classes,
+        )
 
         if not enrollments_by_student:
             raise CandidateRosterError(
@@ -507,31 +508,21 @@ class CandidateService:
         ]
 
         prepared_at = datetime.now(UTC)
-
         try:
             exam.roster_status = ExamRosterStatus.BUILDING
             exam.roster_error = None
-
             await ExamRepository.save_exam(db, exam)
-
-            await CandidateRepository.add_candidates(
-                db,
-                candidates,
-            )
+            await CandidateRepository.add_candidates(db, candidates)
 
             exam.roster_version = next_roster_version
             exam.roster_candidate_count = len(candidates)
             exam.roster_prepared_at = prepared_at
             exam.roster_status = ExamRosterStatus.READY
             exam.roster_error = None
-
             await ExamRepository.save_exam(db, exam)
-
             await db.commit()
-
         except IntegrityError as exc:
             await db.rollback()
-
             raise CandidateRosterError(
                 "Candidate roster could not be prepared because it "
                 "conflicts with existing examination data"
@@ -546,66 +537,37 @@ class CandidateService:
         *,
         exam_id: UUID,
     ):
-        """
-        Refresh an existing candidate roster against the latest synchronized
-        academic eligibility
+        """Refresh a stale roster against current enrollment in frozen classes."""
 
-        Existing eligible candidates are retained
-        Newly eligible students are added
-        Students who are no longer eligible are marker WITHDRAWN
-        BLOCKED canaidates remain blocked until they are eligible
-        """
         exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id, lock=True)
-
         if exam is None:
             raise ExamNotFound("Examination does not exist")
-
         if exam.status != ExamStatus.SEALED:
             raise CandidateRosterError(
                 "Candidate roster can only be reconciled for a SEALED examination"
             )
-
         if exam.roster_status not in {ExamRosterStatus.STALE, ExamRosterStatus.FAILED}:
             raise CandidateRosterError(
                 "Candidate roster does not require reconciliation"
             )
 
         await SyncRepository.acquire_apply_lock(db)
-
         target_classes = await ExamRepository.list_target_classes_for_exam(db, exam.id)
-
         if not target_classes:
             raise CandidateRosterError("Examination has no target classes")
 
         next_roster_version = exam.roster_version + 1
-
-        eligible_enrollments: dict[UUID, StudentEnrollment] = {}
-
-        for target in target_classes:
-            if target.subject_offering_id is None:
-                raise CandidateRosterError(
-                    "Examination target class is missing its subject offering"
-                )
-
-            enrollments = (
-                await AcademicRepository.list_eligible_enrollments_for_offering(
-                    db,
-                    offering_id=target.subject_offering_id,
-                    class_id=target.class_id,
-                )
-            )
-            for enrollment in enrollments:
-                if enrollment.class_id is None:
-                    continue
-
-                eligible_enrollments[enrollment.student_id] = enrollment
+        eligible_enrollments = await cls._eligible_enrollments_for_frozen_classes(
+            db,
+            exam=exam,
+            target_classes=target_classes,
+        )
 
         existing_candidates = await CandidateRepository.list_candidates_for_exam(
             db,
             exam.id,
             lock=True,
         )
-
         existing_by_student = {
             candidate.student_id: candidate for candidate in existing_candidates
         }
@@ -615,7 +577,6 @@ class CandidateService:
 
         for enrollment in eligible_enrollments.values():
             existing = existing_by_student.get(enrollment.student_id)
-
             if existing is None:
                 new_candidates.append(
                     ExamCandidate(
@@ -641,13 +602,11 @@ class CandidateService:
             if existing.status != CandidateStatus.BLOCKED:
                 existing.status = CandidateStatus.ELIGIBLE
                 existing.status_reason = None
-
             changed_candidates.append(existing)
 
         for candidate in existing_candidates:
             if candidate.student_id in eligible_enrollments:
                 continue
-
             candidate.status = CandidateStatus.WITHDRAWN
             candidate.status_reason = (
                 "Student is no longer academically eligible for this examination"
@@ -656,40 +615,25 @@ class CandidateService:
             changed_candidates.append(candidate)
 
         prepared_at = datetime.now(UTC)
-
         try:
             exam.roster_status = ExamRosterStatus.BUILDING
             exam.roster_error = None
-
             await ExamRepository.save_exam(db, exam)
 
             if new_candidates:
-                await CandidateRepository.add_candidates(
-                    db,
-                    new_candidates,
-                )
-
+                await CandidateRepository.add_candidates(db, new_candidates)
             if changed_candidates:
-                await CandidateRepository.save_candidates(
-                    db,
-                    changed_candidates,
-                )
-
-            current_candidate_count = len(eligible_enrollments)
+                await CandidateRepository.save_candidates(db, changed_candidates)
 
             exam.roster_version = next_roster_version
-            exam.roster_candidate_count = current_candidate_count
+            exam.roster_candidate_count = len(eligible_enrollments)
             exam.roster_prepared_at = prepared_at
             exam.roster_status = ExamRosterStatus.READY
             exam.roster_error = None
-
             await ExamRepository.save_exam(db, exam)
-
             await db.commit()
-
         except IntegrityError as exc:
             await db.rollback()
-
             raise CandidateRosterError(
                 "Candidate roster could not be reconciled because it "
                 "conflicts with existing examination data"
@@ -709,23 +653,17 @@ class CandidateService:
     ) -> MissedCandidateListResponse:
         """
         Return candidates who were on the original roster but never started
-        the examination
+        the examination.
 
-        A candidate becomes definitely "misses" only after the original
-        examination is CLOSED
-
-
-        CANCELLED examinations do not produce missed candidates because the
-        sitting itself was invalidated
+        A candidate becomes definitely missed only after the original
+        examination is CLOSED. CANCELLED examinations do not produce missed
+        candidates because the sitting itself was invalidated.
         """
 
         cls._require_admin(actor)
-
         exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id)
-
         if exam is None:
             raise ExamNotFound("Examination does not exist")
-
         if exam.status != ExamStatus.CLOSED:
             raise ValueError(
                 "Missed candidates can only be determined after "
@@ -735,15 +673,12 @@ class CandidateService:
         candidates = await CandidateRepository.list_missed_candidates_for_exam(
             db, exam.id, offset=offset, limit=limit
         )
-
         total = await CandidateRepository.count_missed_candidates_for_exam(db, exam.id)
-
         active_authorizations = (
             await CandidateRepository.list_active_makeup_authorizations_for_candidates(
                 db, [candidate.id for candidate in candidates]
             )
         )
-
         authorization_by_candidate = {
             authorization.candidate_id: authorization
             for authorization in active_authorizations
@@ -775,27 +710,19 @@ class CandidateService:
     async def approve_makeup(
         cls, db: AsyncSession, *, actor: LocalActor, candidate_id: UUID, reason: str
     ) -> CandidateMakeupAuthorizationResponse:
-        """
-        Approve one exact missed candidate/exam pair for a future makeup
-
-        Approval does not create an attempt and does not make the makeup
-        immediately executable. Makeup-period eligibility is a later phase
-        """
+        """Approve one exact missed candidate/exam pair for a future makeup."""
 
         cls._require_admin(actor)
-
         normalized_reason = cls._require_reason(reason)
         now = datetime.now(UTC)
 
         candidate, exam = await cls._get_candidate_and_exam(
             db, candidate_id=candidate_id, lock_candidate=True, lock_exam=True
         )
-
         if exam.status != ExamStatus.CLOSED:
             raise ValueError(
                 "Makeup can only be approved after the original examination is closed"
             )
-
         if candidate.status != CandidateStatus.ELIGIBLE:
             raise ValueError(
                 "Only eligible candidates who missed the examination "
@@ -805,7 +732,6 @@ class CandidateService:
         attempt = await AttemptRepository.get_attempt_by_candidate_id(
             db, candidate_id=candidate_id, lock=True
         )
-
         if attempt is not None:
             raise ValueError(
                 "Candidate cannot receive makeup approval because "
@@ -815,7 +741,6 @@ class CandidateService:
         existing = await CandidateRepository.get_active_makeup_authorization(
             db, candidate.id, lock=True
         )
-
         if existing is not None:
             raise ValueError("Candidate already has an active makeup authorization")
 
@@ -825,17 +750,13 @@ class CandidateService:
             reason=normalized_reason,
             approved_at=now,
         )
-
         try:
             authorization = await CandidateRepository.add_makeup_authorization(
                 db, authorization
             )
-
             await db.commit()
-
         except IntegrityError as exc:
             await db.rollback()
-
             raise ValueError("Makeup authorization could not be created") from exc
 
         return CandidateMakeupAuthorizationResponse.model_validate(authorization)
@@ -850,7 +771,6 @@ class CandidateService:
         reason: str,
     ) -> CandidateMakeupAuthorizationResponse:
         cls._require_admin(actor)
-
         normalized_reason = cls._require_reason(reason)
         now = datetime.now(UTC)
 
@@ -859,40 +779,30 @@ class CandidateService:
             authorization_id,
             lock=True,
         )
-
         if authorization is None:
             raise ValueError("Makeup authorization does not exist")
-
         if authorization.consumed_at is not None:
             raise ValueError("Consumed makeup authorization cannot be revoked")
-
         if authorization.revoked_at is not None:
             raise ValueError("Makeup authorization has already been revoked")
 
-        # Lock candidate as well so future makeup-attempt creation and
-        # revocation cannot race each other.
         _candidate, _exam = await cls._get_candidate_and_exam(
             db,
             candidate_id=authorization.candidate_id,
             lock_candidate=True,
             lock_exam=False,
         )
-
         try:
             authorization.revoked_at = now
             authorization.revoked_by_actor_id = actor.id
             authorization.revocation_reason = normalized_reason
-
             authorization = await CandidateRepository.save_makeup_authorization(
                 db,
                 authorization,
             )
-
             await db.commit()
-
         except IntegrityError as exc:
             await db.rollback()
-
             raise ValueError("Makeup authorization could not be revoked") from exc
 
         return CandidateMakeupAuthorizationResponse.model_validate(authorization)
@@ -906,17 +816,14 @@ class CandidateService:
         candidate_id: UUID,
     ) -> list[CandidateMakeupAuthorizationResponse]:
         cls._require_admin(actor)
-
         candidate, _exam = await cls._get_candidate_and_exam(
             db,
             candidate_id=candidate_id,
         )
-
         authorizations = await CandidateRepository.list_makeup_authorizations(
             db,
             candidate.id,
         )
-
         return [
             CandidateMakeupAuthorizationResponse.model_validate(authorization)
             for authorization in authorizations
