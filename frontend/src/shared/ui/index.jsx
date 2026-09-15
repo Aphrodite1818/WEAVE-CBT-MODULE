@@ -1,10 +1,43 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Icon } from '../icons/Icon'
+
+export function WeaveMark({ className = '' }) {
+  const rawId = useId().replace(/:/g, '')
+  const blueId = `${rawId}-weave-blue`
+  const goldId = `${rawId}-weave-gold`
+
+  return (
+    <svg className={`weave-mark ${className}`.trim()} viewBox="0 0 512 512" fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id={blueId} x1="64" y1="128" x2="448" y2="384" gradientUnits="userSpaceOnUse">
+          <stop stopColor="var(--weave-thread-one-start, #60a5fa)" />
+          <stop offset="0.45" stopColor="var(--weave-thread-one-mid, #1d4ed8)" />
+          <stop offset="1" stopColor="var(--weave-thread-one-end, #1e3a8a)" />
+        </linearGradient>
+        <linearGradient id={goldId} x1="448" y1="128" x2="64" y2="384" gradientUnits="userSpaceOnUse">
+          <stop stopColor="var(--weave-thread-two-start, #fde68a)" />
+          <stop offset="0.46" stopColor="var(--weave-thread-two-mid, #f59e0b)" />
+          <stop offset="1" stopColor="var(--weave-thread-two-end, #b45309)" />
+        </linearGradient>
+      </defs>
+      <g fill="none" strokeLinecap="round">
+        <path d="M72 174c76 0 82 164 184 164s108-164 184-164" stroke="var(--weave-thread-one-halo, #bfdbfe)" strokeWidth="84" opacity=".7" />
+        <path d="M72 174c76 0 82 164 184 164s108-164 184-164" stroke={`url(#${blueId})`} strokeWidth="58" />
+        <path d="M72 338c76 0 82-164 184-164s108 164 184 164" stroke="var(--weave-thread-two-halo, #fef3c7)" strokeWidth="84" opacity=".78" />
+        <path d="M72 338c76 0 82-164 184-164s108 164 184 164" stroke={`url(#${goldId})`} strokeWidth="58" />
+        <path d="M188 256h136" stroke="#fff" strokeWidth="18" opacity=".88" />
+      </g>
+    </svg>
+  )
+}
 
 export function WeaveLogo({ inverse = false, size = 'normal' }) {
   return (
-    <div className={`weave-logo ${inverse ? 'inverse' : ''} ${size === 'large' ? 'large' : ''}`} aria-label="Weave CBT">
-      <img src="/weave-logo.svg" alt="Weave" /><span>CBT</span>
+    <div className={`weave-logo ${inverse ? 'inverse' : ''} ${size === 'large' ? 'large' : ''}`} role="img" aria-label="Weave CBT">
+      <WeaveMark />
+      <strong className="weave-logo__word">Weave</strong>
+      <i className="weave-logo__divider" aria-hidden="true" />
+      <span className="weave-logo__cbt">CBT</span>
     </div>
   )
 }
