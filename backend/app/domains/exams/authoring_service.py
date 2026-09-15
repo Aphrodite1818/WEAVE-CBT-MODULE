@@ -311,6 +311,7 @@ class ExamService:
         - the examination is still in DRAFT state
         - the actor may author the examination's curriculum subject
         - the final term belongs to the final session
+        - when the term changes, the actor may author the subject for that term
         - the final assessment component belongs to the final scheme
         - the current question bank remains valid
         - the final scheduling window is valid
@@ -439,6 +440,16 @@ class ExamService:
         if term.academic_session_id != session.id:
             raise AcademicScopeError(
                 "Academic term does not belong to the selected academic session"
+            )
+
+        # A draft cannot bypass the creation rule by being moved into a term
+        # where the teacher has no academically eligible class for this subject.
+        if "term_id" in fields:
+            await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+                db,
+                actor=actor,
+                curriculum_subject_id=exam.curriculum_subject_id,
+                academic_term_id=term.id,
             )
 
         # validate final assessment scheme
