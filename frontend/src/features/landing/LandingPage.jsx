@@ -37,18 +37,15 @@ export function LandingPage({ dispatch }) {
           <p>Secure. Reliable. Built for Schools.</p>
         </div>
 
-        <div className="landing-hero__visual">
-          <div className="landing-float landing-float--cap" aria-hidden="true"><Pictogram name="student" size={31} /></div>
-          <div className="landing-float landing-float--check" aria-hidden="true"><Pictogram name="check" size={27} /></div>
-          <p className="product-script landing-script" aria-hidden="true">Same dreams.<br />Brighter futures.</p>
-          <img className="landing-hero__image" src="/student-hero.jpg" alt="Student preparing to take an exam with Weave CBT" />
+        <div className="landing-scene-shell">
+          <img className="landing-scene" src="/visuals/landing-scene.webp" alt="Student preparing to take an exam with Weave CBT" />
         </div>
       </section>
 
       <section className="landing-benefits" aria-label="Weave CBT benefits">
         {benefits.map(([icon, title, helper]) => (
           <div key={title} className="landing-benefit">
-            <span className="landing-benefit__icon"><Pictogram name={icon} size={25} /></span>
+            <span className="landing-benefit__icon"><Pictogram name={icon} size={24} /></span>
             <strong>{title}</strong>
             <small>{helper}</small>
           </div>
