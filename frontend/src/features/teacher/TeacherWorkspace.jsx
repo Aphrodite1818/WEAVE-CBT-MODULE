@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { leafGateway } from '../../app/gateway'
+import { weaveGateway } from '../../app/gateway'
 import { TeacherLayout } from './TeacherLayout'
 import { OverviewPage } from './OverviewPage'
 import { BankDetailPage, QuestionBanksPage } from './QuestionBanksPage'
 import { CreateQuestionPage, QuestionsPage } from './QuestionsPage'
 import { CreateExamPage, ExamsPage } from './ExamsPage'
 
-export function TeacherWorkspace({ state, dispatch, signOut, gateway = leafGateway }) {
+export function TeacherWorkspace({ state, dispatch, signOut, gateway = weaveGateway }) {
   const teacherData = useTeacherData(gateway)
 
   return (
@@ -36,7 +36,7 @@ function useTeacherData(gateway) {
       setBanks(loaded.banks)
       setQuestions(loaded.questions)
     } catch (error) {
-      setError(error.userMessage || 'Leaf could not load teacher content.')
+      setError(error.userMessage || 'Weave could not load teacher content.')
       setBanks([])
       setQuestions([])
     } finally {
@@ -54,7 +54,7 @@ function useTeacherData(gateway) {
       })
       .catch((error) => {
         if (cancelled) return
-        setError(error.userMessage || 'Leaf could not load teacher content.')
+        setError(error.userMessage || 'Weave could not load teacher content.')
         setBanks([])
         setQuestions([])
       })

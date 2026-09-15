@@ -3,8 +3,8 @@ import { Icon } from '../icons/Icon'
 
 export function WeaveLogo({ inverse = false, size = 'normal' }) {
   return (
-    <div className={`leaf-logo ${inverse ? 'inverse' : ''} ${size === 'large' ? 'large' : ''}`} aria-label="Weave">
-      <strong><span style={{color: '#2563EB'}}>W</span> Weave</strong> CBT
+    <div className={`weave-logo ${inverse ? 'inverse' : ''} ${size === 'large' ? 'large' : ''}`} aria-label="Weave CBT">
+      <img src="/weave-logo.svg" alt="Weave" /><span>CBT</span>
     </div>
   )
 }

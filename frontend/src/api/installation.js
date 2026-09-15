@@ -1,11 +1,11 @@
-import { leafRequest } from './client'
+import { weaveRequest } from './client'
 
 export function getInstallationStatus({ signal } = {}) {
-  return leafRequest('/installation/status', { signal, staffAuth: false })
+  return weaveRequest('/installation/status', { signal, staffAuth: false })
 }
 
 export function pairInstallation({ pairingCode, serverName }) {
-  return leafRequest('/installation/pair', {
+  return weaveRequest('/installation/pair', {
     method: 'POST',
     staffAuth: false,
     body: { pairing_code: pairingCode, server_name: serverName },

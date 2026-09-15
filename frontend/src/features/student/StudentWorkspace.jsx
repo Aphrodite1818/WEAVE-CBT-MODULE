@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Metric, Notice, StatusBadge } from '../../shared/ui'
+import { Metric, Notice, StatusBadge, WeaveLogo } from '../../shared/ui'
 import './student.css'
 
 export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnToSignIn }) {
@@ -45,7 +45,7 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
         <main className="premium-exam-shell">
           <header className="premium-exam-header">
             <div className="premium-exam-header-left">
-              <div className="leaf-logo"><strong><span style={{color: '#2563EB'}}>W</span> Weave</strong> CBT</div>
+              <WeaveLogo />
               <div className="premium-exam-title">
                 <strong>{resolution?.exam?.title || 'Current examination'}</strong>
                 <span>Preparing questions</span>
@@ -65,7 +65,7 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
       <main className="premium-exam-shell">
         <header className="premium-exam-header">
           <div className="premium-exam-header-left">
-            <div className="leaf-logo"><strong><span style={{color: '#2563EB'}}>W</span> Weave</strong> CBT</div>
+            <WeaveLogo />
             <div className="premium-exam-title">
               <strong>{attempt.exam_title}</strong>
               <span>{attempt.is_makeup ? 'Makeup examination' : 'Normal examination'}</span>

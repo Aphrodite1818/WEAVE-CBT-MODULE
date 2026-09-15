@@ -1,5 +1,6 @@
 import { Icon } from '../../shared/icons/Icon'
 import { WeaveLogo } from '../../shared/ui'
+import { getLocalBrandLogoSrc } from '../../api/branding'
 
 function teacherNavActive(current, section) {
   if (section === 'question-banks') return current === 'question-banks' || current === 'bank-detail'
@@ -11,7 +12,7 @@ function teacherNavActive(current, section) {
 export function TeacherLayout({ state, dispatch, signOut, children }) {
   const teacherName = state.session?.actor?.display_name || state.session?.name || 'Teacher'
   const teacherRole = state.session?.actor?.role || 'teacher'
-  const schoolName = state.installation?.status?.tenant_name || 'Leaf CBT'
+  const schoolName = state.branding?.school_name || state.installation?.status?.tenant_name || 'Weave CBT'
   const serverName = state.installation?.status?.server_name || 'Local node'
   const nav = [
     ['overview', 'dashboard', 'Overview'],
@@ -38,7 +39,7 @@ export function TeacherLayout({ state, dispatch, signOut, children }) {
           <div><strong>{teacherName}</strong><small>{teacherRole}</small></div>
         </div>
         <div className="school-card">
-          <span><Icon name="school" size={20} /></span>
+          <span>{getLocalBrandLogoSrc(state.branding) ? <img className="school-brand-logo" src={getLocalBrandLogoSrc(state.branding)} alt="School logo" /> : <Icon name="school" size={20} />}</span>
           <div><strong>{schoolName}</strong><small>{serverName}</small></div>
         </div>
         <nav>

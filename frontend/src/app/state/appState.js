@@ -40,10 +40,11 @@ export const initialStaff = {
 export function createInitialState() {
   return {
     view: 'boot',
-    authMode: 'staff',
     authLoading: false,
     authError: '',
     bootError: '',
+    syncError: '',
+    syncStatus: null,
     connectivity: 'online',
     installation: { loading: true, configured: false, status: null },
     branding: createDefaultBranding(),
@@ -75,7 +76,7 @@ export function appReducer(state, action) {
     case 'bootSuccess':
       return {
         ...state,
-        view: action.status.configured ? 'auth' : 'setup',
+        view: action.status.configured ? 'landing' : 'welcome',
         bootError: '',
         installation: { loading: false, configured: action.status.configured, status: action.status },
       }
@@ -84,19 +85,19 @@ export function appReducer(state, action) {
     case 'brandingSuccess':
       return { ...state, branding: normalizeBranding(action.branding) }
     case 'setupStart':
-      return { ...state, authLoading: true, authError: '' }
+      return { ...state, view: 'pairing', authLoading: true, authError: '' }
     case 'setupSuccess':
       return {
         ...state,
-        view: 'auth',
+        view: 'paired-success',
         authLoading: false,
         authError: '',
         installation: { loading: false, configured: true, status: action.status },
       }
+    case 'setupFailure':
+      return { ...state, view: 'pairing', authLoading: false, authError: action.message }
     case 'signOut':
-      return { ...state, view: 'auth', authMode: 'staff', authError: '', session: null, studentResolution: null, exam: initialExam }
-    case 'authMode':
-      return { ...state, authMode: action.authMode, authError: '' }
+      return { ...state, view: 'landing', authError: '', session: null, studentResolution: null, exam: initialExam }
     case 'authStart':
       return { ...state, authLoading: true, authError: '' }
     case 'authFailure':
@@ -110,6 +111,17 @@ export function appReducer(state, action) {
         view: action.view,
         exam: { ...initialExam, stage: action.examStage || initialExam.stage },
       }
+    case 'syncChecking':
+      return { ...state, view: 'sync-check', syncError: '' }
+    case 'syncStatus':
+      return {
+        ...state,
+        syncStatus: action.status,
+        syncError: action.status.last_error || '',
+        view: action.status.bootstrap_completed_at ? 'staff' : 'initial-sync',
+      }
+    case 'syncFailure':
+      return { ...state, view: 'initial-sync', syncError: action.message }
     case 'studentResolution':
       return { ...state, studentResolution: action.resolution, view: 'student' }
     case 'view':

@@ -15,10 +15,10 @@ src/
 ## Boundaries
 
 - `app/` may compose features, shared primitives, and API-backed gateways.
-- `api/` owns HTTP details. Feature components should use the injected app gateway rather than importing fetch/client primitives directly.
+- `api/` owns HTTP details. Feature components use the domain adapters through the app gateway rather than calling `fetch` directly.
 - `features/` owns user-facing flows. Feature-specific components, pages, hooks, and CSS stay inside their feature folder.
 - `shared/` contains reusable presentation primitives only. It must not depend on a feature.
 - `styles/` contains truly global styles. Feature-specific styles stay with the feature.
 - Avoid recreating generic top-level `components/`, `lib/`, `services/`, or `state/` buckets. Put code under the owner that gives it context.
 
-`src/App.jsx` is only a compatibility facade for tests/importers. The real application root is `src/app/App.jsx`.
+`src/App.jsx` re-exports the application root for tests and imports. The real application root is `src/app/App.jsx`.

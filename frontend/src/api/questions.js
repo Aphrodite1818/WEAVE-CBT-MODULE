@@ -1,45 +1,45 @@
-import { leafRequest, queryString } from './client'
+import { weaveRequest, queryString } from './client'
 
 export function createQuestionBank(curriculumSubjectId, payload) {
-  return leafRequest(`/questions/banks/${curriculumSubjectId}`, { method: 'POST', body: payload })
+  return weaveRequest(`/questions/banks/${curriculumSubjectId}`, { method: 'POST', body: payload })
 }
 
-export const listAuthorableQuestionBanks = () => leafRequest('/questions/banks/authorable')
+export const listAuthorableQuestionBanks = () => weaveRequest('/questions/banks/authorable')
 
 export function listAdminQuestionBanks(params = {}, options = {}) {
-  return leafRequest(`/questions/banks${queryString(params)}`, options)
+  return weaveRequest(`/questions/banks${queryString(params)}`, options)
 }
 
 export function updateQuestionBank(bankId, payload) {
-  return leafRequest(`/questions/banks/${bankId}`, { method: 'PATCH', body: payload })
+  return weaveRequest(`/questions/banks/${bankId}`, { method: 'PATCH', body: payload })
 }
 
-export const archiveQuestionBank = (bankId) => leafRequest(`/questions/banks/${bankId}/archive`, { method: 'POST' })
-export const reactivateQuestionBank = (bankId) => leafRequest(`/questions/banks/${bankId}/reactivate`, { method: 'POST' })
-export const deleteEmptyQuestionBank = (bankId) => leafRequest(`/questions/banks/${bankId}`, { method: 'DELETE' })
+export const archiveQuestionBank = (bankId) => weaveRequest(`/questions/banks/${bankId}/archive`, { method: 'POST' })
+export const reactivateQuestionBank = (bankId) => weaveRequest(`/questions/banks/${bankId}/reactivate`, { method: 'POST' })
+export const deleteEmptyQuestionBank = (bankId) => weaveRequest(`/questions/banks/${bankId}`, { method: 'DELETE' })
 
 export function createSingleChoiceQuestion(bankId, payload) {
-  return leafRequest(`/questions/banks/${bankId}/single-choice`, { method: 'POST', body: payload })
+  return weaveRequest(`/questions/banks/${bankId}/single-choice`, { method: 'POST', body: payload })
 }
 
 export function createMultipleChoiceQuestion(bankId, payload) {
-  return leafRequest(`/questions/banks/${bankId}/multiple-choice`, { method: 'POST', body: payload })
+  return weaveRequest(`/questions/banks/${bankId}/multiple-choice`, { method: 'POST', body: payload })
 }
 
 export function listQuestionsForBank(bankId, params = {}, options = {}) {
-  return leafRequest(`/questions/banks/${bankId}/items${queryString(params)}`, options)
+  return weaveRequest(`/questions/banks/${bankId}/items${queryString(params)}`, options)
 }
 
-export const getQuestion = (questionId) => leafRequest(`/questions/${questionId}`)
+export const getQuestion = (questionId) => weaveRequest(`/questions/${questionId}`)
 
 export function updateQuestion(questionId, payload) {
-  return leafRequest(`/questions/${questionId}`, { method: 'PATCH', body: payload })
+  return weaveRequest(`/questions/${questionId}`, { method: 'PATCH', body: payload })
 }
 
-export const archiveQuestion = (questionId) => leafRequest(`/questions/${questionId}/archive`, { method: 'POST' })
-export const reactivateQuestion = (questionId) => leafRequest(`/questions/${questionId}/reactivate`, { method: 'POST' })
-export const deleteUnusedQuestion = (questionId) => leafRequest(`/questions/${questionId}`, { method: 'DELETE' })
+export const archiveQuestion = (questionId) => weaveRequest(`/questions/${questionId}/archive`, { method: 'POST' })
+export const reactivateQuestion = (questionId) => weaveRequest(`/questions/${questionId}/reactivate`, { method: 'POST' })
+export const deleteUnusedQuestion = (questionId) => weaveRequest(`/questions/${questionId}`, { method: 'DELETE' })
 
 export function questionImageUrl(questionId) {
-  return `${import.meta.env.VITE_LEAF_API_BASE_URL || '/api/v1'}/questions/${questionId}/image`
+  return `${import.meta.env.VITE_WEAVE_API_BASE_URL || '/api/v1'}/questions/${questionId}/image`
 }

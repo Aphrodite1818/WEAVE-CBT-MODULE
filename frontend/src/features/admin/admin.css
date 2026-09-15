@@ -18,14 +18,15 @@
   height: 100vh;
 }
 
-.premium-sidebar .leaf-logo {
+.premium-sidebar .weave-logo {
   padding-left: 8px;
   margin-bottom: 32px;
 }
-.premium-sidebar .leaf-logo strong {
+.premium-sidebar .weave-logo strong {
   font-size: 20px;
   color: #0F172A;
 }
+.premium-school-badge .school-icon img { width: 30px; height: 30px; object-fit: contain; }
 
 .premium-school-badge {
   display: flex;

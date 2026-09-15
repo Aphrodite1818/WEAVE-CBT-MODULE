@@ -104,7 +104,7 @@ const teacherQuestion = {
   options: [],
 }
 
-describe('Leaf backend integration shell', () => {
+describe('Weave backend integration shell', () => {
   beforeEach(() => {
     window.localStorage.clear()
     vi.restoreAllMocks()
@@ -117,8 +117,8 @@ describe('Leaf backend integration shell', () => {
 
     renderApp()
 
-    expect(screen.getByRole('heading', { name: /starting leaf/i })).toBeInTheDocument()
-    expect(await screen.findByRole('heading', { name: /welcome back/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /starting weave/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /a smarter way to take exams/i })).toBeInTheDocument()
     expect(screen.queryByLabelText(/temporary role switcher/i)).not.toBeInTheDocument()
   })
 
@@ -127,7 +127,7 @@ describe('Leaf backend integration shell', () => {
       'GET /api/v1/installation/status': () => jsonResponse({ configured: false }),
       'POST /api/v1/installation/pair': ({ options }) => {
         expect(JSON.parse(options.body)).toMatchObject({
-          pairing_code: 'leaf2026',
+          pairing_code: 'WEAVE2026',
           server_name: 'Brightfield CBT Lab',
         })
         return jsonResponse(pairedStatus)
@@ -136,12 +136,16 @@ describe('Leaf backend integration shell', () => {
 
     renderApp()
 
-    expect(await screen.findByRole('heading', { name: /pair leaf/i })).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText(/pairing code/i), { target: { value: 'leaf2026' } })
+    expect(await screen.findByRole('heading', { name: /welcome to/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /get started/i }))
+    fireEvent.change(screen.getByLabelText(/pairing code/i), { target: { value: 'weave2026' } })
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
     fireEvent.change(screen.getByLabelText(/server name/i), { target: { value: 'Brightfield CBT Lab' } })
-    fireEvent.click(screen.getByRole('button', { name: /^pair leaf$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /complete setup/i }))
 
-    expect(await screen.findByRole('heading', { name: /welcome back/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /successfully paired/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /continue to home/i }))
+    expect(await screen.findByRole('heading', { name: /a smarter way to take exams/i })).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/installation/pair', expect.objectContaining({ method: 'POST' }))
   })
 
@@ -155,7 +159,8 @@ describe('Leaf backend integration shell', () => {
 
     renderApp()
 
-    await screen.findByRole('heading', { name: /welcome back/i })
+    await screen.findByRole('heading', { name: /a smarter way to take exams/i })
+    fireEvent.click(screen.getByRole('button', { name: /login as staff/i }))
     fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'teacher@brightfield.test' } })
     fireEvent.change(screen.getByPlaceholderText(/enter your password/i), { target: { value: 'secret' } })
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
@@ -165,50 +170,27 @@ describe('Leaf backend integration shell', () => {
     expect(within(sidebar).queryByRole('button', { name: /rosters/i })).not.toBeInTheDocument()
     expect(await screen.findByText(/backend biology bank/i)).toBeInTheDocument()
     expect(screen.queryByText(/biology ca1 bank/i)).not.toBeInTheDocument()
-    expect(window.localStorage.getItem('leaf.staffAccessToken')).toBe('staff-token')
+    expect(window.localStorage.getItem('weave.staffAccessToken')).toBe('staff-token')
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/questions/banks/authorable', expect.anything())
     expect(fetchMock).toHaveBeenCalledWith(`/api/v1/questions/banks/${bankId}/items`, expect.anything())
   })
 
-  it('loads the roster from the exam candidate API and lazy-loads drawer details', async () => {
+  it('routes an admin into the workspace after a completed backend bootstrap', async () => {
     const fetchMock = installFetch({
       'GET /api/v1/installation/status': () => jsonResponse(pairedStatus),
       'POST /api/v1/auth/login': () => jsonResponse(staffLogin('admin')),
-      [`GET /api/v1/exams/${examId}/candidates`]: ({ url }) => {
-        expect(url.searchParams.get('limit')).toBe('100')
-        expect(url.searchParams.get('offset')).toBe('0')
-        return jsonResponse(rosterResponse)
-      },
-      [`GET /api/v1/candidates/${candidateId}`]: () => jsonResponse(rosterCandidate),
-      [`GET /api/v1/candidates/${candidateId}/late-start-authorizations`]: () => jsonResponse([]),
-      [`GET /api/v1/candidates/${candidateId}/makeup-authorizations`]: () => jsonResponse([]),
-      [`POST /api/v1/candidates/${candidateId}/block`]: () => jsonResponse({ ...rosterCandidate, status: 'blocked', status_reason: 'Illness' }),
+      'GET /api/v1/sync/status': () => jsonResponse({ bootstrap_completed_at: '2026-08-22T09:00:00Z', last_error: null }),
     })
 
     renderApp()
 
     await loginAsAdmin()
-    fireEvent.click(screen.getByRole('button', { name: /rosters/i }))
-    fireEvent.change(screen.getByLabelText(/exam id/i), { target: { value: examId } })
-    fireEvent.click(screen.getByRole('button', { name: /^open$/i }))
-
-    expect(await screen.findByText(/taiwo adewale/i)).toBeInTheDocument()
-    expect(fetchMock).not.toHaveBeenCalledWith(`/api/v1/candidates/${candidateId}`, expect.anything())
-
-    fireEvent.click(screen.getByText(/taiwo adewale/i))
-    expect(await screen.findByRole('complementary', { name: /candidate details/i })).toBeInTheDocument()
-    expect(await screen.findByText(/late start history/i)).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: /block candidate/i }))
-    fireEvent.change(screen.getByLabelText(/reason/i), { target: { value: 'Illness' } })
-    fireEvent.click(within(screen.getByRole('dialog', { name: /block taiwo adewale/i })).getByRole('button', { name: /^block candidate$/i }))
-
-    expect(await screen.findByText(/candidate blocked/i)).toBeInTheDocument()
-    await waitFor(() => expect(screen.getAllByText(/blocked/i).length).toBeGreaterThan(0))
+    expect(screen.getByRole('navigation', { name: /admin navigation/i })).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/sync/status', expect.anything())
   })
 
   it('uses student auth and saves answers through the current-attempt API', async () => {
-    installFetch({
+    const fetchMock = installFetch({
       'GET /api/v1/installation/status': () => jsonResponse(pairedStatus),
       'POST /api/v1/student/auth/login': () => jsonResponse({
         student_id: '77777777-7777-7777-7777-777777777777',
@@ -238,10 +220,10 @@ describe('Leaf backend integration shell', () => {
 
     renderApp()
 
-    await screen.findByRole('heading', { name: /welcome back/i })
-    fireEvent.click(screen.getByRole('button', { name: /^student$/i }))
+    await screen.findByRole('heading', { name: /a smarter way to take exams/i })
+    fireEvent.click(screen.getByRole('button', { name: /login as student/i }))
     fireEvent.change(screen.getByLabelText(/admission number/i), { target: { value: 'BFA/24/001' } })
-    fireEvent.change(screen.getByPlaceholderText(/enter your cbt pin/i), { target: { value: '123456' } })
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: '123456' } })
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
 
     expect(await screen.findByRole('heading', { name: /mathematics ca1/i })).toBeInTheDocument()
@@ -249,12 +231,13 @@ describe('Leaf backend integration shell', () => {
     expect(await screen.findByText(/what is 2 \+ 2/i)).toBeInTheDocument()
     fireEvent.click(screen.getByLabelText(/four/i))
 
-    expect(await screen.findByText(/saved/i)).toBeInTheDocument()
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(`/api/v1/student/attempts/current/questions/${attemptQuestionId}/answer`, expect.objectContaining({ method: 'PUT' })))
   })
 })
 
 async function loginAsAdmin() {
-  await screen.findByRole('heading', { name: /welcome back/i })
+  await screen.findByRole('heading', { name: /a smarter way to take exams/i })
+  fireEvent.click(screen.getByRole('button', { name: /login as staff/i }))
   fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'admin@brightfield.test' } })
   fireEvent.change(screen.getByPlaceholderText(/enter your password/i), { target: { value: 'secret' } })
   fireEvent.click(screen.getByRole('button', { name: /sign in/i }))

@@ -11,7 +11,7 @@ import * as results from './results'
 import * as sync from './sync'
 import * as timetable from './timetable'
 
-export const leafApi = {
+export const weaveApi = {
   attempts,
   auth,
   branding,

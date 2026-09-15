@@ -33,7 +33,7 @@ export function OverviewPage({ state, dispatch, teacherData }) {
           </div>
         </Panel>
         <Panel title="Upcoming / Recent Exams">
-          <Notice tone="warning">The backend does not currently expose a teacher exam list. Leaf will not show fake authored exams here.</Notice>
+          <Notice tone="warning">The backend does not currently expose a teacher exam list. Weave will not show fake authored exams here.</Notice>
           <div className="quick-actions"><div><strong>Exam authoring contract needed</strong><p>Add a real exam collection route before this panel can show drafts and submitted exams.</p></div><Icon name="exams" size={28} /></div>
         </Panel>
       </div>

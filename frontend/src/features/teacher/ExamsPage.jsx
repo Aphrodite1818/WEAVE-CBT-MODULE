@@ -6,7 +6,7 @@ export function ExamsPage() {
     <>
       <div className="teacher-page-head"><PageTitle title="Exams" subtitle="Teacher exam lists are waiting on a backend read contract." /></div>
       <Panel title="Backend contract needed">
-        <Notice tone="warning">Leaf is no longer showing fake teacher exam drafts. The backend currently exposes individual exam reads and lifecycle mutations, but no teacher-facing collection route for authored exams.</Notice>
+        <Notice tone="warning">Weave is no longer showing fake teacher exam drafts. The backend currently exposes individual exam reads and lifecycle mutations, but no teacher-facing collection route for authored exams.</Notice>
         <div className="quick-actions"><div><strong>Required route</strong><p>Add a real teacher exam list/search endpoint before this page can show drafts, returned exams, submitted exams, or upcoming schedules.</p></div><Icon name="exams" size={30} /></div>
       </Panel>
     </>

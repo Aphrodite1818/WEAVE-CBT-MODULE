@@ -1,0 +1,28 @@
+.initial-sync-page { min-height: 100vh; display: flex; flex-direction: column; padding: clamp(20px, 3vw, 42px); background: radial-gradient(circle at center 30%, rgb(var(--color-primary-soft)), transparent 43%), #fbfdff; color: rgb(var(--color-text)); }
+.initial-sync-page header, .initial-sync-page footer { width: min(1100px, 100%); margin: 0 auto; }
+.initial-sync-page header { display: flex; align-items: center; gap: 22px; }
+.initial-sync-school-logo { max-width: 130px; max-height: 46px; object-fit: contain; }
+.initial-sync-page footer { margin-top: auto; padding-top: 30px; font-size: 11px; letter-spacing: .2em; color: rgb(var(--color-text-muted)); }
+.initial-sync-card { width: min(680px, 100%); margin: auto; padding: clamp(30px, 5vw, 62px); text-align: center; border: 1px solid rgb(var(--color-border)); border-radius: 28px; background: white; box-shadow: 0 24px 75px rgb(var(--color-primary) / .09); }
+.initial-sync-icon { width: 78px; height: 78px; display: grid; place-items: center; margin: 0 auto 23px; border-radius: 50%; background: rgb(var(--color-primary-soft)); color: rgb(var(--color-primary)); }
+.initial-sync-icon .icon { animation: setup-spin 3s linear infinite; }
+.initial-sync-icon--ready { background: #ddf8ed; color: #059669; }
+.initial-sync-icon--ready .icon { animation: none; }
+.initial-sync-eyebrow { display: block; margin-bottom: 12px; letter-spacing: .25em; color: rgb(var(--color-primary)); font-size: 11px; font-weight: 800; }
+.initial-sync-card h1 { font-size: clamp(30px, 4vw, 42px); letter-spacing: -.04em; }
+.initial-sync-card > p { max-width: 520px; margin: 0 auto 24px; }
+.initial-sync-stages { max-width: 420px; margin: 0 auto; display: grid; gap: 8px; text-align: left; }
+.initial-sync-stages > div { display: flex; align-items: center; gap: 13px; padding: 9px 12px; border-radius: 10px; color: rgb(var(--color-text-soft)); font-size: 14px; }
+.initial-sync-stages > div:nth-child(2) { background: rgb(var(--color-primary-soft)); color: rgb(var(--color-primary)); }
+.initial-sync-stage-dot { width: 10px; height: 10px; flex: 0 0 auto; border-radius: 50%; background: rgb(var(--color-primary)); animation: setup-pulse 1.3s ease-in-out infinite; }
+.initial-sync-stages > div:nth-child(2) .initial-sync-stage-dot { animation-delay: .2s; }
+.initial-sync-stages > div:nth-child(3) .initial-sync-stage-dot { animation-delay: .4s; }
+.initial-sync-stages > div:nth-child(4) .initial-sync-stage-dot { animation-delay: .6s; }
+.initial-sync-stages > div:nth-child(5) .initial-sync-stage-dot { animation-delay: .8s; }
+.initial-sync-rail { height: 9px; overflow: hidden; margin: 25px auto 15px; max-width: 420px; border-radius: 9px; background: rgb(var(--color-primary-soft)); }
+.initial-sync-rail span { display: block; width: 35%; height: 100%; border-radius: inherit; background: rgb(var(--color-primary)); animation: sync-rail 2.4s ease-in-out infinite alternate; }
+.initial-sync-card > small { color: rgb(var(--color-text-muted)); }
+.initial-sync-error { max-width: 420px; margin: 22px auto 0; }
+.initial-sync-error button { min-height: 46px; padding: 0 18px; border: 0; border-radius: 10px; background: rgb(var(--color-primary)); color: rgb(var(--color-on-primary)); font-weight: 750; cursor: pointer; }
+@keyframes sync-rail { from { transform: translateX(-30%); } to { transform: translateX(240%); } }
+@media (prefers-reduced-motion: reduce) { .initial-sync-page * { animation-duration: .01ms !important; } }

@@ -1,9 +1,9 @@
-import { leafRequest } from './client'
+import { weaveRequest } from './client'
 
 export function startBatch(examIds) {
-  return leafRequest('/exams/start-batch', { method: 'POST', body: { exam_ids: examIds } })
+  return weaveRequest('/exams/start-batch', { method: 'POST', body: { exam_ids: examIds } })
 }
 
 export function getTimetableImpact(examId, options = {}) {
-  return leafRequest(`/exams/${examId}/timetable-impact`, options)
+  return weaveRequest(`/exams/${examId}/timetable-impact`, options)
 }

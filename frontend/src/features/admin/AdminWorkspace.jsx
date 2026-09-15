@@ -1,4 +1,6 @@
 import { Icon } from '../../shared/icons/Icon'
+import { WeaveLogo } from '../../shared/ui'
+import { getLocalBrandLogoSrc } from '../../api/branding'
 import { AdminDashboard } from './pages/AdminDashboard'
 import { ExamOperations } from './pages/ExamOperations'
 import { InvigilatorPanel } from './pages/InvigilatorPanel'
@@ -32,15 +34,13 @@ export function AdminWorkspace({ state, dispatch }) {
   return (
     <div className="premium-admin-shell">
       <aside className="premium-sidebar">
-        <div className="leaf-logo">
-          <strong><span style={{color: '#2563EB'}}>W</span> Weave</strong> CBT
-        </div>
+        <WeaveLogo />
 
         <div className="premium-school-badge">
-          <div className="school-icon"><Icon name="school" size={18} /></div>
+            <div className="school-icon">{getLocalBrandLogoSrc(state.branding) ? <img src={getLocalBrandLogoSrc(state.branding)} alt="School logo" /> : <Icon name="school" size={18} />}</div>
           <div className="school-info">
-            <strong>Greenfield College</strong>
-            <small>Main computer lab</small>
+            <strong>{state.branding?.school_name || state.installation?.status?.tenant_name || 'Weave CBT'}</strong>
+            <small>{state.installation?.status?.server_name || 'Local CBT server'}</small>
           </div>
         </div>
 

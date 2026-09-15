@@ -56,7 +56,7 @@ export function CreateQuestionPage({ state, dispatch, teacherData, gateway }) {
       await teacherData.refresh()
       dispatch({ type: 'staff', patch: { section: 'bank-detail', selectedBankId: bankId } })
     } catch (error) {
-      setError(error.userMessage || 'Leaf could not save this question.')
+      setError(error.userMessage || 'Weave could not save this question.')
     } finally {
       setSaving(false)
     }

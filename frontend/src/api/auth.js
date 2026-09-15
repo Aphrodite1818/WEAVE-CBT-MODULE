@@ -1,7 +1,7 @@
-import { clearStaffAccessToken, leafRequest, setStaffAccessToken } from './client'
+import { clearStaffAccessToken, weaveRequest, setStaffAccessToken } from './client'
 
 export async function loginStaff({ email, password }) {
-  const session = await leafRequest('/auth/login', {
+  const session = await weaveRequest('/auth/login', {
     method: 'POST',
     staffAuth: false,
     body: { email, password },
@@ -11,7 +11,7 @@ export async function loginStaff({ email, password }) {
 }
 
 export async function loginStudent({ admissionNumber, pin }) {
-  const session = await leafRequest('/student/auth/login', {
+  const session = await weaveRequest('/student/auth/login', {
     method: 'POST',
     staffAuth: false,
     body: { admission_number: admissionNumber, pin },
@@ -20,7 +20,7 @@ export async function loginStudent({ admissionNumber, pin }) {
 }
 
 export async function logoutStudent() {
-  return leafRequest('/student/auth/logout', { method: 'POST', staffAuth: false })
+  return weaveRequest('/student/auth/logout', { method: 'POST', staffAuth: false })
 }
 
 export function signOutStaff() {

@@ -2,7 +2,7 @@ import { Icon } from '../../shared/icons/Icon'
 import { StatusBadge } from '../../shared/ui'
 
 export function BankIcon({ name }) {
-  const iconName = name === 'flask' ? 'flask' : name === 'math' ? 'math' : name === 'leaf' ? 'leafIcon' : 'book'
+  const iconName = name === 'flask' ? 'flask' : name === 'math' ? 'math' : name === 'weave' ? 'weaveIcon' : 'book'
   return <span className={`bank-icon bank-icon--${name}`}><Icon name={iconName} size={34} /></span>
 }
 

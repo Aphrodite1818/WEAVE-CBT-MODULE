@@ -21,7 +21,7 @@ describe('tenant branding adapter', () => {
     })
 
     expect(style['--color-primary']).toBe('4 120 87')
-    expect(style['--leaf-blue']).toBe('rgb(var(--color-primary))')
+    expect(style['--weave-blue']).toBe('rgb(var(--color-primary))')
     expect(style['--tenant-accent']).toBe('rgb(var(--color-primary))')
   })
 

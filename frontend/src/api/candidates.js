@@ -1,37 +1,37 @@
-import { leafRequest, queryString } from './client'
+import { weaveRequest, queryString } from './client'
 
 export function listExamRoster(examId, params = {}, options = {}) {
-  return leafRequest(`/exams/${examId}/candidates${queryString(params)}`, options)
+  return weaveRequest(`/exams/${examId}/candidates${queryString(params)}`, options)
 }
 
 export function getCandidate(candidateId, options = {}) {
-  return leafRequest(`/candidates/${candidateId}`, options)
+  return weaveRequest(`/candidates/${candidateId}`, options)
 }
 
 export function blockCandidate(candidateId, reason) {
-  return leafRequest(`/candidates/${candidateId}/block`, {
+  return weaveRequest(`/candidates/${candidateId}/block`, {
     method: 'POST',
     body: { reason },
   })
 }
 
 export function unblockCandidate(candidateId) {
-  return leafRequest(`/candidates/${candidateId}/unblock`, { method: 'POST' })
+  return weaveRequest(`/candidates/${candidateId}/unblock`, { method: 'POST' })
 }
 
 export function grantLateStart(candidateId, payload) {
-  return leafRequest(`/candidates/${candidateId}/late-start-authorizations`, {
+  return weaveRequest(`/candidates/${candidateId}/late-start-authorizations`, {
     method: 'POST',
     body: payload,
   })
 }
 
 export function listLateStartAuthorizations(candidateId, options = {}) {
-  return leafRequest(`/candidates/${candidateId}/late-start-authorizations`, options)
+  return weaveRequest(`/candidates/${candidateId}/late-start-authorizations`, options)
 }
 
 export function revokeLateStart(authorizationId, reason) {
-  return leafRequest(`/late-start-authorizations/${authorizationId}/revoke`, {
+  return weaveRequest(`/late-start-authorizations/${authorizationId}/revoke`, {
     method: 'POST',
     body: { reason },
   })

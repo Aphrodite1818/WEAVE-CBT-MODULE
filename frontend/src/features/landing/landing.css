@@ -1,0 +1,28 @@
+.landing-page { min-height: 100vh; display: flex; flex-direction: column; overflow: hidden; background: radial-gradient(circle at 90% 35%, rgb(var(--color-primary-soft)), transparent 36%), #fbfdff; color: rgb(var(--color-text)); }
+.landing-header, .landing-footer { width: min(1400px, calc(100% - 80px)); margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
+.landing-header { padding-top: 28px; position: relative; z-index: 2; }
+.landing-header > div { display: grid; gap: 2px; }
+.landing-school-logo { max-width: 135px; max-height: 46px; object-fit: contain; }
+.landing-header small { color: rgb(var(--color-text-muted)); }
+.landing-header nav { display: flex; gap: 16px; }
+.landing-header button { display: inline-flex; align-items: center; gap: 12px; min-height: 54px; padding: 0 23px; border: 1px solid rgb(var(--color-primary)); border-radius: 13px; background: white; color: rgb(var(--color-primary)); font-weight: 750; cursor: pointer; box-shadow: 0 6px 18px rgb(var(--color-primary) / .1); transition: transform .2s, box-shadow .2s; }
+.landing-header button:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgb(var(--color-primary) / .18); }
+.landing-header .landing-header__primary { background: rgb(var(--color-primary)); color: rgb(var(--color-on-primary)); }
+.landing-hero { width: min(1400px, 100%); flex: 1; margin: 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 26px 0 0; }
+.landing-hero__copy { text-align: center; position: relative; z-index: 1; animation: landing-enter .7s ease-out both; }
+.landing-hero__copy > span { display: block; color: rgb(var(--color-primary)); letter-spacing: .3em; font-size: 14px; font-weight: 700; margin-bottom: 13px; }
+.landing-hero__copy .weave-logo { justify-content: center; }
+.landing-hero__copy h1 { margin: 10px 0 2px; font-size: clamp(26px, 3vw, 35px); font-weight: 550; letter-spacing: -.03em; }
+.landing-hero__copy p { font-size: 18px; color: rgb(var(--color-text-soft)); }
+.landing-school { display: block; color: rgb(var(--color-primary)); font-weight: 700; }
+.landing-hero__image { width: min(100%, 1030px); height: min(53vh, 530px); object-fit: cover; object-position: center 42%; border-radius: 28px; box-shadow: 0 23px 75px rgb(var(--color-primary) / .12); animation: landing-breathe 7s ease-in-out infinite; }
+.landing-benefits { width: min(1000px, calc(100% - 80px)); margin: -20px auto 25px; padding: 12px 16px; position: relative; z-index: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; border: 1px solid rgb(var(--color-border)); border-radius: 22px; background: rgb(var(--color-surface) / .94); box-shadow: 0 15px 35px rgb(var(--color-primary) / .06); }
+.landing-benefits > div { display: grid; grid-template-columns: 56px 1fr; grid-template-rows: 1fr 1fr; gap: 0 11px; align-items: center; }
+.landing-benefits span { grid-row: span 2; width: 56px; height: 56px; display: grid; place-items: center; border-radius: 50%; background: rgb(var(--color-primary-soft)); color: rgb(var(--color-primary)); }
+.landing-benefits strong { align-self: end; font-size: 13px; }
+.landing-benefits small { align-self: start; font-size: 11px; color: rgb(var(--color-text-muted)); }
+.landing-footer { margin-top: auto; padding: 20px 0 26px; color: rgb(var(--color-text-muted)); font-size: 12px; }
+@keyframes landing-enter { from { opacity: 0; transform: translateY(13px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes landing-breathe { 50% { transform: translateY(-5px); } }
+@media (max-width: 760px) { .landing-header, .landing-footer { width: calc(100% - 32px); } .landing-header { align-items: flex-start; gap: 12px; } .landing-header nav { gap: 8px; } .landing-header button { min-height: 42px; padding: 0 10px; font-size: 11px; gap: 5px; } .landing-header button .icon { width: 17px; } .landing-hero { padding: 60px 16px 10px; } .landing-hero__image { height: 40vh; } .landing-benefits { width: calc(100% - 32px); margin: 0 auto 24px; grid-template-columns: repeat(2, 1fr); } .landing-footer span:last-child { display: none; } }
+@media (prefers-reduced-motion: reduce) { .landing-page * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

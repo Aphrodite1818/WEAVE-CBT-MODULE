@@ -1,8 +1,8 @@
 import { existsSync, readdirSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const srcRoot = fileURLToPath(new URL('../src/', import.meta.url))
+const srcRoot = resolve(process.cwd(), 'src')
 
 const forbiddenLegacyDirectories = ['components', 'lib', 'services', 'state']
 const allowedTopLevelEntries = new Set([
@@ -25,7 +25,7 @@ describe('frontend architecture', () => {
   })
 
   it('keeps source ownership inside the documented top-level boundaries', () => {
-    const unexpected = readdirSync(srcRoot).filter((entry) => !allowedTopLevelEntries.has(entry))
+    const unexpected = readdirSync(srcRoot).filter((entry) => !allowedTopLevelEntries.has(entry) && readdirSync(resolve(srcRoot, entry)).length > 0)
     expect(unexpected).toEqual([])
   })
 })

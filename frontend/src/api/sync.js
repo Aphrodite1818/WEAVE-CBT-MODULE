@@ -1,7 +1,7 @@
-import { leafRequest, queryString } from './client'
+import { weaveRequest, queryString } from './client'
 
-export const getSyncStatus = (options = {}) => leafRequest('/sync/status', options)
+export const getSyncStatus = (options = {}) => weaveRequest('/sync/status', options)
 
 export function reconcileSync({ forceFull = false } = {}) {
-  return leafRequest(`/sync/reconcile${queryString({ force_full: forceFull })}`, { method: 'POST' })
+  return weaveRequest(`/sync/reconcile${forceFull ? queryString({ force_full: true }) : ''}`, { method: 'POST' })
 }

@@ -1,204 +1,23 @@
-.premium-auth-shell {
-  min-height: 100vh;
-  background-color: #F8FAFC; /* Soft light blue-grey background */
-  font-family: 'Inter', system-ui, sans-serif;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 40px;
-}
-
-.premium-auth-container {
-  display: flex;
-  max-width: 1200px;
-  width: 100%;
-  background: transparent;
-  gap: 40px;
-  position: relative;
-}
-
-/* Left Side */
-.premium-auth-left {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding-right: 40px;
-}
-
-.premium-auth-brand {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 64px;
-}
-
-.premium-auth-pill {
-  background: #EFF6FF;
-  color: #2563EB;
-  padding: 8px 16px;
-  border-radius: 999px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.premium-auth-hero h1 {
-  font-size: 48px;
-  color: #0F172A;
-  font-weight: 800;
-  line-height: 1.1;
-  margin-bottom: 16px;
-  letter-spacing: -0.02em;
-}
-
-.premium-auth-hero p {
-  font-size: 18px;
-  color: #64748B;
-  margin-bottom: 40px;
-}
-
-.premium-auth-illustration {
-  position: relative;
-  width: 100%;
-  max-width: 500px;
-}
-.premium-auth-illustration img {
-  width: 100%;
-  height: auto;
-  border-radius: 24px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-}
-
-/* Right Side */
-.premium-auth-right {
-  flex: 0.8;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  position: relative;
-}
-
-.premium-signin-card {
-  background: #FFFFFF;
-  border-radius: 24px;
-  padding: 48px;
-  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.08);
-  margin-bottom: 32px;
-}
-
-.premium-signin-card h2 {
-  font-size: 20px;
-  color: #0F172A;
-  margin-bottom: 32px;
-  font-weight: 700;
-}
-
-.premium-form-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  margin-top: 32px;
-}
-
-.premium-form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.premium-form-group label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #334155;
-}
-
-/* Override existing form-field styles to look modern in this context */
-.premium-form-group .form-field {
-  margin: 0;
-}
-
-.premium-form-group .form-field > span:first-child {
-  display: none; /* Hide the default label from FormField since we have our own */
-}
-
-.premium-form-group .form-field__control {
-  border: 1px solid #E2E8F0;
-  border-radius: 12px;
-  padding: 0 16px;
-  height: 52px;
-  background: #F8FAFC;
-}
-
-.premium-form-group .form-field__control:focus-within {
-  border-color: #2563EB;
-  background: #FFFFFF;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-}
-
-.premium-btn-primary.full-width {
-  width: 100%;
-  height: 52px;
-  border-radius: 12px;
-  font-size: 16px;
-  margin-top: 8px;
-}
-
-.premium-forgot-link {
-  text-align: center;
-  margin-top: 24px;
-}
-
-.premium-forgot-link button {
-  background: transparent;
-  border: none;
-  color: #2563EB;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.premium-auth-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 12px;
-  color: #94A3B8;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 0 24px;
-}
-
-/* Segmented Control Adjustment for Auth Page */
-.premium-signin-card .segmented {
-  background: #F1F5F9;
-  border-radius: 12px;
-  padding: 6px;
-}
-
-.premium-signin-card .segmented button {
-  border-radius: 8px;
-  font-weight: 600;
-  color: #64748B;
-}
-
-.premium-signin-card .segmented button.active {
-  background: #FFFFFF;
-  color: #0F172A;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-}
-
-@media (max-width: 1024px) {
-  .premium-auth-container {
-    flex-direction: column;
-    align-items: center;
-    gap: 64px;
-  }
-  .premium-auth-left {
-    padding-right: 0;
-    text-align: center;
-  }
-  .premium-auth-brand {
-    justify-content: center;
-    gap: 24px;
-  }
-}
+.weave-login-page { min-height: 100vh; display: flex; flex-direction: column; padding: clamp(18px, 3vw, 42px); background: radial-gradient(circle at 13% 25%, rgb(var(--color-primary-soft)), transparent 36%), #fbfdff; color: rgb(var(--color-text)); }
+.weave-login-header { width: min(1180px, 100%); margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
+.weave-login-header button { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; color: rgb(var(--color-primary)); font-weight: 700; cursor: pointer; }
+.weave-login-header > div { display: flex; align-items: center; gap: 20px; }
+.weave-login-school-logo { max-width: 130px; max-height: 44px; object-fit: contain; }
+.weave-login-layout { width: min(1180px, 100%); margin: auto; display: grid; grid-template-columns: 1.1fr .9fr; gap: clamp(30px, 5vw, 75px); align-items: center; }
+.weave-login-intro { min-width: 0; animation: setup-enter .5s ease-out both; }
+.weave-login-intro > span { color: rgb(var(--color-primary)); letter-spacing: .25em; font-size: 12px; font-weight: 800; }
+.weave-login-intro h1 { margin: 16px 0 10px; font-size: clamp(44px, 5vw, 66px); letter-spacing: -.04em; }
+.weave-login-intro p { font-size: 18px; }
+.weave-login-intro img { width: min(100%, 550px); max-height: 44vh; object-fit: cover; object-position: center 40%; border-radius: 28px; box-shadow: 0 20px 50px rgb(var(--color-primary) / .1); }
+.weave-login-card { padding: clamp(30px, 4vw, 50px); background: white; border: 1px solid rgb(var(--color-border)); border-radius: 25px; box-shadow: 0 24px 65px rgb(var(--color-primary) / .1); }
+.weave-login-card__icon { width: 62px; height: 62px; display: grid; place-items: center; margin-bottom: 20px; border-radius: 50%; background: rgb(var(--color-primary-soft)); color: rgb(var(--color-primary)); }
+.weave-login-card h2 { font-size: 28px; margin-bottom: 6px; }
+.weave-login-card p { margin-bottom: 27px; }
+.weave-login-card form { display: grid; gap: 12px; }
+.weave-login-card label { font-size: 14px; font-weight: 750; }
+.weave-login-card input { width: 100%; min-height: 54px; padding: 0 16px; border: 1px solid rgb(var(--color-border)); border-radius: 12px; background: rgb(var(--color-surface)); }
+.weave-login-card input:focus { border-color: rgb(var(--color-focus-ring)); outline: 3px solid rgb(var(--color-focus-ring) / .12); }
+.weave-login-card .setup-primary { margin-top: 10px; }
+.weave-login-footer { width: min(1180px, 100%); margin: 25px auto 0; color: rgb(var(--color-text-muted)); font-size: 12px; }
+@media (max-width: 760px) { .weave-login-layout { grid-template-columns: 1fr; padding: 45px 0; } .weave-login-intro img { display: none; } .weave-login-intro h1 { font-size: 40px; } }
+@media (prefers-reduced-motion: reduce) { .weave-login-page * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

@@ -1,5 +1,5 @@
 const DEFAULT_API_BASE_URL = '/api/v1'
-const STAFF_TOKEN_KEY = 'leaf.staffAccessToken'
+const STAFF_TOKEN_KEY = 'weave.staffAccessToken'
 
 const statusLabels = {
   400: 'Invalid request',
@@ -10,10 +10,10 @@ const statusLabels = {
   429: 'Rate limit',
 }
 
-export class LeafApiError extends Error {
+export class WeaveApiError extends Error {
   constructor({ status, statusText, detail, payload }) {
     super(detail || statusLabels[status] || statusText || 'Request failed')
-    this.name = 'LeafApiError'
+    this.name = 'WeaveApiError'
     this.status = status
     this.statusText = statusText
     this.detail = detail
@@ -22,13 +22,13 @@ export class LeafApiError extends Error {
 
   get userMessage() {
     if (this.detail && !looksLikeInternalError(this.detail)) return this.detail
-    if (this.status >= 500) return 'Leaf could not complete that request. Try again, then contact support if it continues.'
+    if (this.status >= 500) return 'Weave could not complete that request. Try again, then contact support if it continues.'
     return statusLabels[this.status] || this.message
   }
 }
 
 export function getApiBaseUrl() {
-  return (import.meta.env.VITE_LEAF_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/$/, '')
+  return (import.meta.env.VITE_WEAVE_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/$/, '')
 }
 
 export function getStaffAccessToken() {
@@ -43,7 +43,7 @@ export function clearStaffAccessToken() {
   window.localStorage.removeItem(STAFF_TOKEN_KEY)
 }
 
-export async function leafRequest(path, options = {}) {
+export async function weaveRequest(path, options = {}) {
   const {
     body,
     headers = {},
@@ -70,7 +70,7 @@ export async function leafRequest(path, options = {}) {
 
   const payload = await parsePayload(response)
   if (!response.ok) {
-    throw new LeafApiError({
+    throw new WeaveApiError({
       status: response.status,
       statusText: response.statusText,
       detail: extractDetail(payload),

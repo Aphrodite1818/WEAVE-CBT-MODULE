@@ -1,0 +1,201 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import App from '../src/App'
+
+const paired = { configured: true, tenant_name: 'Brightfield Academy', server_name: 'Main CBT Lab' }
+const unpaired = { configured: false }
+const branding = { school_name: 'Brightfield Academy', is_enabled: true, logo_revision: 'logo-revision', logo_path: '/api/v1/branding/logo', light_tokens: { '--color-primary': '4 120 87' } }
+const admin = { access_token: 'admin-token', actor: { role: 'admin', display_name: 'Amina Yusuf' } }
+const teacher = { access_token: 'teacher-token', actor: { role: 'teacher', display_name: 'Mrs. Khan' } }
+const incomplete = { bootstrap_completed_at: null, last_error: null }
+const complete = { bootstrap_completed_at: '2026-09-15T08:00:00Z', last_error: null }
+
+const reply = (body, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }))
+
+function routes(overrides = {}) {
+  const handlers = {
+    'GET /api/v1/installation/status': () => reply(paired),
+    'GET /api/v1/branding': () => reply(branding),
+    ...overrides,
+  }
+  const fetchMock = vi.fn((url, options = {}) => {
+    const path = new URL(url, 'http://localhost').pathname
+    return (handlers[`${options.method || 'GET'} ${path}`] || (() => reply({ detail: 'Unexpected request' }, 500)))(options)
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+
+async function openSetup() {
+  await screen.findByRole('heading', { name: /welcome to/i })
+  fireEvent.click(screen.getByRole('button', { name: /get started/i }))
+}
+
+async function submitCode() {
+  await openSetup()
+  fireEvent.change(screen.getByLabelText(/pairing code/i), { target: { value: 'CBT12345' } })
+  fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+}
+
+async function openStaff() {
+  await screen.findByRole('heading', { name: /a smarter way to take exams/i })
+  fireEvent.click(screen.getByRole('button', { name: /login as staff/i }))
+  fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'admin@school.test' } })
+  fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'secret' } })
+  fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
+}
+
+describe('Weave setup and first sync orchestration', () => {
+  beforeEach(() => { window.localStorage.clear(); vi.restoreAllMocks() })
+
+  it('uses installation status to show welcome only on an unpaired server', async () => {
+    routes({ 'GET /api/v1/installation/status': () => reply(unpaired) })
+    render(<App />)
+    expect(await screen.findByRole('heading', { name: /welcome to/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /login as staff/i })).not.toBeInTheDocument()
+  })
+
+  it('skips setup on a configured server even after a new render', async () => {
+    routes()
+    render(<App />)
+    expect(await screen.findByRole('heading', { name: /a smarter way to take exams/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /get started/i })).not.toBeInTheDocument()
+  })
+
+  it('collects a code before any pairing request and then collects the server name', async () => {
+    const fetchMock = routes({ 'GET /api/v1/installation/status': () => reply(unpaired) })
+    render(<App />)
+    await submitCode()
+    expect(screen.getByRole('heading', { name: /set a server name/i })).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/v1/installation/pair')).toBe(false)
+  })
+
+  it('requires the backend code length despite the OTP visual treatment', async () => {
+    const fetchMock = routes({ 'GET /api/v1/installation/status': () => reply(unpaired) })
+    render(<App />)
+    await openSetup()
+    fireEvent.change(screen.getByLabelText(/pairing code/i), { target: { value: '123456' } })
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+    expect(screen.getByText(/8–20 characters/i)).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/v1/installation/pair')).toBe(false)
+  })
+
+  it('shows real in-flight pairing activity and enters success only after the API resolves', async () => {
+    let finish
+    const fetchMock = routes({
+      'GET /api/v1/installation/status': () => reply(unpaired),
+      'POST /api/v1/installation/pair': () => new Promise((resolve) => { finish = resolve }),
+    })
+    render(<App />)
+    await submitCode()
+    fireEvent.change(screen.getByLabelText(/server name/i), { target: { value: 'Main CBT Lab' } })
+    fireEvent.click(screen.getByRole('button', { name: /complete setup/i }))
+    expect(screen.getByRole('heading', { name: /pairing with weave/i })).toBeInTheDocument()
+    expect(screen.getByText(/processing the pairing request/i)).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /successfully paired/i })).not.toBeInTheDocument()
+    expect(JSON.parse(fetchMock.mock.calls.find(([url]) => url === '/api/v1/installation/pair')[1].body)).toEqual({ pairing_code: 'CBT12345', server_name: 'Main CBT Lab' })
+    finish(new Response(JSON.stringify(paired), { status: 201 }))
+    expect(await screen.findByRole('heading', { name: /successfully paired/i })).toBeInTheDocument()
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/v1/branding').length).toBeGreaterThan(1))
+  })
+
+  it('keeps values and offers retry after pairing fails', async () => {
+    routes({ 'GET /api/v1/installation/status': () => reply(unpaired), 'POST /api/v1/installation/pair': () => reply({ detail: 'Invalid pairing code' }, 400) })
+    render(<App />)
+    await submitCode()
+    fireEvent.change(screen.getByLabelText(/server name/i), { target: { value: 'Main CBT Lab' } })
+    fireEvent.click(screen.getByRole('button', { name: /complete setup/i }))
+    expect(await screen.findByRole('button', { name: /retry pairing/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /edit server name/i }))
+    expect(screen.getByLabelText(/server name/i)).toHaveValue('Main CBT Lab')
+  })
+
+  it('rechecks backend status on an already-paired conflict', async () => {
+    let statusReads = 0
+    const fetchMock = routes({
+      'GET /api/v1/installation/status': () => reply(++statusReads === 1 ? unpaired : paired),
+      'POST /api/v1/installation/pair': () => reply({ detail: 'Already paired' }, 409),
+    })
+    render(<App />)
+    await submitCode()
+    fireEvent.change(screen.getByLabelText(/server name/i), { target: { value: 'Main CBT Lab' } })
+    fireEvent.click(screen.getByRole('button', { name: /complete setup/i }))
+    expect(await screen.findByRole('heading', { name: /successfully paired/i })).toBeInTheDocument()
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/v1/installation/status')).toHaveLength(2)
+  })
+
+  it('continues with default Weave blue when branding fails', async () => {
+    routes({ 'GET /api/v1/branding': () => reply({ detail: 'Unavailable' }, 503) })
+    const { container } = render(<App />)
+    expect(await screen.findByRole('heading', { name: /a smarter way to take exams/i })).toBeInTheDocument()
+    expect(container.firstChild.style.getPropertyValue('--color-primary')).toBe('29 78 216')
+  })
+
+  it('applies local school branding and uses the local logo endpoint', async () => {
+    routes()
+    const { container } = render(<App />)
+    await screen.findByRole('heading', { name: /a smarter way to take exams/i })
+    await waitFor(() => expect(container.firstChild.style.getPropertyValue('--color-primary')).toBe('4 120 87'))
+    expect(screen.getByAltText(/brightfield academy logo/i).getAttribute('src')).toBe('/api/v1/branding/logo?v=logo-revision')
+  })
+
+  it('routes landing actions to separate staff and student pages with no role selector', async () => {
+    routes()
+    render(<App />)
+    await screen.findByRole('heading', { name: /a smarter way to take exams/i })
+    fireEvent.click(screen.getByRole('button', { name: /login as student/i }))
+    expect(screen.getByRole('heading', { name: /student login/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/admission number/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^password$/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /back to home/i }))
+    fireEvent.click(screen.getByRole('button', { name: /login as staff/i }))
+    expect(screen.getByRole('heading', { name: /staff login/i })).toBeInTheDocument()
+    expect(screen.queryByText(/admin or teacher/i)).not.toBeInTheDocument()
+  })
+
+  it('checks backend sync status only after admin sign in', async () => {
+    const fetchMock = routes({ 'POST /api/v1/auth/login': () => reply(admin), 'GET /api/v1/sync/status': () => reply(incomplete) })
+    render(<App />)
+    await openStaff()
+    expect(await screen.findByRole('heading', { name: /preparing your cbt server/i })).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/v1/sync/status')).toBe(true)
+    expect(screen.queryByRole('navigation', { name: /admin navigation/i })).not.toBeInTheDocument()
+  })
+
+  it('lets teachers enter their workspace without an admin sync request', async () => {
+    const fetchMock = routes({ 'POST /api/v1/auth/login': () => reply(teacher), 'GET /api/v1/questions/banks/authorable': () => reply([]) })
+    render(<App />)
+    await openStaff()
+    expect(await screen.findByRole('button', { name: /question banks/i })).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/v1/sync/status')).toBe(false)
+  })
+
+  it('shows recoverable backend sync errors and retries without forcing full bootstrap', async () => {
+    const fetchMock = routes({
+      'POST /api/v1/auth/login': () => reply(admin),
+      'GET /api/v1/sync/status': () => reply({ ...incomplete, last_error: 'School connection unavailable' }),
+      'POST /api/v1/sync/reconcile': () => reply(incomplete),
+    })
+    render(<App />)
+    await openStaff()
+    expect(await screen.findByText(/school connection unavailable/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /retry synchronization/i }))
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === '/api/v1/sync/reconcile')).toBe(true))
+    expect(fetchMock.mock.calls.some(([url]) => url.includes('force_full=true'))).toBe(false)
+    expect(screen.queryByText(/\d+%/)).not.toBeInTheDocument()
+  })
+
+  it('stays on initial sync until a later poll reports completed bootstrap', async () => {
+    let reads = 0
+    const fetchMock = routes({
+      'POST /api/v1/auth/login': () => reply(admin),
+      'GET /api/v1/sync/status': () => reply(++reads === 1 ? incomplete : complete),
+    })
+    render(<App />)
+    await openStaff()
+    expect(await screen.findByRole('heading', { name: /preparing your cbt server/i })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: /admin navigation/i })).not.toBeInTheDocument()
+    expect(await screen.findByRole('navigation', { name: /admin navigation/i }, { timeout: 4000 })).toBeInTheDocument()
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/v1/sync/status').length).toBeGreaterThan(1)
+  })
+})

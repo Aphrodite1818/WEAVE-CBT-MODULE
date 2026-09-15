@@ -1,210 +1,34 @@
-import { useEffect, useMemo, useReducer, useState } from 'react'
-import { FormField, Notice, TenantIdentity, WeaveLogo } from '../shared/ui'
 import { AdminWorkspace } from '../features/admin/AdminWorkspace'
-import { AuthPage } from '../features/auth/AuthPage'
+import { StaffLoginPage } from '../features/auth/StaffLoginPage'
+import { StudentLoginPage } from '../features/auth/StudentLoginPage'
+import { LandingPage } from '../features/landing/LandingPage'
+import { SetupFlow } from '../features/setup/SetupFlow'
+import { isSetupView } from '../features/setup/setupViews'
 import { StudentWorkspace } from '../features/student/StudentWorkspace'
+import { InitialSyncPage } from '../features/sync/InitialSyncPage'
 import { TeacherWorkspace } from '../features/teacher/TeacherWorkspace'
-import { buildBrandingThemeStyle } from './theme/branding'
-import { appReducer, createInitialState, getTenant } from './state/appState'
-import { leafGateway } from './gateway'
+import { Notice, WeaveLogo } from '../shared/ui'
+import { buildBrandingThemeStyle, createDefaultBranding } from './theme/branding'
+import { weaveGateway } from './gateway'
+import { useAppController } from './useAppController'
 
 export default function App() {
-  const [state, dispatch] = useReducer(appReducer, undefined, createInitialState)
-  const tenant = getTenant(state)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    dispatch({ type: 'bootStart' })
-
-    leafGateway.branding
-      .getBranding({ signal: controller.signal })
-      .then((branding) => dispatch({ type: 'brandingSuccess', branding }))
-      .catch(() => null)
-
-    leafGateway.installation
-      .getInstallationStatus({ signal: controller.signal })
-      .then((status) => dispatch({ type: 'bootSuccess', status }))
-      .catch((error) => {
-        if (error.name !== 'AbortError') {
-          dispatch({ type: 'bootFailure', message: error.userMessage || 'Weave could not reach the local backend.' })
-        }
-      })
-    return () => controller.abort()
-  }, [])
-
-  const themeStyle = useMemo(
-    () => buildBrandingThemeStyle(state.branding),
-    [state.branding],
-  )
-
-  const signIn = async (form) => {
-    if (state.authMode === 'student' && (!form.identifier || !form.secret)) {
-      dispatch({ type: 'authFailure', message: 'Admission number and CBT PIN are required.' })
-      return
-    }
-    if (state.authMode === 'staff' && (!form.identifier || !form.secret)) {
-      dispatch({ type: 'authFailure', message: 'Email and password are required.' })
-      return
-    }
-
-    dispatch({ type: 'authStart' })
-    try {
-      if (state.authMode === 'student') {
-        const session = await leafGateway.auth.loginStudent({ admissionNumber: form.identifier, pin: form.secret })
-        const resolution = {
-          state: session.availability,
-          exam: { id: session.exam_id, title: session.exam_title, scheduledStartAt: session.scheduled_start_at },
-          candidate: { id: session.candidate_id, name: session.display_name, studentId: session.student_id },
-          isMakeup: session.is_makeup,
-        }
-        dispatch({ type: 'authSuccess', session, view: 'student', examStage: 'lobby' })
-        dispatch({ type: 'studentResolution', resolution })
-        return
-      }
-
-      const session = await leafGateway.auth.loginStaff({ email: form.identifier, password: form.secret })
-      dispatch({ type: 'authSuccess', session, view: 'staff' })
-      dispatch({ type: 'staff', patch: { section: 'overview' } })
-    } catch (error) {
-      dispatch({ type: 'authFailure', message: error.userMessage || 'Sign in failed.' })
-    }
-  }
-
-  const pairInstallation = async (form) => {
-    if (!form.pairingCode || !form.serverName) {
-      dispatch({ type: 'authFailure', message: 'Pairing code and server name are required.' })
-      return
-    }
-
-    dispatch({ type: 'setupStart' })
-    try {
-      const status = await leafGateway.installation.pairInstallation(form)
-      dispatch({ type: 'setupSuccess', status })
-      leafGateway.branding
-        .getBranding()
-        .then((branding) => dispatch({ type: 'brandingSuccess', branding }))
-        .catch(() => null)
-    } catch (error) {
-      dispatch({ type: 'authFailure', message: error.userMessage || 'Pairing failed.' })
-    }
-  }
-
+  const { state, dispatch, boot, pair, signInStaff, signInStudent, signOut } = useAppController()
+  const branding = state.installation.configured ? state.branding : createDefaultBranding()
   const currentRole = state.session?.role || state.session?.type
-  const signOut = async () => {
-    if (state.session?.type === 'student') {
-      await leafGateway.auth.logoutStudent().catch(() => null)
-    }
-    if (state.session?.type === 'staff') leafGateway.auth.signOutStaff()
-    dispatch({ type: 'signOut' })
-  }
 
   return (
-    <div className="leaf-app" style={themeStyle}>
-      {state.view === 'boot' && (
-        <BootScreen
-          error={state.bootError}
-          retry={() => {
-            dispatch({ type: 'bootStart' })
-            leafGateway.branding
-              .getBranding()
-              .then((branding) => dispatch({ type: 'brandingSuccess', branding }))
-              .catch(() => null)
-            leafGateway.installation
-              .getInstallationStatus()
-              .then((status) => dispatch({ type: 'bootSuccess', status }))
-              .catch((error) => dispatch({ type: 'bootFailure', message: error.userMessage || 'Weave could not reach the local backend.' }))
-          }}
-        />
-      )}
-      {state.view === 'setup' && (
-        <SetupScreen
-          tenant={tenant}
-          error={state.authError}
-          loading={state.authLoading}
-          onSubmit={pairInstallation}
-          onContinue={() => dispatch({ type: 'view', view: 'auth' })}
-        />
-      )}
-      {state.view === 'auth' && (
-        <AuthPage
-          mode={state.authMode}
-          tenant={tenant}
-          connectivity={state.connectivity}
-          error={state.authError}
-          loading={state.authLoading}
-          setMode={(authMode) => dispatch({ type: 'authMode', authMode })}
-          onSubmit={signIn}
-        />
-      )}
-      {state.view === 'student' && (
-        <StudentWorkspace
-          exam={state.exam}
-          resolution={state.studentResolution}
-          gateway={leafGateway}
-          dispatch={dispatch}
-          returnToSignIn={signOut}
-        />
-      )}
-      {state.view === 'staff' && currentRole === 'teacher' && (
-        <TeacherWorkspace state={state} dispatch={dispatch} signOut={signOut} gateway={leafGateway} />
-      )}
-      {state.view === 'staff' && currentRole === 'admin' && (
-        <AdminWorkspace state={state} dispatch={dispatch} signOut={signOut} gateway={leafGateway} />
-      )}
+    <div className="weave-app" style={buildBrandingThemeStyle(branding)}>
+      {state.view === 'boot' && <main className="auth-shell"><section className="submission-card"><WeaveLogo /><h1>Starting Weave</h1><p>Checking the local CBT backend and installation state.</p>{state.bootError && <Notice tone="danger">{state.bootError}</Notice>}{state.bootError && <button className="button button--primary" onClick={() => boot()}>Try again</button>}</section></main>}
+      {isSetupView(state.view) && <SetupFlow view={state.view} error={state.authError} installation={state.installation} dispatch={dispatch} onPair={pair} />}
+      {state.view === 'landing' && <LandingPage dispatch={dispatch} branding={branding} />}
+      {state.view === 'staff-login' && <StaffLoginPage error={state.authError} loading={state.authLoading} branding={branding} onSubmit={signInStaff} onBack={() => dispatch({ type: 'view', view: 'landing' })} />}
+      {state.view === 'student-login' && <StudentLoginPage error={state.authError} loading={state.authLoading} branding={branding} onSubmit={signInStudent} onBack={() => dispatch({ type: 'view', view: 'landing' })} />}
+      {state.view === 'sync-check' && <main className="auth-shell"><section className="submission-card"><WeaveLogo /><h1>Checking server readiness</h1><p>Reading the local synchronization status.</p></section></main>}
+      {state.view === 'initial-sync' && <InitialSyncPage error={state.syncError} status={state.syncStatus} branding={branding} dispatch={dispatch} />}
+      {state.view === 'student' && <StudentWorkspace exam={state.exam} resolution={state.studentResolution} gateway={weaveGateway} dispatch={dispatch} returnToSignIn={signOut} />}
+      {state.view === 'staff' && currentRole === 'teacher' && <TeacherWorkspace state={state} dispatch={dispatch} signOut={signOut} gateway={weaveGateway} />}
+      {state.view === 'staff' && currentRole === 'admin' && <AdminWorkspace state={state} dispatch={dispatch} signOut={signOut} gateway={weaveGateway} />}
     </div>
-  )
-}
-
-function BootScreen({ error, retry }) {
-  return (
-    <main className="auth-shell">
-      <section className="submission-card">
-        <WeaveLogo />
-        <h1>Starting Weave</h1>
-        <p>Checking the local CBT backend and installation state.</p>
-        {error && <Notice tone="danger">{error}</Notice>}
-        {error && <button className="button button--primary" onClick={retry}>Try again</button>}
-      </section>
-    </main>
-  )
-}
-
-function SetupScreen({ tenant, error, loading, onSubmit, onContinue }) {
-  const [pairingCode, setPairingCode] = useState('')
-  const [serverName, setServerName] = useState('')
-
-  return (
-    <main className="auth-shell">
-      <div className="auth-shell__brand">
-        <WeaveLogo />
-        <TenantIdentity tenant={tenant} />
-      </div>
-      <div className="auth-shell__content auth-shell__content--centered">
-        <section className="signin-card setup-card">
-          <div className="signin-card__header">
-            <h1>Pair Weave</h1>
-            <p>Connect this CBT node to its Weave school account.</p>
-          </div>
-          <form
-            className="form-grid"
-            onSubmit={(event) => {
-              event.preventDefault()
-              onSubmit({ pairingCode, serverName })
-            }}
-          >
-            <FormField label="Pairing Code" icon="link" value={pairingCode} placeholder="Enter Weave pairing code" onChange={setPairingCode} />
-            <FormField label="Server Name" icon="school" value={serverName} placeholder="e.g. Brightfield CBT Lab" onChange={setServerName} />
-            <Notice>If this CBT backend is already paired, continue to sign in.</Notice>
-            {error && <Notice tone="danger">{error}</Notice>}
-            <button className="button button--primary" type="submit" disabled={loading}>
-              {loading ? 'Pairing...' : 'Pair Weave'}
-            </button>
-            <button className="button button--secondary" type="button" onClick={onContinue}>
-              Continue to sign in
-            </button>
-          </form>
-        </section>
-      </div>
-    </main>
   )
 }

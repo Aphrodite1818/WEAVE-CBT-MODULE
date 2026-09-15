@@ -14,7 +14,7 @@ const paths = {
   check: <path d="m5 12 4 4L19 6"/>,
   book: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4H6.5A2.5 2.5 0 0 0 4 6.5z"/><path d="M4 6.5v13"/></>,
   school: <><path d="m12 3 8 4v6c0 4.5-3.2 7.5-8 8-4.8-.5-8-3.5-8-8V7z"/><path d="M8 10h8M8 14h8M12 7v11"/></>,
-  leafIcon: <><path d="M20 4C11 4 5 10 5 19c9 0 15-6 15-15Z"/><path d="M5 19c4-6 8-9 15-15"/></>,
+  weaveIcon: <><path d="M20 4C11 4 5 10 5 19c9 0 15-6 15-15Z"/><path d="M5 19c4-6 8-9 15-15"/></>,
   flask: <><path d="M9 3h6M10 3v5l-5 9a3 3 0 0 0 2.6 4.5h8.8A3 3 0 0 0 19 17l-5-9V3"/><path d="M8 15h8"/></>,
   math: <><path d="M5 6h14M8 4l8 16M17 8l-2.5 2.5L17 13M7 16h6"/></>,
   upload: <><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></>,
