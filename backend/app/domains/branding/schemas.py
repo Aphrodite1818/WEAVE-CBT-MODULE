@@ -15,6 +15,7 @@ class BrandingResponse(BaseModel):
     tenant_id: UUID | None = None
     school_name: str
     logo_revision: UUID | None = None
+    logo_path: str | None = None
     is_enabled: bool = False
     is_default_theme: bool = True
     theme_version: int = Field(default=0, ge=0)
