@@ -13,6 +13,7 @@ os.environ.setdefault(
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
 from app.domains.academics.repository import AcademicRepository  # noqa: E402
+from app.domains.sync.invalidation import SyncInvalidationRepository  # noqa: E402
 from app.domains.sync.service import ENTITY_MODELS, SyncService  # noqa: E402
 from app.integrations.weave.schemas import SYNC_SCHEMA_VERSION, WeaveSyncChange  # noqa: E402
 
@@ -49,6 +50,11 @@ class SyncLifecycleDeleteTests(unittest.IsolatedAsyncioTestCase):
                         "bulk_upsert_projections",
                         new=AsyncMock(),
                     ),
+                    patch.object(
+                        SyncInvalidationRepository,
+                        "mark_pre_execution_rosters_stale",
+                        new=AsyncMock(),
+                    ) as invalidate,
                 ):
                     await service._apply_delta_page(  # type: ignore[arg-type]
                         object(),
@@ -61,6 +67,10 @@ class SyncLifecycleDeleteTests(unittest.IsolatedAsyncioTestCase):
                     [entity_id],
                     deleted_at=occurred_at,
                 )
+                if entity_type == "student_enrollment":
+                    invalidate.assert_awaited_once()
+                else:
+                    invalidate.assert_not_awaited()
 
 
 if __name__ == "__main__":
