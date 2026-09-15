@@ -14,13 +14,8 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ["DEBUG"] = "false"
 
 from app.core.exceptions import AcademicAuthorizationError  # noqa: E402
-from app.domains.academics.authorization import (  # noqa: E402
-    AcademicAuthorizationService,
-)
-from app.domains.exams.exceptions import (  # noqa: E402
-    ExamAuthorizationError,
-    ExamNotFound,
-)
+from app.domains.academics.authorization import AcademicAuthorizationService  # noqa: E402
+from app.domains.exams.exceptions import ExamAuthorizationError, ExamNotFound  # noqa: E402
 from app.domains.exams.repository import ExamRepository  # noqa: E402
 from app.domains.exams.service import ExamService  # noqa: E402
 
@@ -39,6 +34,7 @@ def actor(*, role: str = "teacher", membership_id: UUID | None = None):
 def exam(**overrides):
     values = {
         "id": uuid4(),
+        "term_id": uuid4(),
         "curriculum_subject_id": uuid4(),
         "created_by_actor_id": uuid4(),
     }
@@ -50,7 +46,6 @@ class ExamReadServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_admin_can_get_exam(self) -> None:
         db = AsyncMock()
         current_exam = exam()
-
         with patch.object(
             ExamRepository,
             "get_exam_by_id",
@@ -61,17 +56,13 @@ class ExamReadServiceTests(unittest.IsolatedAsyncioTestCase):
                 actor=actor(role="admin"),
                 exam_id=current_exam.id,
             )
-
         self.assertIs(result, current_exam)
 
-    async def test_assigned_invigilator_can_get_exam_without_authoring_access(
-        self,
-    ) -> None:
+    async def test_assigned_invigilator_can_get_exam_without_authoring_access(self) -> None:
         db = AsyncMock()
         teacher_id = uuid4()
         current_actor = actor(role="teacher", membership_id=teacher_id)
         current_exam = exam()
-
         with (
             patch.object(
                 ExamRepository,
@@ -85,7 +76,7 @@ class ExamReadServiceTests(unittest.IsolatedAsyncioTestCase):
             ) as get_invigilator,
             patch.object(
                 AcademicAuthorizationService,
-                "require_can_author_curriculum_subject",
+                "require_can_author_curriculum_subject_for_term",
                 new=AsyncMock(),
             ) as require_authoring,
         ):
@@ -99,11 +90,10 @@ class ExamReadServiceTests(unittest.IsolatedAsyncioTestCase):
         get_invigilator.assert_awaited_once_with(db, current_exam.id, teacher_id)
         require_authoring.assert_not_awaited()
 
-    async def test_teacher_with_authoring_scope_can_get_exam(self) -> None:
+    async def test_second_eligible_teacher_can_get_shared_exam(self) -> None:
         db = AsyncMock()
         current_actor = actor(role="teacher")
         current_exam = exam()
-
         with (
             patch.object(
                 ExamRepository,
@@ -117,7 +107,7 @@ class ExamReadServiceTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch.object(
                 AcademicAuthorizationService,
-                "require_can_author_curriculum_subject",
+                "require_can_author_curriculum_subject_for_term",
                 new=AsyncMock(),
             ) as require_authoring,
         ):
@@ -132,13 +122,38 @@ class ExamReadServiceTests(unittest.IsolatedAsyncioTestCase):
             db,
             actor=current_actor,
             curriculum_subject_id=current_exam.curriculum_subject_id,
+            academic_term_id=current_exam.term_id,
         )
+
+    async def test_lead_must_still_have_current_term_authoring_scope(self) -> None:
+        db = AsyncMock()
+        current_actor = actor(role="teacher")
+        current_exam = exam(created_by_actor_id=current_actor.id)
+        with (
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=current_exam),
+            ),
+            patch.object(
+                AcademicAuthorizationService,
+                "require_can_author_curriculum_subject_for_term",
+                new=AsyncMock(
+                    side_effect=AcademicAuthorizationError("No assignment")
+                ),
+            ),
+            self.assertRaisesRegex(ExamAuthorizationError, "not allowed"),
+        ):
+            await ExamService.get_exam(
+                db,
+                actor=current_actor,
+                exam_id=current_exam.id,
+            )
 
     async def test_unrelated_teacher_cannot_get_exam(self) -> None:
         db = AsyncMock()
         current_actor = actor(role="teacher")
         current_exam = exam()
-
         with (
             patch.object(
                 ExamRepository,
@@ -152,8 +167,10 @@ class ExamReadServiceTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch.object(
                 AcademicAuthorizationService,
-                "require_can_author_curriculum_subject",
-                new=AsyncMock(side_effect=AcademicAuthorizationError("No assignment")),
+                "require_can_author_curriculum_subject_for_term",
+                new=AsyncMock(
+                    side_effect=AcademicAuthorizationError("No assignment")
+                ),
             ),
             self.assertRaisesRegex(ExamAuthorizationError, "not allowed"),
         ):
@@ -165,7 +182,6 @@ class ExamReadServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_missing_exam_raises_not_found(self) -> None:
         db = AsyncMock()
-
         with (
             patch.object(
                 ExamRepository,
