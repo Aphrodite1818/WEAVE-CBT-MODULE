@@ -5,7 +5,7 @@ import unittest
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from pydantic import SecretStr, ValidationError
 
@@ -81,8 +81,8 @@ class SyncContractTests(unittest.TestCase):
 
         self.assertEqual(payload.metadata.schema_version, 5)
         self.assertEqual(payload.metadata.cursor, 134)
-        self.assertEqual(payload.school.id, raw["school"]["id"])
-        self.assertEqual(payload.server.id, raw["server"]["id"])
+        self.assertEqual(payload.school.id, UUID(raw["school"]["id"]))
+        self.assertEqual(payload.server.id, UUID(raw["server"]["id"]))
         self.assertEqual(payload.curriculum_subject_departments, [])
 
     def test_bootstrap_rejects_legacy_offerings_field(self) -> None:
