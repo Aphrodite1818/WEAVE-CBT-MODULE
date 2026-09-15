@@ -32,14 +32,15 @@ from app.domains.academics.models import (
     ClassTermDepartment,
     Curriculum,
     CurriculumSubject,
+    CurriculumSubjectDepartment,
     Department,
     SchoolProfile,
     StudentEnrollment,
-    SubjectOffering,
     TeacherAssignment,
 )
 from app.domains.academics.repository import AcademicRepository
 from app.domains.node.identity_store import node_identity_store
+from app.domains.sync.invalidation import SyncInvalidationRepository
 from app.domains.sync.repository import SyncRepository
 from app.domains.sync.schemas import SyncReconcileResponse, SyncStatusResponse
 from app.integrations.weave.academics import (
@@ -60,10 +61,10 @@ from app.integrations.weave.schemas import (
     WeaveClassSnapshot,
     WeaveClassTermDepartmentSnapshot,
     WeaveCurriculumSnapshot,
+    WeaveCurriculumSubjectDepartmentSnapshot,
     WeaveCurriculumSubjectSnapshot,
     WeaveDepartmentSnapshot,
     WeaveStudentEnrollmentSnapshot,
-    WeaveSubjectOfferingSnapshot,
     WeaveSubjectSnapshot,
     WeaveSyncChange,
     WeaveTeacherAssignmentSnapshot,
@@ -86,13 +87,13 @@ ENTITY_SCHEMAS: dict[str, type[BaseModel]] = {
     "subject": WeaveSubjectSnapshot,
     "curriculum": WeaveCurriculumSnapshot,
     "curriculum_subject": WeaveCurriculumSubjectSnapshot,
+    "curriculum_subject_department": WeaveCurriculumSubjectDepartmentSnapshot,
     "assessment_scheme": WeaveAssessmentSchemeSnapshot,
     "assessment_component": WeaveAssessmentComponentSnapshot,
     "admin": WeaveAdminSnapshot,
     "teacher": WeaveTeacherSnapshot,
-    "student_enrollment": WeaveStudentEnrollmentSnapshot,
-    "subject_offering": WeaveSubjectOfferingSnapshot,
     "teacher_assignment": WeaveTeacherAssignmentSnapshot,
+    "student_enrollment": WeaveStudentEnrollmentSnapshot,
 }
 
 ENTITY_MODELS: dict[str, type] = {
@@ -106,13 +107,13 @@ ENTITY_MODELS: dict[str, type] = {
     "subject": AcademicSubject,
     "curriculum": Curriculum,
     "curriculum_subject": CurriculumSubject,
+    "curriculum_subject_department": CurriculumSubjectDepartment,
     "assessment_scheme": AssessmentScheme,
     "assessment_component": AssessmentComponent,
     "admin": AcademicAdmin,
     "teacher": AcademicTeacher,
-    "student_enrollment": StudentEnrollment,
-    "subject_offering": SubjectOffering,
     "teacher_assignment": TeacherAssignment,
+    "student_enrollment": StudentEnrollment,
 }
 
 UPSERT_ORDER = tuple(ENTITY_MODELS)
@@ -127,13 +128,13 @@ BOOTSTRAP_SECTIONS = (
     ("subject", "subjects"),
     ("curriculum", "curricula"),
     ("curriculum_subject", "curriculum_subjects"),
+    ("curriculum_subject_department", "curriculum_subject_departments"),
     ("assessment_scheme", "assessment_schemes"),
     ("assessment_component", "assessment_components"),
     ("admin", "admins"),
     ("teacher", "teachers"),
-    ("student_enrollment", "student_enrollments"),
-    ("subject_offering", "offerings"),
     ("teacher_assignment", "teacher_assignments"),
+    ("student_enrollment", "student_enrollments"),
 )
 
 
@@ -192,6 +193,10 @@ class SyncService:
                 [self._row(snapshot) for snapshot in snapshots],
                 synced_at=payload.metadata.generated_at,
             )
+
+        # A full bootstrap may replace enrollment truth wholesale. Any roster
+        # that has been prepared but has not started execution must be rebuilt.
+        await SyncInvalidationRepository.mark_pre_execution_rosters_stale(db)
 
     async def bootstrap(
         self,
@@ -336,6 +341,9 @@ class SyncService:
                 [self._row(snapshot) for _, snapshot in entries],
                 synced_at=max(change.occurred_at for change, _ in entries),
             )
+
+        if any(change.entity_type == "student_enrollment" for change in effective):
+            await SyncInvalidationRepository.mark_pre_execution_rosters_stale(db)
 
     async def reconcile(self, db: AsyncSession) -> SyncReconcileResponse:
         """Recover every durable Weave change after the local committed cursor."""
