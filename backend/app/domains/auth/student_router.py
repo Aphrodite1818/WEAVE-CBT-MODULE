@@ -10,6 +10,7 @@ from app.core.database import DbSession
 from app.domains.auth.student_dependencies import STUDENT_SESSION_COOKIE
 from app.domains.auth.student_schemas import StudentLoginRequest, StudentLoginResponse
 from app.domains.auth.student_service import (
+    INVALID_STUDENT_LOGIN,
     StudentAuthenticationError,
     StudentAuthService,
 )
@@ -28,13 +29,13 @@ async def login_student(
         result = await StudentAuthService.login(
             db,
             admission_number=payload.admission_number,
-            pin=payload.pin,
+            password=payload.password,
         )
     except StudentAuthenticationError as exc:
         detail = str(exc)
         code = (
             status.HTTP_401_UNAUTHORIZED
-            if detail == "Invalid admission number or CBT PIN"
+            if detail == INVALID_STUDENT_LOGIN
             else status.HTTP_409_CONFLICT
         )
         raise HTTPException(status_code=code, detail=detail) from exc
