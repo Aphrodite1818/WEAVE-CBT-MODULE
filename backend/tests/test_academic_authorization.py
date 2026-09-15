@@ -12,7 +12,10 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from app.core.exceptions import AcademicAuthorizationError  # noqa: E402
+from app.core.exceptions import (  # noqa: E402
+    AcademicAuthorizationError,
+    AcademicScopeError,
+)
 from app.domains.academics.authorization import AcademicAuthorizationService  # noqa: E402
 from app.domains.academics.repository import AcademicRepository  # noqa: E402
 from app.domains.academics.service import AcademicEligibilityService  # noqa: E402
@@ -119,12 +122,10 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                 AcademicAuthorizationError,
                 "does not have an active assignment",
             ):
-                await (
-                    AcademicAuthorizationService.require_can_author_curriculum_subject(
-                        object(),  # type: ignore[arg-type]
-                        actor=actor,  # type: ignore[arg-type]
-                        curriculum_subject_id=subject_id,
-                    )
+                await AcademicAuthorizationService.require_can_author_curriculum_subject(
+                    object(),  # type: ignore[arg-type]
+                    actor=actor,  # type: ignore[arg-type]
+                    curriculum_subject_id=subject_id,
                 )
 
     async def test_exact_class_scope_requires_exact_teacher_assignment(self) -> None:
@@ -177,10 +178,47 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                     curriculum_subject_id=subject_id,
                 )
 
-    async def test_admin_targetable_classes_use_term_eligibility(self) -> None:
+    async def test_admin_term_authoring_requires_at_least_one_eligible_class(self) -> None:
         subject_id = uuid4()
         term_id = uuid4()
-        eligible_class = SimpleNamespace(id=uuid4(), display_name="SS2 Science A")
+        actor = SimpleNamespace(
+            id=uuid4(),
+            role="admin",
+            is_active=True,
+            weave_membership_id=None,
+        )
+
+        with (
+            patch.object(
+                AcademicRepository,
+                "get_curriculum_subject_by_id",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=subject_id, is_active=True)
+                ),
+            ),
+            patch.object(
+                AcademicEligibilityService,
+                "list_eligible_classes",
+                new=AsyncMock(return_value=[]),
+            ),
+        ):
+            with self.assertRaisesRegex(
+                AcademicScopeError,
+                "no academically eligible classes",
+            ):
+                await (
+                    AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+                        object(),  # type: ignore[arg-type]
+                        actor=actor,  # type: ignore[arg-type]
+                        curriculum_subject_id=subject_id,
+                        academic_term_id=term_id,
+                    )
+                )
+
+    async def test_admin_can_author_level_wide_subject_for_term(self) -> None:
+        subject_id = uuid4()
+        term_id = uuid4()
+        eligible_class = SimpleNamespace(id=uuid4(), display_name="SS1 Science A")
         actor = SimpleNamespace(
             id=uuid4(),
             role="admin",
@@ -202,29 +240,25 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=[eligible_class]),
             ) as list_eligible,
         ):
-            classes = await AcademicAuthorizationService.list_actor_targetable_classes(
+            await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
                 object(),  # type: ignore[arg-type]
                 actor=actor,  # type: ignore[arg-type]
                 curriculum_subject_id=subject_id,
                 academic_term_id=term_id,
             )
 
-        self.assertEqual(classes, [eligible_class])
         list_eligible.assert_awaited_once_with(
             ANY,
             curriculum_subject_id=subject_id,
             academic_term_id=term_id,
         )
 
-    async def test_teacher_targetable_classes_intersect_eligibility_and_assignment(
-        self,
-    ) -> None:
+    async def test_teacher_may_joint_author_when_assigned_to_one_eligible_class(self) -> None:
         membership_id = uuid4()
         subject_id = uuid4()
         term_id = uuid4()
-        eligible_assigned = SimpleNamespace(id=uuid4(), display_name="SS2 Science A")
-        eligible_unassigned = SimpleNamespace(id=uuid4(), display_name="SS2 Science B")
-        assigned_but_ineligible = SimpleNamespace(id=uuid4(), display_name="SS2 Arts A")
+        science_a = SimpleNamespace(id=uuid4(), display_name="SS1 Science A")
+        science_b = SimpleNamespace(id=uuid4(), display_name="SS1 Science B")
         actor = SimpleNamespace(
             id=uuid4(),
             role="teacher",
@@ -241,10 +275,54 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                 ),
             ),
             patch.object(
+                AcademicRepository,
+                "get_teacher_by_membership_id",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=membership_id, status="active")
+                ),
+            ),
+            patch.object(
+                AcademicRepository,
+                "teacher_has_curriculum_subject_assignment",
+                new=AsyncMock(return_value=True),
+            ),
+            patch.object(
                 AcademicEligibilityService,
                 "list_eligible_classes",
+                new=AsyncMock(return_value=[science_a, science_b]),
+            ),
+            patch.object(
+                AcademicRepository,
+                "list_teacher_classes_for_curriculum_subject",
+                new=AsyncMock(return_value=[science_a]),
+            ),
+        ):
+            await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+                object(),  # type: ignore[arg-type]
+                actor=actor,  # type: ignore[arg-type]
+                curriculum_subject_id=subject_id,
+                academic_term_id=term_id,
+            )
+
+    async def test_teacher_cannot_author_term_when_assignment_is_not_eligible(self) -> None:
+        membership_id = uuid4()
+        subject_id = uuid4()
+        term_id = uuid4()
+        science_class = SimpleNamespace(id=uuid4(), display_name="SS1 Science A")
+        arts_class = SimpleNamespace(id=uuid4(), display_name="SS1 Arts A")
+        actor = SimpleNamespace(
+            id=uuid4(),
+            role="teacher",
+            is_active=True,
+            weave_membership_id=str(membership_id),
+        )
+
+        with (
+            patch.object(
+                AcademicRepository,
+                "get_curriculum_subject_by_id",
                 new=AsyncMock(
-                    return_value=[eligible_assigned, eligible_unassigned]
+                    return_value=SimpleNamespace(id=subject_id, is_active=True)
                 ),
             ),
             patch.object(
@@ -256,20 +334,32 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch.object(
                 AcademicRepository,
+                "teacher_has_curriculum_subject_assignment",
+                new=AsyncMock(return_value=True),
+            ),
+            patch.object(
+                AcademicEligibilityService,
+                "list_eligible_classes",
+                new=AsyncMock(return_value=[science_class]),
+            ),
+            patch.object(
+                AcademicRepository,
                 "list_teacher_classes_for_curriculum_subject",
-                new=AsyncMock(
-                    return_value=[eligible_assigned, assigned_but_ineligible]
-                ),
+                new=AsyncMock(return_value=[arts_class]),
             ),
         ):
-            classes = await AcademicAuthorizationService.list_actor_targetable_classes(
-                object(),  # type: ignore[arg-type]
-                actor=actor,  # type: ignore[arg-type]
-                curriculum_subject_id=subject_id,
-                academic_term_id=term_id,
-            )
-
-        self.assertEqual(classes, [eligible_assigned])
+            with self.assertRaisesRegex(
+                AcademicAuthorizationError,
+                "any academically eligible class",
+            ):
+                await (
+                    AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+                        object(),  # type: ignore[arg-type]
+                        actor=actor,  # type: ignore[arg-type]
+                        curriculum_subject_id=subject_id,
+                        academic_term_id=term_id,
+                    )
+                )
 
 
 if __name__ == "__main__":
