@@ -78,12 +78,32 @@ export function normalizeBranding(payload) {
   }
 }
 
+function applyOfficialMark(style) {
+  style['--weave-thread-one-start'] = '#60a5fa'
+  style['--weave-thread-one-mid'] = '#1d4ed8'
+  style['--weave-thread-one-end'] = '#1e3a8a'
+  style['--weave-thread-one-halo'] = '#bfdbfe'
+  style['--weave-thread-two-start'] = '#fde68a'
+  style['--weave-thread-two-mid'] = '#f59e0b'
+  style['--weave-thread-two-end'] = '#b45309'
+  style['--weave-thread-two-halo'] = '#fef3c7'
+}
+
+function applyTenantMark(style, tokens) {
+  style['--weave-thread-one-start'] = `rgb(${tokens['--color-primary-soft']})`
+  style['--weave-thread-one-mid'] = `rgb(${tokens['--color-primary']})`
+  style['--weave-thread-one-end'] = `rgb(${tokens['--color-primary-deep']})`
+  style['--weave-thread-one-halo'] = `rgb(${tokens['--color-primary-soft']})`
+  style['--weave-thread-two-start'] = `rgb(${tokens['--color-accent-soft']})`
+  style['--weave-thread-two-mid'] = `rgb(${tokens['--color-accent']})`
+  style['--weave-thread-two-end'] = `rgb(${tokens['--color-accent-hover']})`
+  style['--weave-thread-two-halo'] = `rgb(${tokens['--color-accent-soft']})`
+}
+
 export function buildBrandingThemeStyle(branding) {
   const normalized = normalizeBranding(branding)
   const style = { ...normalized.light_tokens }
 
-  // Compatibility aliases let the existing UI adopt semantic branding without
-  // repainting or redesigning individual screens.
   style['--bg'] = 'rgb(var(--color-background))'
   style['--surface'] = 'rgb(var(--color-surface))'
   style['--surface-soft'] = 'rgb(var(--color-surface-muted))'
@@ -96,6 +116,12 @@ export function buildBrandingThemeStyle(branding) {
   style['--tenant-accent'] = 'rgb(var(--color-primary))'
   style['--tenant-accent-soft'] = 'rgb(var(--color-primary-soft))'
   style['--tenant-accent-ink'] = 'rgb(var(--color-primary-deep))'
+
+  if (normalized.is_enabled && !normalized.is_default_theme) {
+    applyTenantMark(style, normalized.light_tokens)
+  } else {
+    applyOfficialMark(style)
+  }
 
   return style
 }
