@@ -157,6 +157,17 @@ class Settings(BaseSettings):
     MEDIA_MAX_IMAGE_SIZE_BYTES: int = Field(default=5 * 1024 * 1024, ge=1)
 
     # ========================== #
+    # TENANT BRANDING CACHE
+    # ========================== #
+
+    # School branding must continue working while Weave Cloud is unavailable.
+    # The configured directory therefore belongs on the same persistent local
+    # volume as the rest of the CBT runtime state. Only the current effective
+    # tenant logo is cached here; Weave remains the source of truth.
+    BRANDING_LOGO_STORAGE_PATH: Path = Path("/var/lib/weave-cbt/branding")
+    BRANDING_LOGO_MAX_SIZE_BYTES: int = Field(default=2 * 1024 * 1024, ge=1)
+
+    # ========================== #
     # LOCAL STAFF AUTHENTICATION
     # ========================== #
 
