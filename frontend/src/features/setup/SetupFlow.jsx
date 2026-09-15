@@ -1,7 +1,30 @@
 import { useState } from 'react'
-import { Icon } from '../../shared/icons/Icon'
-import { Notice, WeaveLogo } from '../../shared/ui'
+import { Pictogram } from '../../shared/icons/Pictogram'
+import { Notice, WeaveLogo, WeaveMark } from '../../shared/ui'
 import './setup.css'
+
+function HardwareScene({ compact = false }) {
+  return (
+    <div className={`setup-hardware ${compact ? 'setup-hardware--compact' : ''}`} aria-hidden="true">
+      <div className="setup-laptop">
+        <div className="setup-laptop__screen"><WeaveMark /></div>
+        <div className="setup-laptop__base" />
+      </div>
+      <div className="setup-connection"><i /><i /><i /><i /><i /></div>
+      <div className="setup-server-stack">
+        {Array.from({ length: 4 }, (_, index) => <span key={index}><b /><em /></span>)}
+      </div>
+    </div>
+  )
+}
+
+function SetupHeader() {
+  return (
+    <header className="setup-header">
+      <div className="setup-header__brand"><WeaveLogo /><small>Exams made simple.</small></div>
+    </header>
+  )
+}
 
 export function SetupFlow({ view, error, installation, dispatch, onPair }) {
   const [pairingCode, setPairingCode] = useState('')
@@ -26,74 +49,130 @@ export function SetupFlow({ view, error, installation, dispatch, onPair }) {
     onPair({ pairingCode: pairingCode.trim().toUpperCase(), serverName: serverName.trim() })
   }
 
+  const codeCharacters = pairingCode.slice(0, 8).padEnd(8, ' ').split('')
+
   return (
-    <main className="setup-shell">
-      <header className="setup-header"><WeaveLogo /><span>EXAMS MADE SIMPLE</span></header>
+    <main className={`setup-shell setup-shell--${view}`}>
+      <SetupHeader />
+
       {view === 'welcome' && (
         <section className="setup-welcome setup-enter">
           <div className="setup-welcome__copy">
-            <span className="setup-eyebrow">EXAMS MADE SIMPLE</span>
+            <span className="product-kicker">EXAMS MADE SIMPLE</span>
             <h1>Welcome to<br />Weave <em>CBT</em></h1>
             <p>This CBT server needs to be connected to your school’s Weave account before it can be used.</p>
-            <button className="setup-primary" onClick={() => dispatch({ type: 'view', view: 'pairing-code' })}>Get Started <Icon name="arrow" /></button>
-            <small>Already paired on this device? The app will open the landing page automatically when the local server reports it is configured.</small>
+            <button className="setup-primary setup-primary--welcome" onClick={() => dispatch({ type: 'view', view: 'pairing-code' })}>
+              Get Started <Pictogram name="arrow" size={20} />
+            </button>
+            <div className="setup-paired-note"><Pictogram name="link" size={17} /><span><b>Already paired on this device?</b><small>The app will move to the landing page automatically.</small></span></div>
           </div>
-          <div className="setup-welcome__visual" aria-hidden="true">
-            <div className="setup-visual-card"><Icon name="shield" size={34} /><strong>Secure</strong></div>
-            <div className="setup-visual-card"><Icon name="sync" size={34} /><strong>Offline Ready</strong></div>
-            <div className="setup-visual-card"><Icon name="school" size={34} /><strong>Reliable</strong></div>
+          <div className="setup-welcome__visual">
+            <div className="setup-feature-pills">
+              <span><Pictogram name="shield" size={20} /><b>Secure</b></span>
+              <span><Pictogram name="sync" size={20} /><b>Offline Ready</b></span>
+              <span><Pictogram name="server" size={20} /><b>Reliable</b></span>
+            </div>
+            <HardwareScene />
+            <p className="product-script setup-script">Local today.<br />Brighter tomorrow.</p>
           </div>
         </section>
       )}
+
       {view === 'pairing-code' && (
-        <section className="setup-card setup-enter">
-          <div className="setup-icon"><Icon name="link" size={30} /></div>
-          <h1>Enter Pairing Code</h1>
-          <p>Use the pairing code from your Weave school account to connect this server.</p>
-          <form onSubmit={(event) => { event.preventDefault(); nextCode() }}>
-            <label className="setup-code-label" htmlFor="pairing-code">Pairing Code</label>
-            <input id="pairing-code" className="setup-code-input" autoFocus autoComplete="one-time-code" maxLength="20" value={pairingCode} onChange={(event) => { setPairingCode(event.target.value.toUpperCase()); setLocalError('') }} placeholder="Enter or paste code" />
-            <div className="setup-code-tiles" aria-hidden="true">{Array.from({ length: 8 }, (_, index) => <span key={index}>{pairingCode[index] || ''}</span>)}</div>
-            {localError && <Notice tone="danger">{localError}</Notice>}
-            <button className="setup-primary" type="submit">Continue <Icon name="arrow" /></button>
-          </form>
-          <button className="setup-back" onClick={() => dispatch({ type: 'view', view: 'welcome' })}><Icon name="back" /> Back</button>
+        <section className="setup-stage setup-stage--code setup-enter">
+          <button className="setup-back setup-back--top" onClick={() => dispatch({ type: 'view', view: 'welcome' })}><Pictogram name="back" size={18} /> Back</button>
+          <div className="setup-card">
+            <div className="setup-icon"><Pictogram name="link" size={31} /></div>
+            <h1>Enter Pairing Code</h1>
+            <p>Use the pairing code from your Weave school account to connect this server.</p>
+            <form onSubmit={(event) => { event.preventDefault(); nextCode() }}>
+              <label className="setup-visually-hidden" htmlFor="pairing-code">Pairing Code</label>
+              <div className={`setup-code-entry ${pairingCode ? 'has-value' : ''}`}>
+                <input
+                  id="pairing-code"
+                  className="setup-code-native"
+                  autoFocus
+                  autoComplete="one-time-code"
+                  maxLength="20"
+                  value={pairingCode}
+                  onChange={(event) => { setPairingCode(event.target.value.toUpperCase()); setLocalError('') }}
+                  aria-describedby="pairing-code-help"
+                />
+                <div className="setup-code-tiles" aria-hidden="true">
+                  {codeCharacters.map((character, index) => <span key={index} className={index === Math.min(pairingCode.length, 7) ? 'current' : ''}>{character.trim()}</span>)}
+                </div>
+              </div>
+              {pairingCode.length > 8 && <small className="setup-code-more">{pairingCode.length} characters entered</small>}
+              {localError && <Notice tone="danger">{localError}</Notice>}
+              <button className="setup-primary" type="submit">Continue <Pictogram name="arrow" size={20} /></button>
+            </form>
+            <small id="pairing-code-help" className="setup-help">Enter or paste the code from your Weave school account.</small>
+          </div>
         </section>
       )}
+
       {view === 'server-name' && (
-        <section className="setup-card setup-enter">
-          <div className="setup-icon"><Icon name="school" size={30} /></div>
-          <h1>Set a server name</h1>
-          <p>Give this CBT server a name to easily identify it in your Weave account.</p>
-          <form onSubmit={(event) => { event.preventDefault(); submitName() }}>
-            <label htmlFor="server-name">Server Name</label>
-            <input id="server-name" autoFocus maxLength="150" value={serverName} onChange={(event) => { setServerName(event.target.value); setLocalError('') }} placeholder="e.g. Main Lab, Block A, School Hall" />
-            {localError && <Notice tone="danger">{localError}</Notice>}
-            <button className="setup-primary" type="submit">Complete Setup <Icon name="arrow" /></button>
-          </form>
-          <button className="setup-back" onClick={() => dispatch({ type: 'view', view: 'pairing-code' })}><Icon name="back" /> Back</button>
+        <section className="setup-stage setup-stage--server setup-enter">
+          <button className="setup-back setup-back--top" onClick={() => dispatch({ type: 'view', view: 'pairing-code' })}><Pictogram name="back" size={18} /> Back</button>
+          <div className="setup-server-grid">
+            <div className="setup-card setup-card--server">
+              <div className="setup-icon"><Pictogram name="server" size={31} /></div>
+              <h1>Set a server name</h1>
+              <p>Give this CBT server a name to easily identify it in your Weave account.</p>
+              <form onSubmit={(event) => { event.preventDefault(); submitName() }}>
+                <label htmlFor="server-name">Server Name</label>
+                <div className="setup-input-with-icon"><Pictogram name="server" size={19} /><input id="server-name" autoFocus maxLength="150" value={serverName} onChange={(event) => { setServerName(event.target.value); setLocalError('') }} placeholder="e.g. Main Lab, Block A, School Hall" /></div>
+                {localError && <Notice tone="danger">{localError}</Notice>}
+                <button className="setup-primary" type="submit">Complete Setup <Pictogram name="arrow" size={20} /></button>
+              </form>
+            </div>
+            <aside className="setup-server-art" aria-hidden="true">
+              <div className="setup-server-tip"><Pictogram name="link" size={19} /><span>Easily identify this server in your Weave dashboard.</span></div>
+              <div className="setup-school-illustration"><Pictogram name="school" size={118} /></div>
+            </aside>
+          </div>
         </section>
       )}
+
       {view === 'pairing' && (
-        <section className="setup-card setup-enter" aria-live="polite">
-          <div className={`setup-icon ${error ? 'setup-icon--error' : 'setup-icon--busy'}`}><Icon name={error ? 'info' : 'sync'} size={32} /></div>
-          <h1>{error ? 'Pairing needs attention' : 'Pairing with Weave...'}</h1>
-          <p>{error ? 'The server is still unpaired. Review the message and retry with the same details.' : 'Verifying your code and connecting this server to your school account.'}</p>
-          {error ? <Notice tone="danger">{error}</Notice> : <div className="setup-activity"><span>Processing the pairing request</span><span className="setup-dots">● ● ●</span></div>}
-          {error && <button className="setup-primary" onClick={submitName}>Retry Pairing <Icon name="arrow" /></button>}
-          {error && <button className="setup-back" onClick={() => dispatch({ type: 'view', view: 'server-name' })}><Icon name="back" /> Edit server name</button>}
+        <section className="setup-stage setup-stage--pairing setup-enter" aria-live="polite">
+          <div className="setup-pairing-card">
+            <HardwareScene compact />
+            <h1>{error ? 'Pairing needs attention' : 'Pairing with Weave...'}</h1>
+            <p>{error ? 'The server is still unpaired. Review the message and retry with the same details.' : 'Verifying your code and connecting this server to your school account.'}</p>
+            {error ? (
+              <>
+                <Notice tone="danger">{error}</Notice>
+                <button className="setup-primary" onClick={submitName}>Retry Pairing <Pictogram name="arrow" size={20} /></button>
+                <button className="setup-back" onClick={() => dispatch({ type: 'view', view: 'server-name' })}><Pictogram name="back" size={18} /> Edit server name</button>
+              </>
+            ) : (
+              <div className="setup-progress-list" aria-label="Pairing activity">
+                {['Validating pairing code', 'Connecting to Weave', 'Finalizing setup'].map((label, index) => (
+                  <div key={label} style={{ '--activity-delay': `${index * .35}s` }}><span className="setup-progress-spinner" /><b>{label}</b></div>
+                ))}
+              </div>
+            )}
+            {!error && <small className="setup-help">This may take a few seconds...</small>}
+          </div>
         </section>
       )}
+
       {view === 'paired-success' && (
-        <section className="setup-card setup-enter">
-          <div className="setup-icon setup-icon--success"><Icon name="check" size={34} /></div>
-          <h1>Successfully Paired!</h1>
-          <p>This CBT server is now connected to {installation.status?.tenant_name || 'your Weave school account'}.</p>
-          <div className="setup-activity">Your server is set up and ready for sign in. School data may still be preparing in the background.</div>
-          <button className="setup-primary" onClick={() => dispatch({ type: 'view', view: 'landing' })}>Continue to Home <Icon name="arrow" /></button>
+        <section className="setup-stage setup-stage--success setup-enter">
+          <div className="setup-success-card">
+            <div className="setup-confetti" aria-hidden="true">{Array.from({ length: 10 }, (_, index) => <i key={index} />)}</div>
+            <div className="setup-success-check"><Pictogram name="check" size={42} /></div>
+            <h1>Successfully Paired!</h1>
+            <p>This CBT server is now connected to {installation.status?.tenant_name || 'your Weave school account'}.</p>
+            <div className="setup-success-info"><Pictogram name="server" size={22} /><span>Your server is set up and ready to use. School data may continue preparing in the background.</span></div>
+            <button className="setup-primary" onClick={() => dispatch({ type: 'view', view: 'landing' })}>Continue to Home <Pictogram name="arrow" size={20} /></button>
+          </div>
+          <p className="product-script setup-success-script" aria-hidden="true">Same tools.<br />Brighter learning.</p>
         </section>
       )}
-      <footer className="setup-footer"><span>WEAVE CBT&nbsp; • &nbsp;EXAMS MADE SIMPLE</span><span>LOCAL TODAY. BRIGHTER TOMORROW.</span></footer>
+
+      <footer className="setup-footer"><span><b>WEAVE CBT</b> • EXAMS MADE SIMPLE</span><span>LOCAL TODAY. BRIGHTER TOMORROW.</span></footer>
     </main>
   )
 }
