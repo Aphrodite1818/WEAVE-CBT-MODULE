@@ -10,8 +10,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class StudentExamAvailability(str, PyEnum):
-    READY = "ready"
+    NO_EXAM = "no_exam"
     WAITING_FOR_ACTIVATION = "waiting_for_activation"
+    READY = "ready"
     MAKEUP = "makeup"
 
 
@@ -26,14 +27,15 @@ class StudentLoginResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 
     student_id: UUID
-    candidate_id: UUID
-    exam_id: UUID
-    exam_title: str
+    candidate_id: UUID | None = None
+    exam_id: UUID | None = None
+    exam_title: str | None = None
     display_name: str
     availability: StudentExamAvailability
-    is_makeup: bool
-    scheduled_start_at: datetime | None
-    activated_at: datetime | None
+    status_message: str
+    is_makeup: bool = False
+    scheduled_start_at: datetime | None = None
+    activated_at: datetime | None = None
 
 
 class StudentSessionResponse(StudentLoginResponse):
