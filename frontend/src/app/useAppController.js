@@ -84,7 +84,7 @@ export function useAppController() {
   const signInStudent = useCallback(async ({ admissionNumber, password }) => {
     dispatch({ type: 'authStart' })
     try {
-      const session = await weaveGateway.auth.loginStudent({ admissionNumber, pin: password })
+      const session = await weaveGateway.auth.loginStudent({ admissionNumber, password })
       const resolution = {
         state: session.availability,
         exam: { id: session.exam_id, title: session.exam_title, scheduledStartAt: session.scheduled_start_at },
