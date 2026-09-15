@@ -13,8 +13,11 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 from app.domains.auth.student_schemas import StudentExamAvailability  # noqa: E402
 from app.domains.auth.student_service import (  # noqa: E402
     INVALID_STUDENT_LOGIN,
+    NO_EXAM_MESSAGE,
+    READY_MESSAGE,
     StudentAuthenticationError,
     StudentAuthService,
+    StudentExamResolution,
     hash_student_session_token,
 )
 from app.domains.auth.student_repository import StudentAuthRepository  # noqa: E402
@@ -29,6 +32,8 @@ class StudentAuthTests(unittest.IsolatedAsyncioTestCase):
         enrollment = SimpleNamespace(
             student_id=student_id,
             admission_number="STU/2026/001",
+            first_name="Candidate",
+            last_name="A",
         )
         candidate = SimpleNamespace(
             id=candidate_id,
@@ -60,11 +65,12 @@ class StudentAuthTests(unittest.IsolatedAsyncioTestCase):
                 StudentAuthService,
                 "_resolve_candidate",
                 AsyncMock(
-                    return_value=(
-                        candidate,
-                        exam,
-                        None,
-                        StudentExamAvailability.READY,
+                    return_value=StudentExamResolution(
+                        candidate=candidate,
+                        exam=exam,
+                        makeup_authorization_id=None,
+                        availability=StudentExamAvailability.READY,
+                        status_message=READY_MESSAGE,
                     )
                 ),
             ),
@@ -94,6 +100,7 @@ class StudentAuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.response.student_id, student_id)
         self.assertEqual(result.response.candidate_id, candidate_id)
         self.assertEqual(result.response.exam_id, exam_id)
+        self.assertEqual(result.response.availability, StudentExamAvailability.READY)
         self.assertFalse(result.response.is_makeup)
         self.assertEqual(session.student_id, student_id)
         self.assertEqual(session.candidate_id, candidate_id)
@@ -106,6 +113,71 @@ class StudentAuthTests(unittest.IsolatedAsyncioTestCase):
             old_session.revocation_reason,
             "Superseded by a new student login",
         )
+        db.commit.assert_awaited_once()
+
+    async def test_valid_student_can_login_without_available_exam(self):
+        student_id = uuid4()
+        enrollment = SimpleNamespace(
+            student_id=student_id,
+            admission_number="STU/2026/001",
+            first_name="Ada",
+            last_name="Okafor",
+        )
+        captured = {}
+
+        async def add_session(_db, session):
+            captured["session"] = session
+            return session
+
+        db = AsyncMock()
+        with (
+            patch.object(
+                StudentAuthService,
+                "_get_current_enrollment",
+                AsyncMock(return_value=enrollment),
+            ),
+            patch.object(
+                StudentAuthService,
+                "_resolve_candidate",
+                AsyncMock(
+                    return_value=StudentExamResolution(
+                        candidate=None,
+                        exam=None,
+                        makeup_authorization_id=None,
+                        availability=StudentExamAvailability.NO_EXAM,
+                        status_message=NO_EXAM_MESSAGE,
+                    )
+                ),
+            ),
+            patch.object(
+                StudentAuthRepository,
+                "list_unrevoked_sessions_for_student",
+                AsyncMock(return_value=[]),
+            ),
+            patch.object(
+                StudentAuthRepository,
+                "save_sessions",
+                AsyncMock(return_value=[]),
+            ),
+            patch.object(
+                StudentAuthRepository,
+                "add_session",
+                AsyncMock(side_effect=add_session),
+            ),
+        ):
+            result = await StudentAuthService.login(
+                db,
+                admission_number="STU/2026/001",
+                password="stu/2026/001",
+            )
+
+        self.assertEqual(result.response.availability, StudentExamAvailability.NO_EXAM)
+        self.assertEqual(result.response.status_message, NO_EXAM_MESSAGE)
+        self.assertEqual(result.response.display_name, "Ada Okafor")
+        self.assertIsNone(result.response.candidate_id)
+        self.assertIsNone(result.response.exam_id)
+        self.assertIsNone(captured["session"].candidate_id)
+        self.assertIsNone(captured["session"].exam_id)
         db.commit.assert_awaited_once()
 
     async def test_lowercase_admission_number_is_rejected_before_lookup(self):
@@ -154,6 +226,36 @@ class StudentAuthTests(unittest.IsolatedAsyncioTestCase):
                 submitted_password="stu/2026/999",
                 stored_admission_number="STU/2026/001",
             )
+
+    async def test_session_resolution_accepts_waiting_room_only_session(self):
+        student_id = uuid4()
+        session = SimpleNamespace(
+            id=uuid4(),
+            student_id=student_id,
+            candidate_id=None,
+            exam_id=None,
+            makeup_authorization_id=None,
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+            last_seen_at=datetime.now(UTC),
+            revoked_at=None,
+        )
+        db = AsyncMock()
+
+        with patch.object(
+            StudentAuthRepository,
+            "get_session_by_hash",
+            AsyncMock(return_value=session),
+        ):
+            context = await StudentAuthService.resolve_session(
+                db,
+                raw_token="opaque-token",
+                touch=False,
+            )
+
+        self.assertEqual(context.student_id, student_id)
+        self.assertIsNone(context.candidate_id)
+        self.assertIsNone(context.exam_id)
+        self.assertFalse(context.is_exam_bound)
 
     async def test_session_resolution_rejects_candidate_identity_mismatch(self):
         student_id = uuid4()
@@ -238,6 +340,7 @@ class StudentAuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(context.student_id, student_id)
         self.assertEqual(context.candidate_id, candidate_id)
         self.assertEqual(context.exam_id, exam_id)
+        self.assertTrue(context.is_exam_bound)
 
 
 if __name__ == "__main__":
