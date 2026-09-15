@@ -1,124 +1,133 @@
 .weave-login-page {
-  position: relative;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 26px clamp(28px, 4vw, 68px) 18px;
-  background:
-    radial-gradient(ellipse at 12% 12%, rgb(var(--color-primary-soft)) 0 17%, transparent 43%),
-    radial-gradient(ellipse at 93% 28%, rgb(var(--color-accent-soft)) 0 14%, transparent 39%),
-    linear-gradient(180deg, #fff 0%, rgb(var(--color-background)) 100%);
+  padding: 27px clamp(32px, 4.8vw, 76px) 18px;
   color: rgb(var(--color-text));
+  background:
+    radial-gradient(ellipse at 12% 14%, rgb(var(--color-primary-soft) / .96) 0 17%, transparent 42%),
+    radial-gradient(ellipse at 91% 18%, rgb(var(--color-accent-soft) / .72) 0 15%, transparent 38%),
+    linear-gradient(180deg, #fff 0%, rgb(var(--color-background)) 100%);
 }
-.weave-login-page::before,
-.weave-login-page::after {
-  content: "";
-  position: absolute;
-  pointer-events: none;
-  background: rgb(var(--color-primary-soft) / .5);
-  border-radius: 50%;
-}
-.weave-login-page::before { width: 520px; height: 330px; left: -260px; top: 160px; transform: rotate(18deg); }
-.weave-login-page::after { width: 540px; height: 340px; right: -270px; top: 70px; transform: rotate(-14deg); }
+
 .weave-login-header,
 .weave-login-content,
 .weave-login-footer {
-  width: min(1400px, 100%);
+  width: min(1360px, 100%);
   margin-inline: auto;
-  position: relative;
-  z-index: 2;
 }
-.weave-login-header { display: flex; align-items: flex-start; justify-content: space-between; }
-.weave-login-brand { display: grid; gap: 2px; }
-.weave-login-brand small { margin-left: 3px; color: rgb(var(--color-text-muted)); font-size: 12px; }
-.weave-login-content { flex: 1; display: grid; align-content: center; padding: 18px 0 8px; }
+.weave-login-header { display: flex; align-items: flex-start; }
+.weave-login-brand { display: grid; gap: 3px; }
+.weave-login-brand small { margin-left: 4px; color: rgb(var(--color-text-muted)); font-size: 12px; font-weight: 450; }
+
+.weave-login-content {
+  flex: 1;
+  display: grid;
+  align-content: center;
+  padding: 10px 0 8px;
+}
 .weave-login-back {
   width: fit-content;
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  margin: 0 0 14px 3px;
+  margin: 0 0 10px 4px;
   border: 0;
+  padding: 5px 0;
   background: transparent;
   color: rgb(var(--color-primary));
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 590;
   cursor: pointer;
 }
-.weave-login-back:hover { text-decoration: underline; text-underline-offset: 3px; }
+.weave-login-back:hover { text-decoration: underline; text-underline-offset: 4px; }
+
 .weave-login-layout {
-  min-height: 590px;
+  min-height: 560px;
   display: grid;
-  grid-template-columns: minmax(360px, 465px) minmax(420px, 1fr);
-  gap: clamp(34px, 6vw, 92px);
+  grid-template-columns: minmax(370px, 430px) minmax(500px, 1fr);
+  gap: clamp(48px, 7vw, 110px);
   align-items: center;
 }
+
 .weave-login-card {
-  position: relative;
-  z-index: 3;
   width: 100%;
   display: grid;
   justify-items: center;
   border: 1px solid rgb(var(--color-border));
   border-radius: 28px;
-  background: rgb(var(--color-surface) / .95);
-  padding: 29px 35px 27px;
-  box-shadow: 0 24px 70px rgb(var(--color-primary) / .10);
+  background: rgb(var(--color-surface) / .97);
+  padding: 30px 34px 28px;
+  box-shadow: 0 24px 68px rgb(var(--color-primary) / .095);
   backdrop-filter: blur(18px);
   animation: login-card-enter .5s cubic-bezier(.2,.8,.2,1) both;
 }
 .weave-login-card__icon {
-  width: 66px;
-  height: 66px;
+  width: 65px;
+  height: 65px;
   display: grid;
   place-items: center;
   margin-bottom: 13px;
-  border-radius: 23px;
+  border-radius: 22px;
   background: linear-gradient(145deg, rgb(var(--color-primary-soft)), rgb(var(--color-surface)));
   color: rgb(var(--color-primary));
   box-shadow: inset 0 0 0 1px rgb(var(--color-primary) / .08);
 }
 .weave-login-card h1 {
-  margin: 0 0 4px;
-  font-size: clamp(29px, 2.5vw, 35px);
-  font-weight: 780;
-  letter-spacing: -.045em;
+  margin: 0 0 6px;
+  font-size: clamp(30px, 2.5vw, 36px);
+  line-height: 1.04;
+  font-weight: 660;
+  letter-spacing: -.042em;
 }
-.weave-login-card > p { margin: 0 0 27px; color: rgb(var(--color-text-soft)); font-size: 16px; }
+.weave-login-card > p {
+  margin: 0 0 26px;
+  color: rgb(var(--color-text-soft));
+  font-size: 15px;
+  font-weight: 430;
+}
 .weave-login-card form { width: 100%; display: grid; gap: 15px; }
-.login-field { display: grid; gap: 7px; color: rgb(var(--color-text)); font-size: 13px; font-weight: 750; }
+
+.login-field {
+  display: grid;
+  gap: 7px;
+  color: rgb(var(--color-text));
+  font-size: 13px;
+  font-weight: 620;
+}
 .login-field__control {
-  min-height: 52px;
+  min-height: 54px;
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 12px;
   border: 1px solid rgb(var(--color-border-strong));
   border-radius: 13px;
-  padding: 0 13px;
-  background: rgb(var(--color-surface) / .96);
+  padding: 0 14px;
+  background: rgb(var(--color-surface));
   color: rgb(var(--color-primary-deep));
   transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
 }
 .login-field__control:focus-within {
   border-color: rgb(var(--color-focus-ring));
-  box-shadow: 0 0 0 4px rgb(var(--color-focus-ring) / .09);
+  box-shadow: 0 0 0 4px rgb(var(--color-focus-ring) / .085);
   transform: translateY(-1px);
 }
 .login-field input {
   width: 100%;
-  min-height: 48px;
+  min-height: 50px;
   border: 0;
   outline: 0;
   background: transparent;
   color: rgb(var(--color-text));
   padding: 0;
+  font-size: 14px;
 }
 .login-field input::placeholder { color: rgb(var(--color-text-faint)); }
 .login-field__reveal {
-  width: 31px;
-  height: 31px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
   border: 0;
@@ -126,8 +135,8 @@
   background: transparent;
   color: rgb(var(--color-primary));
   cursor: pointer;
-  font-size: 15px;
 }
+
 .weave-login-submit {
   min-height: 56px;
   display: inline-flex;
@@ -139,91 +148,66 @@
   border-radius: 13px;
   background: linear-gradient(135deg, rgb(var(--color-primary)), rgb(var(--color-primary-hover)));
   color: rgb(var(--color-on-primary));
-  font-weight: 760;
+  font-size: 14px;
+  font-weight: 650;
   cursor: pointer;
-  box-shadow: 0 13px 25px rgb(var(--color-primary) / .22);
+  box-shadow: 0 13px 26px rgb(var(--color-primary) / .20);
   transition: transform .2s ease, box-shadow .2s ease;
 }
-.weave-login-submit:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 17px 32px rgb(var(--color-primary) / .28); }
-.weave-login-submit:disabled { cursor: not-allowed; opacity: .55; }
+.weave-login-submit:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 18px 33px rgb(var(--color-primary) / .26); }
+.weave-login-submit:disabled { opacity: .55; cursor: not-allowed; }
 .weave-login-trust {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-top: 24px;
+  margin-top: 23px;
   color: rgb(var(--color-text-muted));
-  font-size: 12px;
+  font-size: 11px;
 }
 .weave-login-trust .pictogram { color: rgb(var(--color-primary)); }
+
 .weave-login-art {
   position: relative;
-  min-height: 590px;
+  min-height: 560px;
+  height: min(62vh, 640px);
   overflow: hidden;
-  align-self: stretch;
-  border-radius: 50px 50px 24px 24px;
-  isolation: isolate;
-}
-.weave-login-art__wash {
-  position: absolute;
-  inset: 0;
-  z-index: -2;
-  background:
-    radial-gradient(circle at 68% 24%, rgb(var(--color-primary-soft)) 0 15%, transparent 48%),
-    linear-gradient(180deg, rgb(var(--color-surface) / .15), rgb(var(--color-primary-soft) / .42));
+  align-self: center;
+  border-radius: 46px 46px 24px 24px;
+  background: linear-gradient(180deg, rgb(var(--color-primary-soft) / .35), rgb(var(--color-surface) / .22));
+  animation: login-art-enter .68s .06s cubic-bezier(.2,.8,.2,1) both;
 }
 .weave-login-art img {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
   width: 100%;
   height: 100%;
+  display: block;
   object-fit: cover;
-  object-position: center 45%;
+  object-position: center center;
   border-radius: inherit;
-  opacity: .96;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 9%, #000 93%, transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0, #000 9%, #000 93%, transparent 100%);
+  transition: transform .55s ease;
 }
-.weave-login-page--staff .weave-login-art img { object-position: 58% 45%; filter: saturate(.88) brightness(1.035); }
-.weave-login-motto { position: absolute; z-index: 3; right: 8%; top: 23%; width: 190px; }
-.weave-login-art__staff-badge {
-  position: absolute;
-  z-index: 4;
-  left: 8%;
-  bottom: 12%;
-  max-width: 235px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border: 1px solid rgb(var(--color-border));
-  border-radius: 20px;
-  padding: 13px 16px;
-  background: rgb(var(--color-surface) / .88);
-  color: rgb(var(--color-primary));
-  box-shadow: var(--product-shadow-soft);
-  backdrop-filter: blur(14px);
-}
-.weave-login-art__staff-badge span { color: rgb(var(--color-text-soft)); font-size: 12px; font-weight: 700; line-height: 1.3; }
+.weave-login-art:hover img { transform: scale(1.006); }
+.weave-login-page--staff .weave-login-art img { object-position: center 50%; }
+.weave-login-page--student .weave-login-art img { object-position: center 50%; }
+
 .weave-login-benefits {
-  width: min(920px, calc(100% - 30px));
+  width: min(920px, calc(100% - 28px));
   justify-self: center;
-  margin: -26px 0 0;
+  margin: -24px 0 0;
   position: relative;
   z-index: 5;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
+  gap: 5px;
   border: 1px solid rgb(var(--color-border));
   border-radius: 22px;
   padding: 12px 14px;
-  background: rgb(var(--color-surface) / .93);
-  box-shadow: 0 16px 44px rgb(var(--color-primary) / .07);
+  background: rgb(var(--color-surface) / .94);
+  box-shadow: 0 16px 44px rgb(var(--color-primary) / .065);
   backdrop-filter: blur(18px);
 }
 .weave-login-benefits > div {
-  min-width: 0;
   display: grid;
-  grid-template-columns: 46px 1fr;
+  grid-template-columns: 45px 1fr;
   grid-template-rows: auto auto;
   align-items: center;
   column-gap: 9px;
@@ -239,8 +223,9 @@
   background: rgb(var(--color-primary-soft));
   color: rgb(var(--color-primary));
 }
-.weave-login-benefits strong { align-self: end; font-size: 11px; }
+.weave-login-benefits strong { align-self: end; font-size: 11px; font-weight: 620; }
 .weave-login-benefits small { align-self: start; margin-top: 2px; color: rgb(var(--color-text-muted)); font-size: 9px; line-height: 1.25; }
+
 .weave-login-footer {
   display: flex;
   align-items: center;
@@ -250,12 +235,19 @@
   font-size: 10px;
 }
 .weave-login-footer span { display: inline-flex; align-items: center; gap: 9px; }
-.weave-login-footer b { color: rgb(var(--color-primary-deep)); }
+.weave-login-footer b { color: rgb(var(--color-primary-deep)); font-weight: 620; }
 .weave-login-footer i { width: 28px; height: 2px; border-radius: 999px; background: rgb(var(--color-primary)); }
 
-@keyframes login-card-enter { from { opacity: 0; transform: translateY(14px) scale(.992); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes login-card-enter {
+  from { opacity: 0; transform: translateY(14px) scale(.994); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes login-art-enter {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
-@media (max-width: 900px) {
+@media (max-width: 980px) {
   .weave-login-layout { grid-template-columns: minmax(320px, 500px); justify-content: center; min-height: auto; }
   .weave-login-art { display: none; }
   .weave-login-benefits { margin-top: 24px; grid-template-columns: repeat(2, 1fr); }
@@ -269,5 +261,5 @@
   .weave-login-footer span:last-child { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .weave-login-page *, .weave-login-page *::before, .weave-login-page *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  .weave-login-page * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
