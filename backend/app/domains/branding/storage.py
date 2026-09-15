@@ -51,6 +51,28 @@ class BrandingLogoStorage:
         revision: UUID,
     ) -> CachedBrandingLogo:
         data = await self._download(url)
+        return await self.cache_bytes(
+            data=data,
+            tenant_id=tenant_id,
+            revision=revision,
+        )
+
+    async def cache_bytes(
+        self,
+        *,
+        data: bytes,
+        tenant_id: UUID,
+        revision: UUID,
+    ) -> CachedBrandingLogo:
+        """Validate bytes and atomically store one immutable logo revision."""
+
+        if not data:
+            raise BrandingLogoStorageError("School logo is empty.")
+        if len(data) > settings.BRANDING_LOGO_MAX_SIZE_BYTES:
+            raise BrandingLogoStorageError(
+                "School logo exceeds the configured maximum size."
+            )
+
         return await asyncio.to_thread(
             self._validate_and_store_sync,
             data,
