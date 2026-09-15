@@ -7,10 +7,25 @@ import { isSetupView } from '../features/setup/setupViews'
 import { StudentWorkspace } from '../features/student/StudentWorkspace'
 import { InitialSyncPage } from '../features/sync/InitialSyncPage'
 import { TeacherWorkspace } from '../features/teacher/TeacherWorkspace'
-import { Notice, WeaveLogo } from '../shared/ui'
+import { Notice, WeaveMark } from '../shared/ui'
 import { buildBrandingThemeStyle, createDefaultBranding } from './theme/branding'
 import { weaveGateway } from './gateway'
 import { useAppController } from './useAppController'
+
+function ProductLoadingScreen({ title, copy, error, onRetry }) {
+  return (
+    <main className="product-loading-page">
+      <section className="product-loading-card" aria-live="polite">
+        <div className="product-loading-orbit"><WeaveMark /></div>
+        <span className="product-kicker">WEAVE CBT</span>
+        <h1>{title}</h1>
+        <p>{copy}</p>
+        {error && <Notice tone="danger">{error}</Notice>}
+        {error && onRetry && <button className="button button--primary" onClick={onRetry}>Try again</button>}
+      </section>
+    </main>
+  )
+}
 
 export default function App() {
   const { state, dispatch, boot, pair, signInStaff, signInStudent, signOut } = useAppController()
@@ -19,12 +34,19 @@ export default function App() {
 
   return (
     <div className="weave-app" style={buildBrandingThemeStyle(branding)}>
-      {state.view === 'boot' && <main className="auth-shell"><section className="submission-card"><WeaveLogo /><h1>Starting Weave</h1><p>Checking the local CBT backend and installation state.</p>{state.bootError && <Notice tone="danger">{state.bootError}</Notice>}{state.bootError && <button className="button button--primary" onClick={() => boot()}>Try again</button>}</section></main>}
+      {state.view === 'boot' && (
+        <ProductLoadingScreen
+          title="Starting Weave"
+          copy="Checking the local CBT server and installation state."
+          error={state.bootError}
+          onRetry={() => boot()}
+        />
+      )}
       {isSetupView(state.view) && <SetupFlow view={state.view} error={state.authError} installation={state.installation} dispatch={dispatch} onPair={pair} />}
       {state.view === 'landing' && <LandingPage dispatch={dispatch} branding={branding} />}
       {state.view === 'staff-login' && <StaffLoginPage error={state.authError} loading={state.authLoading} branding={branding} onSubmit={signInStaff} onBack={() => dispatch({ type: 'view', view: 'landing' })} />}
       {state.view === 'student-login' && <StudentLoginPage error={state.authError} loading={state.authLoading} branding={branding} onSubmit={signInStudent} onBack={() => dispatch({ type: 'view', view: 'landing' })} />}
-      {state.view === 'sync-check' && <main className="auth-shell"><section className="submission-card"><WeaveLogo /><h1>Checking server readiness</h1><p>Reading the local synchronization status.</p></section></main>}
+      {state.view === 'sync-check' && <ProductLoadingScreen title="Checking server readiness" copy="Reading the local synchronization status." />}
       {state.view === 'initial-sync' && <InitialSyncPage error={state.syncError} status={state.syncStatus} branding={branding} dispatch={dispatch} />}
       {state.view === 'student' && <StudentWorkspace exam={state.exam} resolution={state.studentResolution} gateway={weaveGateway} dispatch={dispatch} returnToSignIn={signOut} />}
       {state.view === 'staff' && currentRole === 'teacher' && <TeacherWorkspace state={state} dispatch={dispatch} signOut={signOut} gateway={weaveGateway} />}
