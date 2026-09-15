@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import AcademicAuthorizationError, AcademicScopeError
 from app.domains.academics.models import AcademicClass, CurriculumSubject
 from app.domains.academics.repository import AcademicRepository
+from app.domains.academics.service import AcademicEligibilityService
 from app.domains.auth.models import LocalActor
 
 
@@ -178,8 +179,17 @@ class AcademicAuthorizationService:
         *,
         actor: LocalActor,
         curriculum_subject_id: UUID,
+        academic_term_id: UUID,
     ) -> list[AcademicClass]:
-        """Return classes the actor may target for one CurriculumSubject."""
+        """Return academically eligible classes the actor may target for a subject.
+
+        AcademicEligibilityService owns the curriculum/specialization rules.
+        Authorization then narrows that academic scope according to actor authority:
+
+        - administrators may target every academically eligible class;
+        - teachers may target only academically eligible classes for which they
+          also hold a current effective Weave teacher assignment.
+        """
 
         if not actor.is_active:
             raise AcademicAuthorizationError("Active local actor is required")
@@ -197,16 +207,19 @@ class AcademicAuthorizationService:
         if not curriculum_subject.is_active:
             raise AcademicScopeError("Curriculum subject is inactive")
 
-        if actor.role == "admin":
-            return await AcademicRepository.list_classes_for_curriculum_subject(
-                db,
-                curriculum_subject_id=curriculum_subject_id,
-            )
-
-        if actor.role != "teacher":
+        if actor.role not in {"admin", "teacher"}:
             raise AcademicAuthorizationError(
                 "Only administrators and teachers can access this academic scope"
             )
+
+        eligible_classes = await AcademicEligibilityService.list_eligible_classes(
+            db,
+            curriculum_subject_id=curriculum_subject_id,
+            academic_term_id=academic_term_id,
+        )
+
+        if actor.role == "admin":
+            return eligible_classes
 
         teacher_membership_id = AcademicAuthorizationService._teacher_membership_id(
             actor
@@ -217,11 +230,20 @@ class AcademicAuthorizationService:
             teacher_membership_id=teacher_membership_id,
         )
 
-        return await AcademicRepository.list_teacher_classes_for_curriculum_subject(
-            db,
-            teacher_membership_id=teacher_membership_id,
-            curriculum_subject_id=curriculum_subject_id,
+        assigned_classes = (
+            await AcademicRepository.list_teacher_classes_for_curriculum_subject(
+                db,
+                teacher_membership_id=teacher_membership_id,
+                curriculum_subject_id=curriculum_subject_id,
+            )
         )
+        assigned_class_ids = {classroom.id for classroom in assigned_classes}
+
+        return [
+            classroom
+            for classroom in eligible_classes
+            if classroom.id in assigned_class_ids
+        ]
 
     @staticmethod
     def _teacher_membership_id(actor: LocalActor) -> UUID:
