@@ -169,14 +169,18 @@ class AuthRepository:
         actor_id: UUID,
         *,
         include_revoked: bool = False,
+        lock: bool = False,
     ) -> list[LocalActorSession]:
-        """Return an actor's sessions, newest first."""
+        """Return an actor's sessions, newest first, optionally row-locked."""
         query = select(LocalActorSession).where(
             LocalActorSession.actor_id == actor_id,
         )
 
         if not include_revoked:
             query = query.where(LocalActorSession.revoked_at.is_(None))
+
+        if lock:
+            query = query.with_for_update(of=LocalActorSession)
 
         result = await db.execute(query.order_by(LocalActorSession.created_at.desc()))
         return list(result.scalars().all())
@@ -186,7 +190,7 @@ class AuthRepository:
         db: AsyncSession,
         actor_session: LocalActorSession,
     ) -> LocalActorSession:
-        """Attach an actor session and flush pending changes."""
+        """Attach an actor session to the unit of work and flush changes."""
         db.add(actor_session)
         await db.flush()
         return actor_session
@@ -241,14 +245,18 @@ class AuthRepository:
         session_id: UUID,
         *,
         include_revoked: bool = False,
+        lock: bool = False,
     ) -> list[LocalRefreshToken]:
-        """Return refresh tokens issued for a session, newest first."""
+        """Return refresh tokens issued for a session, optionally row-locked."""
         query = select(LocalRefreshToken).where(
             LocalRefreshToken.session_id == session_id,
         )
 
         if not include_revoked:
             query = query.where(LocalRefreshToken.revoked_at.is_(None))
+
+        if lock:
+            query = query.with_for_update(of=LocalRefreshToken)
 
         result = await db.execute(query.order_by(LocalRefreshToken.created_at.desc()))
         return list(result.scalars().all())
@@ -258,7 +266,7 @@ class AuthRepository:
         db: AsyncSession,
         refresh_token: LocalRefreshToken,
     ) -> LocalRefreshToken:
-        """Attach a refresh token and flush pending changes."""
+        """Attach a refresh token to the unit of work and flush changes."""
         db.add(refresh_token)
         await db.flush()
         return refresh_token
