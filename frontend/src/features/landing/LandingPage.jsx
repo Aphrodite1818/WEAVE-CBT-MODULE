@@ -1,33 +1,64 @@
-import { Icon } from '../../shared/icons/Icon'
+import { Pictogram } from '../../shared/icons/Pictogram'
 import { WeaveLogo } from '../../shared/ui'
-import { getLocalBrandLogoSrc } from '../../api/branding'
 import './landing.css'
 
-export function LandingPage({ dispatch, branding }) {
-  const schoolLogo = getLocalBrandLogoSrc(branding)
+const benefits = [
+  ['shield', 'Secure & Trusted', 'Your exams, your security'],
+  ['bolt', 'Built for Schools', 'Powerful. Lightweight. Reliable.'],
+  ['chart', 'Offline Ready', 'Keeps exams running'],
+  ['staff', 'Better Outcomes', 'For every learner'],
+]
+
+export function LandingPage({ dispatch }) {
   return (
     <main className="landing-page">
       <header className="landing-header">
-        <div><WeaveLogo /><small>Exams made simple.</small>{schoolLogo && <img className="landing-school-logo" src={schoolLogo} alt={`${branding.school_name} logo`} />}</div>
-        <nav aria-label="Sign in"><button onClick={() => dispatch({ type: 'view', view: 'student-login' })}><Icon name="school" /> Login as Student</button><button className="landing-header__primary" onClick={() => dispatch({ type: 'view', view: 'staff-login' })}><Icon name="staff" /> Login as Staff</button></nav>
+        <div className="landing-brand">
+          <WeaveLogo />
+          <small>Exams made simple.</small>
+        </div>
+        <nav aria-label="Sign in" className="landing-actions">
+          <button className="landing-action landing-action--student" onClick={() => dispatch({ type: 'view', view: 'student-login' })}>
+            <Pictogram name="student" size={22} />
+            Login as Student
+          </button>
+          <button className="landing-action landing-action--staff" onClick={() => dispatch({ type: 'view', view: 'staff-login' })}>
+            <Pictogram name="staff" size={22} />
+            Login as Staff
+          </button>
+        </nav>
       </header>
+
       <section className="landing-hero">
         <div className="landing-hero__copy">
-          <span>W E L C O M E &nbsp; T O</span>
+          <span className="product-kicker">WELCOME TO</span>
           <WeaveLogo size="large" />
           <h1>A smarter way to take exams.</h1>
           <p>Secure. Reliable. Built for Schools.</p>
-          {branding?.is_enabled && branding?.school_name && <small className="landing-school">For {branding.school_name}</small>}
         </div>
-        <img className="landing-hero__image" src="/student-hero.jpg" alt="Student preparing to take an exam with Weave CBT" />
+
+        <div className="landing-hero__visual">
+          <div className="landing-float landing-float--cap" aria-hidden="true"><Pictogram name="student" size={31} /></div>
+          <div className="landing-float landing-float--check" aria-hidden="true"><Pictogram name="check" size={27} /></div>
+          <p className="product-script landing-script" aria-hidden="true">Same dreams.<br />Brighter futures.</p>
+          <img className="landing-hero__image" src="/student-hero.jpg" alt="Student preparing to take an exam with Weave CBT" />
+        </div>
       </section>
+
       <section className="landing-benefits" aria-label="Weave CBT benefits">
-        <div><span><Icon name="shield" size={27} /></span><strong>Secure &amp; Trusted</strong><small>Your exams, your security</small></div>
-        <div><span><Icon name="bolt" size={27} /></span><strong>Built for Schools</strong><small>Powerful. Lightweight. Reliable.</small></div>
-        <div><span><Icon name="results" size={27} /></span><strong>Offline Ready</strong><small>Keeps exams running</small></div>
-        <div><span><Icon name="users" size={27} /></span><strong>Better Outcomes</strong><small>For every learner</small></div>
+        {benefits.map(([icon, title, helper]) => (
+          <div key={title} className="landing-benefit">
+            <span className="landing-benefit__icon"><Pictogram name={icon} size={25} /></span>
+            <strong>{title}</strong>
+            <small>{helper}</small>
+          </div>
+        ))}
       </section>
-      <footer className="landing-footer"><span><b>Weave CBT</b> • Local Today. Brighter Tomorrow.</span><span>More than exams. A brighter tomorrow.</span></footer>
+
+      <footer className="landing-footer">
+        <span><b>Weave CBT</b><i />Local Today. Brighter Tomorrow.</span>
+        <span><i />More than exams. A brighter tomorrow.</span>
+      </footer>
     </main>
   )
 }
