@@ -100,7 +100,7 @@ class StudentAuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.response.student_id, student_id)
         self.assertEqual(result.response.candidate_id, candidate_id)
         self.assertEqual(result.response.exam_id, exam_id)
-        self.assertEqual(result.response.availability, StudentExamAvailability.READY)
+        self.assertEqual(result.response.availability, StudentExamAvailability.READY.value)
         self.assertFalse(result.response.is_makeup)
         self.assertEqual(session.student_id, student_id)
         self.assertEqual(session.candidate_id, candidate_id)
@@ -171,7 +171,7 @@ class StudentAuthTests(unittest.IsolatedAsyncioTestCase):
                 password="stu/2026/001",
             )
 
-        self.assertEqual(result.response.availability, StudentExamAvailability.NO_EXAM)
+        self.assertEqual(result.response.availability, StudentExamAvailability.NO_EXAM.value)
         self.assertEqual(result.response.status_message, NO_EXAM_MESSAGE)
         self.assertEqual(result.response.display_name, "Ada Okafor")
         self.assertIsNone(result.response.candidate_id)
