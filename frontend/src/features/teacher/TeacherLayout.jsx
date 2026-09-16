@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Icon } from '../../shared/icons/Icon'
 import { DashboardAccountMenu, DashboardSchoolIdentity } from '../../shared/ui'
 import { getLocalBrandLogoSrc } from '../../api/branding'
@@ -20,10 +20,20 @@ export function TeacherLayout({ state, dispatch, signOut, children }) {
   const schoolLogoSrc = getLocalBrandLogoSrc(state.branding)
   const nav = [
     ['overview', 'home', 'Overview'],
-    ['question-banks', 'database', 'Question Banks'],
+    ['question-banks', 'bank', 'Question Banks'],
     ['questions', 'fileText', 'Questions'],
     ['exams', 'calendar', 'Exams'],
   ]
+
+  useEffect(() => {
+    const className = 'teacher-dashboard-active'
+    document.documentElement.classList.add(className)
+    document.body.classList.add(className)
+    return () => {
+      document.documentElement.classList.remove(className)
+      document.body.classList.remove(className)
+    }
+  }, [])
 
   return (
     <main className={`teacher-shell${sidebarOpen ? '' : ' teacher-shell--collapsed'}`}>
