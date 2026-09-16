@@ -212,13 +212,16 @@ class Settings(BaseSettings):
     # HTTP / FRONTEND
     # ========================== #
 
-    # Production is expected to serve the frontend and API through
-    # the same local Nginx origin.
-    #
-    # localhost is retained for local Vite development.
+    # Staff and student frontends are separate browser applications.
+    # Their default local development ports are intentionally isolated:
+    # staff -> 5173, student -> 5174.
+    # Production may still place both behind local DNS/reverse-proxy names.
     CORS_ORIGINS: list[str] = Field(
         default_factory=lambda: [
             "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:5174",
+            "http://127.0.0.1:5174",
         ]
     )
 
