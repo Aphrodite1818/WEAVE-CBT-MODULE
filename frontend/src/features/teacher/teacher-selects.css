@@ -56,6 +56,59 @@
   width: 100%;
 }
 
+html.teacher-dashboard-active,
+body.teacher-dashboard-active {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html.teacher-dashboard-active::-webkit-scrollbar,
+body.teacher-dashboard-active::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.teacher-page-title-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.teacher-page-title-icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+  color: rgb(var(--color-primary));
+}
+
+.teacher-page-title-line h1 {
+  margin: 0;
+}
+
+.teacher-question-lifecycle__card {
+  position: fixed !important;
+  z-index: 1200 !important;
+  top: auto;
+  right: auto !important;
+  bottom: auto;
+  max-height: min(320px, calc(100vh - 24px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.teacher-question-lifecycle__card[data-placement="top"] {
+  transform-origin: bottom right;
+}
+
+.teacher-question-lifecycle__card[data-placement="bottom"] {
+  transform-origin: top right;
+}
+
 .teacher-question-lifecycle__card > button.teacher-question-lifecycle__delete {
   margin-top: 8px;
   border: 1px solid rgb(220 38 38 / .16);
