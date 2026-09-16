@@ -27,8 +27,8 @@ export function TeacherWorkspace({ state, dispatch, signOut, gateway = weaveGate
       {state.staff.section === 'overview' && <OverviewPage state={state} dispatch={dispatch} teacherData={teacherData} />}
       {state.staff.section === 'question-banks' && <QuestionBanksPage dispatch={dispatch} teacherData={teacherData} />}
       {state.staff.section === 'bank-detail' && <BankDetailPage state={state} dispatch={dispatch} teacherData={teacherData} />}
-      {state.staff.section === 'questions' && <QuestionsPage dispatch={dispatch} teacherData={teacherData} />}
-      {state.staff.section === 'create-question' && <CreateQuestionPage state={state} dispatch={dispatch} teacherData={teacherData} gateway={gateway} />}
+      {state.staff.section === 'questions' && <QuestionsPage dispatch={dispatch} teacherData={teacherData} gateway={gateway} />}
+      {(state.staff.section === 'create-question' || state.staff.section === 'edit-question') && <CreateQuestionPage state={state} dispatch={dispatch} teacherData={teacherData} gateway={gateway} />}
       {state.staff.section === 'exams' && <ExamsPage state={state} dispatch={dispatch} teacherData={teacherData} />}
       {state.staff.section === 'create-exam' && <CreateExamPage dispatch={dispatch} teacherData={teacherData} gateway={gateway} />}
     </TeacherLayout>
@@ -169,8 +169,10 @@ function normalizeQuestion(question, bank) {
     id: question.id,
     bankId: question.bank_id,
     prompt: question.prompt,
+    instruction: question.instruction,
     type: question.question_type === 'multiple_choice' ? 'Multiple choice' : 'Single choice',
     image: Boolean(question.image_asset_id),
+    imageAssetId: question.image_asset_id,
     status: question.is_active ? 'Ready' : 'Archived',
     updated: `v${question.version}`,
     version: question.version,
