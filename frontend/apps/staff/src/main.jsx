@@ -1,0 +1,15 @@
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
+import '../../../src/styles/global.css'
+import StaffApp from '../../../src/app/StaffApp.jsx'
+import '../../../src/app/theme/branding.css'
+import '../../../src/styles/product-shell.css'
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <BrowserRouter>
+      <StaffApp />
+    </BrowserRouter>
+  </StrictMode>,
+)
