@@ -51,3 +51,23 @@
 .field-stack select {
   width: 100%;
 }
+
+.teacher-question-lifecycle__card > button.teacher-question-lifecycle__delete {
+  margin-top: 8px;
+  border: 1px solid rgb(220 38 38 / .16);
+  background: rgb(254 242 242);
+  color: rgb(185 28 28);
+}
+
+.teacher-question-lifecycle__card > button.teacher-question-lifecycle__delete:hover:not(:disabled) {
+  border-color: rgb(220 38 38 / .3);
+  background: rgb(254 226 226);
+}
+
+.teacher-question-lifecycle__card > button.teacher-question-lifecycle__delete strong {
+  color: rgb(185 28 28);
+}
+
+.teacher-question-lifecycle__card > button.teacher-question-lifecycle__delete small {
+  color: rgb(153 27 27 / .82);
+}
