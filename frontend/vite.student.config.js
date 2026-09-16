@@ -13,7 +13,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: '0.0.0.0',
-    port: 5174,
+    port: 3002,
     strictPort: true,
     fs: {
       allow: [frontendRoot],
@@ -27,7 +27,7 @@ export default defineConfig({
   },
   preview: {
     host: '0.0.0.0',
-    port: 4174,
+    port: 4002,
     strictPort: true,
   },
   build: {
