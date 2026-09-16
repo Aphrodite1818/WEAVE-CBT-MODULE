@@ -7,6 +7,7 @@ const NAV_STATE_KEY = 'weave.cbt.navigation'
 const teacherSections = new Set(['overview', 'question-banks', 'bank-detail', 'questions', 'create-question', 'exams', 'create-exam'])
 const adminSections = new Set(['dashboard', 'exams', 'question-banks', 'students', 'invigilators', 'results', 'reports', 'settings'])
 const setupViews = new Set(['welcome', 'pairing-code', 'server-name', 'pairing', 'paired-success'])
+const applications = new Set(['combined', 'staff', 'student'])
 
 function toStudentResolution(session) {
   return {
@@ -27,7 +28,11 @@ function toStudentResolution(session) {
   }
 }
 
-export function useAppController() {
+export function useAppController({ application = 'combined' } = {}) {
+  if (!applications.has(application)) {
+    throw new Error(`Unsupported Weave CBT frontend application: ${application}`)
+  }
+
   const navigate = useNavigate()
   const location = useLocation()
   const [state, rawDispatch] = useReducer(appReducer, undefined, createInitialState)
@@ -51,14 +56,24 @@ export function useAppController() {
   const routeDispatch = useCallback((action) => {
     rawDispatch(action)
     const current = stateRef.current
-    const nextPath = pathForAction(action, current)
+    const nextPath = pathForAction(action, current, application)
     if (nextPath) navigate(nextPath)
-  }, [navigate])
+  }, [application, navigate])
 
   const restoreSession = useCallback(async () => {
     const savedNavigation = readNavigationState()
-    const routeNavigation = routeToNavigation(routeFromPath(locationPathRef.current))
+    const routeNavigation = routeToNavigation(
+      routeFromPath(locationPathRef.current, application),
+    )
     const navigationTarget = { ...savedNavigation, ...routeNavigation }
+
+    if (application === 'staff') {
+      return restoreStaffSession(rawDispatch, navigationTarget, navigateRef.current)
+    }
+    if (application === 'student') {
+      return restoreStudentSession(rawDispatch, navigationTarget, navigateRef.current)
+    }
+
     const preferredType = navigationTarget?.sessionType
     const restorers = preferredType === 'student'
       ? [restoreStudentSession, restoreStaffSession]
@@ -68,7 +83,7 @@ export function useAppController() {
       if (await restore(rawDispatch, navigationTarget, navigateRef.current)) return true
     }
     return false
-  }, [])
+  }, [application])
 
   const boot = useCallback(async (signal) => {
     rawDispatch({ type: 'bootStart' })
@@ -77,15 +92,33 @@ export function useAppController() {
       .catch(() => null)
     try {
       const status = await weaveGateway.installation.getInstallationStatus({ signal })
-      rawDispatch({ type: 'bootSuccess', status, view: status.configured ? 'boot' : undefined })
+      rawDispatch({
+        type: 'bootSuccess',
+        status,
+        view: status.configured
+          ? 'boot'
+          : application === 'student'
+            ? 'student-unavailable'
+            : undefined,
+      })
       if (status.configured) {
         const restored = await restoreSession()
-        if (!restored) applyRouteToState(routeFromPath(locationPathRef.current), stateRef.current, rawDispatch, navigateRef.current)
+        if (!restored) {
+          applyRouteToState(
+            routeFromPath(locationPathRef.current, application),
+            stateRef.current,
+            rawDispatch,
+            navigateRef.current,
+          )
+        }
+      } else if (application === 'student') {
+        rawDispatch({ type: 'view', view: 'student-unavailable' })
+        navigateRef.current('/', { replace: true })
       } else {
-        const route = routeFromPath(locationPathRef.current)
+        const route = routeFromPath(locationPathRef.current, application)
         if (setupViews.has(route.view)) {
           rawDispatch({ type: 'view', view: route.view })
-          navigateRef.current(pathForView(route.view), { replace: true })
+          navigateRef.current(pathForView(route.view, application), { replace: true })
         } else {
           navigateRef.current('/setup', { replace: true })
         }
@@ -95,7 +128,7 @@ export function useAppController() {
         rawDispatch({ type: 'bootFailure', message: error.userMessage || 'Weave could not reach the local backend.' })
       }
     }
-  }, [restoreSession])
+  }, [application, restoreSession])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -106,7 +139,13 @@ export function useAppController() {
   useEffect(() => {
     if (state.installation.loading) return
     if (!state.installation.configured) {
-      const route = routeFromPath(location.pathname)
+      if (application === 'student') {
+        rawDispatch({ type: 'view', view: 'student-unavailable' })
+        if (normalizePath(location.pathname) !== '/') navigate('/', { replace: true })
+        return
+      }
+
+      const route = routeFromPath(location.pathname, application)
       if (setupViews.has(route.view)) {
         rawDispatch({ type: 'view', view: route.view })
         return
@@ -115,17 +154,24 @@ export function useAppController() {
       navigate('/setup', { replace: true })
       return
     }
-    const route = routeFromPath(location.pathname)
+
+    const route = routeFromPath(location.pathname, application)
     if (setupViews.has(route.view)) {
       rawDispatch({ type: 'view', view: 'landing' })
       navigate('/', { replace: true })
       return
     }
     applyRouteToState(route, stateRef.current, rawDispatch, navigate)
-  }, [location.pathname, navigate, state.installation.configured, state.installation.loading])
+  }, [
+    application,
+    location.pathname,
+    navigate,
+    state.installation.configured,
+    state.installation.loading,
+  ])
 
   const pair = useCallback(async (form) => {
-    if (pairPending.current) return
+    if (application === 'student' || pairPending.current) return
     pairPending.current = true
     rawDispatch({ type: 'setupStart' })
     navigate('/setup/pairing')
@@ -154,9 +200,10 @@ export function useAppController() {
     } finally {
       pairPending.current = false
     }
-  }, [navigate])
+  }, [application, navigate])
 
   const signInStaff = useCallback(async ({ email, password }) => {
+    if (application === 'student') return
     rawDispatch({ type: 'authStart' })
     try {
       const session = await weaveGateway.auth.loginStaff({ email, password })
@@ -183,9 +230,10 @@ export function useAppController() {
     } catch (error) {
       rawDispatch({ type: 'authFailure', message: error.userMessage || 'Staff sign in failed.' })
     }
-  }, [navigate])
+  }, [application, navigate])
 
   const signInStudent = useCallback(async ({ admissionNumber, password }) => {
+    if (application === 'staff') return
     rawDispatch({ type: 'authStart' })
     try {
       const session = await weaveGateway.auth.loginStudent({ admissionNumber, password })
@@ -195,9 +243,11 @@ export function useAppController() {
     } catch (error) {
       rawDispatch({ type: 'authFailure', message: error.userMessage || 'Student sign in failed.' })
     }
-  }, [navigate])
+  }, [application, navigate])
 
   useEffect(() => {
+    if (application === 'staff') return undefined
+
     const waitingState = state.studentResolution?.state
     const shouldPoll = (
       state.session?.type === 'student'
@@ -228,6 +278,7 @@ export function useAppController() {
       window.clearInterval(interval)
     }
   }, [
+    application,
     state.session?.type,
     state.view,
     state.exam.stage,
@@ -246,12 +297,16 @@ export function useAppController() {
   }, [state.view, state.session?.type, state.session?.role, state.staff.section, state.exam.stage])
 
   const signOut = useCallback(async () => {
-    if (state.session?.type === 'student') await weaveGateway.auth.logoutStudent().catch(() => null)
-    if (state.session?.type === 'staff') await weaveGateway.auth.signOutStaff().catch(() => weaveGateway.auth.clearStaffSession())
+    if (state.session?.type === 'student' && application !== 'staff') {
+      await weaveGateway.auth.logoutStudent().catch(() => null)
+    }
+    if (state.session?.type === 'staff' && application !== 'student') {
+      await weaveGateway.auth.signOutStaff().catch(() => weaveGateway.auth.clearStaffSession())
+    }
     clearNavigationState()
     rawDispatch({ type: 'signOut' })
     navigate('/', { replace: true })
-  }, [navigate, state.session])
+  }, [application, navigate, state.session])
 
   return { state, dispatch: routeDispatch, boot, pair, signInStaff, signInStudent, signOut }
 }
@@ -309,7 +364,32 @@ function staffSectionForRole(role, section) {
   return role === 'admin' ? 'dashboard' : 'overview'
 }
 
-function routeFromPath(pathname) {
+function routeFromPath(pathname, application = 'combined') {
+  const route = routeFromPathUnchecked(pathname)
+
+  if (application === 'staff') {
+    if (route.view === 'student-login' || route.sessionType === 'student') {
+      return { view: 'landing' }
+    }
+    return route
+  }
+
+  if (application === 'student') {
+    if (
+      route.view === 'staff-login'
+      || route.sessionType === 'staff'
+      || setupViews.has(route.view)
+      || route.view === 'sync-check'
+      || route.view === 'initial-sync'
+    ) {
+      return { view: 'landing' }
+    }
+  }
+
+  return route
+}
+
+function routeFromPathUnchecked(pathname) {
   const path = normalizePath(pathname)
   if (path === '/') return { view: 'landing' }
   if (path === '/student/login') return { view: 'student-login' }
@@ -381,30 +461,42 @@ function applyRouteToState(route, state, dispatch, navigate) {
   dispatch({ type: 'view', view: route?.view || 'landing' })
 }
 
-function pathForAction(action, state) {
-  if (action.type === 'view') return pathForView(action.view)
-  if (action.type === 'setupStart') return '/setup/pairing'
-  if (action.type === 'setupSuccess') return '/setup/paired-success'
+function pathForAction(action, state, application = 'combined') {
+  if (action.type === 'view') return pathForView(action.view, application)
+  if (action.type === 'setupStart') return application === 'student' ? '/' : '/setup/pairing'
+  if (action.type === 'setupSuccess') return application === 'student' ? '/' : '/setup/paired-success'
   if (action.type === 'signOut') return '/'
-  if (action.type === 'syncChecking') return '/sync/check'
-  if (action.type === 'syncFailure') return '/sync/initial'
-  if (action.type === 'syncStatus') return action.status.bootstrap_completed_at ? pathForStaffState(state) : '/sync/initial'
+  if (action.type === 'syncChecking') return application === 'student' ? '/' : '/sync/check'
+  if (action.type === 'syncFailure') return application === 'student' ? '/' : '/sync/initial'
+  if (action.type === 'syncStatus') {
+    return application === 'student'
+      ? '/'
+      : action.status.bootstrap_completed_at
+        ? pathForStaffState(state)
+        : '/sync/initial'
+  }
   if (action.type === 'staff' && action.patch?.section && state.session?.type === 'staff') {
-    return pathForStaffState({ ...state, staff: { ...state.staff, ...action.patch } })
+    return application === 'student'
+      ? '/'
+      : pathForStaffState({ ...state, staff: { ...state.staff, ...action.patch } })
   }
   if (action.type === 'exam' && action.patch?.stage && state.session?.type === 'student') {
+    if (application === 'staff') return '/'
     return action.patch.stage === 'active' ? '/student/exam' : '/student'
   }
   return null
 }
 
-function pathForView(view) {
+function pathForView(view, application = 'combined') {
   if (view === 'landing') return '/'
-  if (view === 'student-login') return '/student/login'
-  if (view === 'staff-login') return '/staff/login'
-  if (setupViews.has(view)) return view === 'welcome' ? '/setup' : `/setup/${view}`
-  if (view === 'sync-check') return '/sync/check'
-  if (view === 'initial-sync') return '/sync/initial'
+  if (view === 'student-login') return application === 'staff' ? '/' : '/student/login'
+  if (view === 'staff-login') return application === 'student' ? '/' : '/staff/login'
+  if (setupViews.has(view)) {
+    if (application === 'student') return '/'
+    return view === 'welcome' ? '/setup' : `/setup/${view}`
+  }
+  if (view === 'sync-check') return application === 'student' ? '/' : '/sync/check'
+  if (view === 'initial-sync') return application === 'student' ? '/' : '/sync/initial'
   return null
 }
 
