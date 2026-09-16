@@ -139,14 +139,16 @@ describe('Weave backend integration shell', () => {
     fireEvent.change(screen.getByPlaceholderText(/enter your password/i), { target: { value: 'secret' } })
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
 
-    const sidebar = await screen.findByRole('navigation')
-    expect(within(sidebar).getByRole('button', { name: /question banks/i })).toBeInTheDocument()
+    const sidebar = await screen.findByRole('navigation', { name: /teacher navigation/i })
+    const banksButton = within(sidebar).getByRole('button', { name: /question banks/i })
+    expect(banksButton).toBeInTheDocument()
     expect(within(sidebar).queryByRole('button', { name: /rosters/i })).not.toBeInTheDocument()
+    fireEvent.click(banksButton)
     expect(await screen.findByText(/backend biology bank/i)).toBeInTheDocument()
     expect(screen.queryByText(/biology ca1 bank/i)).not.toBeInTheDocument()
     expect(window.localStorage.getItem('weave.staffAccessToken')).toBe('staff-token')
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/questions/banks/authorable', expect.anything())
-    expect(fetchMock).toHaveBeenCalledWith(`/api/v1/questions/banks/${bankId}/items`, expect.anything())
+    expect(fetchMock).toHaveBeenCalledWith(`/api/v1/questions/banks/${bankId}/items?include_archived=true`, expect.anything())
   })
 
   it('routes an admin into the workspace after a completed backend bootstrap', async () => {
