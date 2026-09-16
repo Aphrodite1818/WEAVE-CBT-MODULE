@@ -1,4 +1,8 @@
-import { weaveRequest } from './client'
+import { queryString, weaveRequest } from './client'
+
+export function listExams(params = {}, options = {}) {
+  return weaveRequest(`/exams${queryString(params)}`, options)
+}
 
 export function getExam(examId, options = {}) {
   return weaveRequest(`/exams/${examId}`, options)
