@@ -4,6 +4,7 @@ export const weaveGateway = {
   installation: weaveApi.installation,
   branding: weaveApi.branding,
   auth: weaveApi.auth,
+  academics: weaveApi.academics,
   attempts: weaveApi.attempts,
   candidates: weaveApi.candidates,
   exams: weaveApi.exams,
