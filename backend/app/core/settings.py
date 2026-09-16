@@ -214,14 +214,14 @@ class Settings(BaseSettings):
 
     # Staff and student frontends are separate browser applications.
     # Their default local development ports are intentionally isolated:
-    # staff -> 5173, student -> 5174.
+    # staff -> 3001, student -> 3002.
     # Production may still place both behind local DNS/reverse-proxy names.
     CORS_ORIGINS: list[str] = Field(
         default_factory=lambda: [
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "http://localhost:5174",
-            "http://127.0.0.1:5174",
+            "http://localhost:3001",
+            "http://127.0.0.1:3001",
+            "http://localhost:3002",
+            "http://127.0.0.1:3002",
         ]
     )
 
