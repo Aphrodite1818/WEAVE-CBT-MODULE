@@ -6,7 +6,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AcademicScopeError
+from app.core.exceptions import AcademicAuthorizationError, AcademicScopeError
 from app.domains.academics.authorization import AcademicAuthorizationService
 from app.domains.academics.eligibility import AcademicEligibilityService
 from app.domains.academics.query_repository import AcademicQueryRepository
@@ -216,10 +216,8 @@ class AcademicQueryService:
         actor: LocalActor,
         active_only: bool = True,
     ) -> list[AssessmentSchemeResponse]:
-        # CurrentLocalActor already guarantees an active local staff actor.
-        # Keep this service defensive when called outside the HTTP dependency graph.
         if not actor.is_active or actor.role not in {"admin", "teacher"}:
-            raise AcademicScopeError(
+            raise AcademicAuthorizationError(
                 "Only active administrators and teachers can read assessment metadata"
             )
 
@@ -238,7 +236,7 @@ class AcademicQueryService:
         active_only: bool = True,
     ) -> list[AssessmentComponentResponse]:
         if not actor.is_active or actor.role not in {"admin", "teacher"}:
-            raise AcademicScopeError(
+            raise AcademicAuthorizationError(
                 "Only active administrators and teachers can read assessment metadata"
             )
 
