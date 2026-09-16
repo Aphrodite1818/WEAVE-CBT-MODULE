@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { appReducer, createInitialState } from './state/appState'
 
 const NAV_STATE_KEY = 'weave.cbt.navigation'
-const teacherSections = new Set(['overview', 'question-banks', 'bank-detail', 'questions', 'create-question', 'exams', 'create-exam'])
+const teacherSections = new Set(['overview', 'question-banks', 'bank-detail', 'questions', 'create-question', 'edit-question', 'exams', 'create-exam'])
 const adminSections = new Set(['dashboard', 'exams', 'question-banks', 'students', 'invigilators', 'results', 'reports', 'settings'])
 const setupViews = new Set(['welcome', 'pairing-code', 'server-name', 'pairing', 'paired-success'])
 const applications = new Set(['combined', 'staff', 'student'])
