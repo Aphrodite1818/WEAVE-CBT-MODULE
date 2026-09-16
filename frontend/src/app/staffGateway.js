@@ -1,3 +1,4 @@
+import * as academics from '../api/academics'
 import * as branding from '../api/branding'
 import * as candidates from '../api/candidates'
 import * as exams from '../api/exams'
@@ -15,6 +16,7 @@ export const staffGateway = {
   installation,
   branding,
   auth: staffAuth,
+  academics,
   attempts: staffAttempts,
   candidates,
   exams,
