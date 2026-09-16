@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AcademicScopeError
 from app.domains.academics.authorization import AcademicAuthorizationService
+from app.domains.academics.eligibility import AcademicEligibilityService
+from app.domains.academics.query_repository import AcademicQueryRepository
 from app.domains.academics.repository import AcademicRepository
 from app.domains.academics.schemas import (
+    AssessmentComponentResponse,
+    AssessmentSchemeResponse,
     AuthorableCurriculumSubjectResponse,
+    EligibleAcademicClassResponse,
     TeacherAssignmentResponse,
 )
 from app.domains.auth.models import LocalActor
@@ -107,33 +114,19 @@ class AcademicQueryService:
             ],
         )
 
-        teachers_by_id = {
-            teacher.id: teacher
-            for teacher in teachers
-        }
-
-        classes_by_id = {
-            classroom.id: classroom
-            for classroom in classes
-        }
-
+        teachers_by_id = {teacher.id: teacher for teacher in teachers}
+        classes_by_id = {classroom.id: classroom for classroom in classes}
         curriculum_subjects_by_id = {
             curriculum_subject.id: curriculum_subject
             for curriculum_subject in curriculum_subjects
         }
-
-        subjects_by_id = {
-            subject.id: subject
-            for subject in subjects
-        }
+        subjects_by_id = {subject.id: subject for subject in subjects}
 
         response: list[TeacherAssignmentResponse] = []
 
         for assignment in assignments:
             teacher = teachers_by_id.get(assignment.teacher_membership_id)
-
             classroom = classes_by_id.get(assignment.class_id)
-
             curriculum_subject = curriculum_subjects_by_id.get(
                 assignment.curriculum_subject_id
             )
@@ -189,3 +182,81 @@ class AcademicQueryService:
             )
 
         return response
+
+    @staticmethod
+    async def list_eligible_classes_for_curriculum_subject(
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        curriculum_subject_id: UUID,
+        academic_term_id: UUID,
+    ) -> list[EligibleAcademicClassResponse]:
+        await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+            db,
+            actor=actor,
+            curriculum_subject_id=curriculum_subject_id,
+            academic_term_id=academic_term_id,
+        )
+
+        classes = await AcademicEligibilityService.list_eligible_classes(
+            db,
+            curriculum_subject_id=curriculum_subject_id,
+            academic_term_id=academic_term_id,
+        )
+
+        return [
+            EligibleAcademicClassResponse.model_validate(classroom)
+            for classroom in classes
+        ]
+
+    @staticmethod
+    async def list_assessment_schemes(
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        active_only: bool = True,
+    ) -> list[AssessmentSchemeResponse]:
+        # CurrentLocalActor already guarantees an active local staff actor.
+        # Keep this service defensive when called outside the HTTP dependency graph.
+        if not actor.is_active or actor.role not in {"admin", "teacher"}:
+            raise AcademicScopeError(
+                "Only active administrators and teachers can read assessment metadata"
+            )
+
+        schemes = await AcademicQueryRepository.list_assessment_schemes(
+            db,
+            active_only=active_only,
+        )
+        return [AssessmentSchemeResponse.model_validate(scheme) for scheme in schemes]
+
+    @staticmethod
+    async def list_assessment_components(
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        assessment_scheme_id: UUID,
+        active_only: bool = True,
+    ) -> list[AssessmentComponentResponse]:
+        if not actor.is_active or actor.role not in {"admin", "teacher"}:
+            raise AcademicScopeError(
+                "Only active administrators and teachers can read assessment metadata"
+            )
+
+        scheme = await AcademicRepository.get_assessment_scheme_by_id(
+            db,
+            scheme_id=assessment_scheme_id,
+        )
+        if scheme is None:
+            raise AcademicScopeError(
+                "Assessment scheme does not exist or is no longer available"
+            )
+
+        components = await AcademicQueryRepository.list_assessment_components(
+            db,
+            assessment_scheme_id=assessment_scheme_id,
+            active_only=active_only,
+        )
+        return [
+            AssessmentComponentResponse.model_validate(component)
+            for component in components
+        ]
