@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domains.questions.models import QuestionType
 
@@ -40,8 +40,15 @@ class QuestionBankResponse(OutputBase):
 
 
 class QuestionOptionCreate(InputBase):
-    text: str = Field(min_length=1)
+    text: str | None = None
+    image_asset_id: UUID | None = None
     is_correct: bool = False
+
+    @model_validator(mode="after")
+    def require_content(self) -> "QuestionOptionCreate":
+        if not self.text and self.image_asset_id is None:
+            raise ValueError("An answer option must include text, an image, or both")
+        return self
 
 
 class SingleChoiceQuestionCreate(InputBase):
@@ -71,7 +78,8 @@ class QuestionOptionResponse(OutputBase):
     id: UUID
     question_id: UUID
     position: int
-    text: str
+    text: str | None
+    image_asset_id: UUID | None
     is_correct: bool
 
 

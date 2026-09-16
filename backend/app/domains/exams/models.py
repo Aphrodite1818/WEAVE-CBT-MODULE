@@ -745,7 +745,13 @@ class ExamQuestionOption(Base):
 
     position: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    text: Mapped[str] = mapped_column(Text, nullable=False)
+    text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    image_asset_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("media_assets.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
 
     is_correct: Mapped[bool] = mapped_column(
         Boolean,
@@ -763,6 +769,10 @@ class ExamQuestionOption(Base):
         CheckConstraint(
             "position >= 1",
             name="ck_exam_question_options_position_positive",
+        ),
+        CheckConstraint(
+            "text IS NOT NULL OR image_asset_id IS NOT NULL",
+            name="ck_exam_question_options_content_required",
         ),
         Index(
             "ix_exam_question_options_question_position",

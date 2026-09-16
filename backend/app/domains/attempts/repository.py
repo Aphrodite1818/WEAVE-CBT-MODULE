@@ -25,6 +25,8 @@ from app.domains.attempts.models import (
     ExamAttempt,
 )
 from app.domains.candidates.models import ExamCandidate
+from app.domains.exams.models import ExamQuestionOption
+from app.domains.questions.models import QuestionOption
 
 
 class AttemptRepository:
@@ -271,13 +273,54 @@ class AttemptRepository:
         return int(value or 0)
 
     @staticmethod
+    async def _hydrate_option_media(
+        db: AsyncSession,
+        rows: list[AttemptOptionAllocation],
+    ) -> None:
+        exam_option_ids = [
+            row.exam_question_option_id
+            for row in rows
+            if row.exam_question_option_id is not None
+        ]
+        source_option_ids = [
+            row.source_question_option_id
+            for row in rows
+            if row.source_question_option_id is not None
+        ]
+
+        exam_media: dict[UUID, UUID | None] = {}
+        if exam_option_ids:
+            exam_rows = (
+                await db.execute(
+                    select(ExamQuestionOption).where(
+                        ExamQuestionOption.id.in_(exam_option_ids)
+                    )
+                )
+            ).scalars().all()
+            exam_media = {row.id: row.image_asset_id for row in exam_rows}
+
+        source_media: dict[UUID, UUID | None] = {}
+        if source_option_ids:
+            source_rows = (
+                await db.execute(
+                    select(QuestionOption).where(QuestionOption.id.in_(source_option_ids))
+                )
+            ).scalars().all()
+            source_media = {row.id: row.image_asset_id for row in source_rows}
+
+        for row in rows:
+            if row.exam_question_option_id is not None:
+                row.image_asset_id = exam_media.get(row.exam_question_option_id)
+            elif row.source_question_option_id is not None:
+                row.image_asset_id = source_media.get(row.source_question_option_id)
+
+    @staticmethod
     async def add_option_allocation(
         db: AsyncSession,
         allocation: AttemptOptionAllocation,
     ) -> AttemptOptionAllocation:
-        db.add(allocation)
-        await db.flush()
-        return allocation
+        rows = await AttemptRepository.add_option_allocations(db, [allocation])
+        return rows[0]
 
     @staticmethod
     async def add_option_allocations(
@@ -286,6 +329,7 @@ class AttemptRepository:
     ) -> list[AttemptOptionAllocation]:
         rows = list(allocations)
         if rows:
+            await AttemptRepository._hydrate_option_media(db, rows)
             db.add_all(rows)
             await db.flush()
         return rows

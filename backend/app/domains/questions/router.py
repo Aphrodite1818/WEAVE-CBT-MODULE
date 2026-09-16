@@ -402,6 +402,37 @@ async def get_question_image(
     )
 
 
+@router.get("/{question_id}/options/{option_id}/image")
+async def get_question_option_image(
+    question_id: UUID,
+    option_id: UUID,
+    db: DbSession,
+    actor: CurrentLocalActor,
+) -> Response:
+    try:
+        option = await QuestionService.get_actor_question_option(
+            db,
+            actor=actor,
+            question_id=question_id,
+            option_id=option_id,
+        )
+    except (AcademicAuthorizationError, AcademicScopeError, ValueError) as exc:
+        raise _domain_http_error(exc) from exc
+
+    if option.image_asset_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Question option does not have an image.",
+        )
+
+    content = await MediaService.load_asset_content(db, asset_id=option.image_asset_id)
+    return Response(
+        content=content.data,
+        media_type=content.mime_type,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @router.patch(
     "/{question_id}",
     response_model=QuestionResponse,

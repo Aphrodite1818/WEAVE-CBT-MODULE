@@ -7,9 +7,10 @@ from uuid import UUID
 from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domains.exams.models import ExamQuestion
+from app.domains.attempts.models import AttemptOptionAllocation, AttemptQuestionAllocation
+from app.domains.exams.models import ExamQuestion, ExamQuestionOption
 from app.domains.media.models import MediaAsset
-from app.domains.questions.models import Question
+from app.domains.questions.models import Question, QuestionOption
 
 
 class MediaRepository:
@@ -48,24 +49,57 @@ class MediaRepository:
         return result.scalar_one_or_none()
 
     @staticmethod
+    async def _exists_reference(
+        db: AsyncSession,
+        predicate,
+    ) -> bool:
+        result = await db.execute(select(exists().where(predicate)))
+        return bool(result.scalar())
+
+    @staticmethod
     async def is_referenced_by_question(
         db: AsyncSession,
         asset_id: UUID,
     ) -> bool:
-        result = await db.execute(
-            select(exists().where(Question.image_asset_id == asset_id))
+        if await MediaRepository._exists_reference(
+            db,
+            Question.image_asset_id == asset_id,
+        ):
+            return True
+        return await MediaRepository._exists_reference(
+            db,
+            QuestionOption.image_asset_id == asset_id,
         )
-        return bool(result.scalar())
 
     @staticmethod
     async def is_referenced_by_exam_question(
         db: AsyncSession,
         asset_id: UUID,
     ) -> bool:
-        result = await db.execute(
-            select(exists().where(ExamQuestion.image_asset_id == asset_id))
+        if await MediaRepository._exists_reference(
+            db,
+            ExamQuestion.image_asset_id == asset_id,
+        ):
+            return True
+        return await MediaRepository._exists_reference(
+            db,
+            ExamQuestionOption.image_asset_id == asset_id,
         )
-        return bool(result.scalar())
+
+    @staticmethod
+    async def is_referenced_by_attempt_question(
+        db: AsyncSession,
+        asset_id: UUID,
+    ) -> bool:
+        if await MediaRepository._exists_reference(
+            db,
+            AttemptQuestionAllocation.image_asset_id == asset_id,
+        ):
+            return True
+        return await MediaRepository._exists_reference(
+            db,
+            AttemptOptionAllocation.image_asset_id == asset_id,
+        )
 
     @staticmethod
     async def is_referenced(
@@ -74,7 +108,9 @@ class MediaRepository:
     ) -> bool:
         if await MediaRepository.is_referenced_by_question(db, asset_id):
             return True
-        return await MediaRepository.is_referenced_by_exam_question(db, asset_id)
+        if await MediaRepository.is_referenced_by_exam_question(db, asset_id):
+            return True
+        return await MediaRepository.is_referenced_by_attempt_question(db, asset_id)
 
     @staticmethod
     async def delete_asset(

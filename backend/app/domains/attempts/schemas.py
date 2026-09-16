@@ -22,7 +22,8 @@ class OutputBase(BaseModel):
 class AttemptOptionResponse(OutputBase):
     id: UUID
     position: int
-    text: str
+    text: str | None
+    image_asset_id: UUID | None = None
 
 
 class AttemptQuestionResponse(OutputBase):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -74,22 +75,25 @@ def _normalize_and_validate_options(
     options: list[QuestionOptionCreate],
     *,
     question_type: QuestionType,
-) -> list[tuple[str, bool]]:
+) -> list[tuple[str | None, UUID | None, bool]]:
     if len(options) < 2:
         raise ValueError("A question must have at least two options")
 
-    normalized: list[tuple[str, bool]] = []
+    normalized: list[tuple[str | None, UUID | None, bool]] = []
     for option in options:
-        text = _normalize_required_text(option.text)
-        if text is None:
-            raise ValueError("Question options cannot be empty")
-        normalized.append((text, option.is_correct))
+        text = _normalize_optional_text(option.text)
+        if text is None and option.image_asset_id is None:
+            raise ValueError("Question options must include text, an image, or both")
+        normalized.append((text, option.image_asset_id, option.is_correct))
 
-    comparable = [text.casefold() for text, _ in normalized]
+    comparable = [
+        (text.casefold() if text is not None else None, image_asset_id)
+        for text, image_asset_id, _ in normalized
+    ]
     if len(comparable) != len(set(comparable)):
         raise ValueError("Question options must be unique")
 
-    correct_count = sum(1 for _, is_correct in normalized if is_correct)
+    correct_count = sum(1 for _, _, is_correct in normalized if is_correct)
 
     if question_type == QuestionType.SINGLE_CHOICE and correct_count != 1:
         raise ValueError(
@@ -109,26 +113,53 @@ def _normalize_and_validate_options(
     return normalized
 
 
-async def _resolve_new_question_image(
+async def _resolve_new_media_asset(
     db: AsyncSession,
     *,
     actor: LocalActor,
     image_asset_id: UUID,
+    label: str,
 ) -> UUID:
     # Lock the immutable asset so cleanup cannot delete it between validation
-    # and the Question FK write in this transaction.
+    # and the owning domain FK write in this transaction.
     asset = await MediaRepository.get_asset_by_id(
         db,
         image_asset_id,
         lock=True,
     )
     if asset is None:
-        raise ValueError("Question image does not exist")
+        raise ValueError(f"{label} does not exist")
     if asset.created_by_actor_id != actor.id:
-        raise ValueError(
-            "New question image must have been uploaded by the current actor"
-        )
+        raise ValueError(f"New {label.lower()} must have been uploaded by the current actor")
     return asset.id
+
+
+async def _resolve_new_question_image(
+    db: AsyncSession,
+    *,
+    actor: LocalActor,
+    image_asset_id: UUID,
+) -> UUID:
+    return await _resolve_new_media_asset(
+        db,
+        actor=actor,
+        image_asset_id=image_asset_id,
+        label="Question image",
+    )
+
+
+async def _resolve_new_option_image(
+    db: AsyncSession,
+    *,
+    actor: LocalActor,
+    image_asset_id: UUID,
+) -> UUID:
+    return await _resolve_new_media_asset(
+        db,
+        actor=actor,
+        image_asset_id=image_asset_id,
+        label="Answer option image",
+    )
 
 
 async def _resolve_updated_question_image(
@@ -156,6 +187,63 @@ async def _resolve_updated_question_image(
         actor=actor,
         image_asset_id=requested_image_asset_id,
     )
+
+
+async def _resolve_created_option_images(
+    db: AsyncSession,
+    *,
+    actor: LocalActor,
+    normalized_options: list[tuple[str | None, UUID | None, bool]],
+) -> list[tuple[str | None, UUID | None, bool]]:
+    resolved: list[tuple[str | None, UUID | None, bool]] = []
+    for text, image_asset_id, is_correct in normalized_options:
+        if image_asset_id is not None:
+            image_asset_id = await _resolve_new_option_image(
+                db,
+                actor=actor,
+                image_asset_id=image_asset_id,
+            )
+        resolved.append((text, image_asset_id, is_correct))
+    return resolved
+
+
+async def _resolve_updated_option_images(
+    db: AsyncSession,
+    *,
+    actor: LocalActor,
+    normalized_options: list[tuple[str | None, UUID | None, bool]],
+    current_options: list[QuestionOption],
+) -> list[tuple[str | None, UUID | None, bool]]:
+    current_image_ids = {
+        option.image_asset_id
+        for option in current_options
+        if option.image_asset_id is not None
+    }
+    resolved: list[tuple[str | None, UUID | None, bool]] = []
+    for text, image_asset_id, is_correct in normalized_options:
+        if image_asset_id is not None and image_asset_id not in current_image_ids:
+            image_asset_id = await _resolve_new_option_image(
+                db,
+                actor=actor,
+                image_asset_id=image_asset_id,
+            )
+        resolved.append((text, image_asset_id, is_correct))
+    return resolved
+
+
+async def _cleanup_unreferenced_media(
+    db: AsyncSession,
+    *,
+    asset_ids: Iterable[UUID | None],
+    log_context: str,
+) -> None:
+    for asset_id in {asset_id for asset_id in asset_ids if asset_id is not None}:
+        try:
+            await MediaService.delete_unreferenced_asset(db, asset_id=asset_id)
+        except ValueError:
+            pass
+        except Exception:
+            logger.exception("Failed to clean up %s media asset %s", log_context, asset_id)
 
 
 class QuestionService:
@@ -469,6 +557,11 @@ class QuestionService:
             options,
             question_type=question_type,
         )
+        normalized_options = await _resolve_created_option_images(
+            db,
+            actor=actor,
+            normalized_options=normalized_options,
+        )
 
         question = Question(
             bank_id=bank.id,
@@ -490,9 +583,10 @@ class QuestionService:
                     question_id=question.id,
                     position=position,
                     text=text,
+                    image_asset_id=option_image_asset_id,
                     is_correct=is_correct,
                 )
-                for position, (text, is_correct) in enumerate(
+                for position, (text, option_image_asset_id, is_correct) in enumerate(
                     normalized_options,
                     start=1,
                 )
@@ -549,6 +643,24 @@ class QuestionService:
         return question
 
     @staticmethod
+    async def get_actor_question_option(
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        question_id: UUID,
+        option_id: UUID,
+    ) -> QuestionOption:
+        question = await QuestionService.get_actor_question(
+            db,
+            actor=actor,
+            question_id=question_id,
+        )
+        option = await QuestionRepository.get_option_by_id(db, option_id)
+        if option is None or option.question_id != question.id:
+            raise ValueError("Question option does not exist")
+        return option
+
+    @staticmethod
     async def update_question(
         db: AsyncSession,
         *,
@@ -582,6 +694,8 @@ class QuestionService:
         fields = payload.model_fields_set
         changed = False
         old_image_asset_id = question.image_asset_id
+        old_option_image_ids: set[UUID] = set()
+        next_option_image_ids: set[UUID] = set()
 
         if "prompt" in fields:
             if payload.prompt is None:
@@ -610,21 +724,38 @@ class QuestionService:
                 question.image_asset_id = next_image_id
                 changed = True
 
-        normalized_options: list[tuple[str, bool]] | None = None
+        normalized_options: list[tuple[str | None, UUID | None, bool]] | None = None
         options_changed = False
         if "options" in fields:
             if payload.options is None:
                 raise ValueError("Question options cannot be null")
-            normalized_options = _normalize_and_validate_options(
-                payload.options,
-                question_type=question.question_type,
-            )
             current_options = await QuestionRepository.list_options_for_question(
                 db,
                 question.id,
             )
+            old_option_image_ids = {
+                option.image_asset_id
+                for option in current_options
+                if option.image_asset_id is not None
+            }
+            normalized_options = _normalize_and_validate_options(
+                payload.options,
+                question_type=question.question_type,
+            )
+            normalized_options = await _resolve_updated_option_images(
+                db,
+                actor=actor,
+                normalized_options=normalized_options,
+                current_options=current_options,
+            )
+            next_option_image_ids = {
+                image_asset_id
+                for _, image_asset_id, _ in normalized_options
+                if image_asset_id is not None
+            }
             current_values = [
-                (option.text, option.is_correct) for option in current_options
+                (option.text, option.image_asset_id, option.is_correct)
+                for option in current_options
             ]
             if normalized_options != current_values:
                 options_changed = True
@@ -647,9 +778,10 @@ class QuestionService:
                         question_id=question.id,
                         position=position,
                         text=text,
+                        image_asset_id=option_image_asset_id,
                         is_correct=is_correct,
                     )
-                    for position, (text, is_correct) in enumerate(
+                    for position, (text, option_image_asset_id, is_correct) in enumerate(
                         normalized_options,
                         start=1,
                     )
@@ -658,22 +790,15 @@ class QuestionService:
 
         await db.commit()
 
-        if (
-            old_image_asset_id is not None
-            and old_image_asset_id != question.image_asset_id
-        ):
-            try:
-                await MediaService.delete_unreferenced_asset(
-                    db,
-                    asset_id=old_image_asset_id,
-                )
-            except ValueError:
-                pass
-            except Exception:
-                logger.exception(
-                    "Failed to clean up replaced question image %s",
-                    old_image_asset_id,
-                )
+        cleanup_ids: set[UUID] = set()
+        if old_image_asset_id is not None and old_image_asset_id != question.image_asset_id:
+            cleanup_ids.add(old_image_asset_id)
+        cleanup_ids.update(old_option_image_ids - next_option_image_ids)
+        await _cleanup_unreferenced_media(
+            db,
+            asset_ids=cleanup_ids,
+            log_context=f"updated question {question.id}",
+        )
 
         return question
 
@@ -774,20 +899,20 @@ class QuestionService:
                 "A question already used by an exam cannot be deleted; archive it instead"
             )
 
-        image_asset_id = question.image_asset_id
+        options = await QuestionRepository.list_options_for_question(db, question.id)
+        media_asset_ids = {
+            option.image_asset_id
+            for option in options
+            if option.image_asset_id is not None
+        }
+        if question.image_asset_id is not None:
+            media_asset_ids.add(question.image_asset_id)
+
         await QuestionRepository.delete_question(db, question)
         await db.commit()
 
-        if image_asset_id is not None:
-            try:
-                await MediaService.delete_unreferenced_asset(
-                    db,
-                    asset_id=image_asset_id,
-                )
-            except ValueError:
-                pass
-            except Exception:
-                logger.exception(
-                    "Failed to clean up media for deleted question %s",
-                    question_id,
-                )
+        await _cleanup_unreferenced_media(
+            db,
+            asset_ids=media_asset_ids,
+            log_context=f"deleted question {question_id}",
+        )

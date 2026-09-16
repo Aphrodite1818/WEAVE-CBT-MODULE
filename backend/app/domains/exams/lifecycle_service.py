@@ -410,10 +410,15 @@ class ExamLifecycleServiceMixin:
                     "the examination can be sealed"
                 )
 
-            comparable_text = [
-                option.text.strip().casefold() for option in question_options
-            ]
-            if len(comparable_text) != len(set(comparable_text)):
+            comparable_content: list[tuple[str | None, UUID | None]] = []
+            for option in question_options:
+                normalized_text = option.text.strip().casefold() if option.text else None
+                if normalized_text is None and option.image_asset_id is None:
+                    raise ValueError(
+                        "Every examination answer option must contain text, an image, or both"
+                    )
+                comparable_content.append((normalized_text, option.image_asset_id))
+            if len(comparable_content) != len(set(comparable_content)):
                 raise ValueError(
                     "Question options must be unique before the examination can be sealed"
                 )
@@ -609,6 +614,7 @@ class ExamLifecycleServiceMixin:
                             exam_question_id=frozen_question.id,
                             position=source_option.position,
                             text=source_option.text,
+                            image_asset_id=source_option.image_asset_id,
                             is_correct=source_option.is_correct,
                         )
                     )

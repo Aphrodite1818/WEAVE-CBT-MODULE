@@ -225,6 +225,15 @@ class QuestionRepository:
         return rows
 
     @staticmethod
+    async def get_option_by_id(
+        db: AsyncSession,
+        option_id: UUID,
+    ) -> QuestionOption | None:
+        return (
+            await db.execute(select(QuestionOption).where(QuestionOption.id == option_id))
+        ).scalar_one_or_none()
+
+    @staticmethod
     async def list_options_for_question(
         db: AsyncSession,
         question_id: UUID,

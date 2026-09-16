@@ -117,7 +117,10 @@ class QuestionOption(Base):
         ForeignKey("questions.id", ondelete="CASCADE"), nullable=False, index=True
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
-    text: Mapped[str] = mapped_column(Text, nullable=False)
+    text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_asset_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("media_assets.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     is_correct: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
@@ -130,5 +133,9 @@ class QuestionOption(Base):
             "question_id", "position", name="uq_question_options_question_position"
         ),
         CheckConstraint("position >= 1", name="ck_question_options_position_positive"),
+        CheckConstraint(
+            "text IS NOT NULL OR image_asset_id IS NOT NULL",
+            name="ck_question_options_content_required",
+        ),
         Index("ix_question_options_question_position", "question_id", "position"),
     )

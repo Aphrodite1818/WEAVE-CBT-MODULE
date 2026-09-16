@@ -329,7 +329,12 @@ class AttemptOptionAllocation(Base):
         index=True,
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
-    text: Mapped[str] = mapped_column(Text, nullable=False)
+    text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_asset_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("media_assets.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     is_correct: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=sql_text("false")
     )
@@ -346,6 +351,10 @@ class AttemptOptionAllocation(Base):
             "OR (exam_question_option_id IS NULL "
             "AND source_question_option_id IS NOT NULL)",
             name="ck_attempt_options_exactly_one_source",
+        ),
+        CheckConstraint(
+            "text IS NOT NULL OR image_asset_id IS NOT NULL",
+            name="ck_attempt_options_content_required",
         ),
         CheckConstraint("position >= 1", name="ck_attempt_options_position_positive"),
         Index(

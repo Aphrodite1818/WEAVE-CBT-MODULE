@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from app.core.database import DbSession
 from app.core.exceptions import AcademicAuthorizationError
 from app.domains.attempts.models import AttemptStatus
 from app.domains.attempts.query_schemas import AttemptMonitorListResponse
 from app.domains.attempts.query_service import AttemptQueryService
+from app.domains.attempts.repository import AttemptRepository
 from app.domains.attempts.schemas import (
     AttemptAnswerMutation,
     AttemptAnswerResponse,
@@ -23,6 +24,7 @@ from app.domains.attempts.service import AttemptService, AttemptStateError
 from app.domains.auth.dependencies import CurrentLocalActor
 from app.domains.auth.student_dependencies import CurrentStudentExamSession
 from app.domains.exams.exceptions import ExamNotFound, ExamStateError
+from app.domains.media.service import MediaService
 
 
 student_router = APIRouter(prefix="/student/attempts", tags=["Student Attempts"])
@@ -40,13 +42,42 @@ def _http_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
+async def _attach_option_media(
+    db: DbSession,
+    attempt: AttemptResponse,
+) -> AttemptResponse:
+    """Attach immutable option-media snapshot IDs without changing service policy."""
+
+    question_ids = [question.id for question in attempt.questions]
+    allocations = await AttemptRepository.list_option_allocations_for_questions(
+        db,
+        question_ids,
+    )
+    media_by_option_id = {
+        allocation.id: allocation.image_asset_id for allocation in allocations
+    }
+    for question in attempt.questions:
+        for option in question.options:
+            option.image_asset_id = media_by_option_id.get(option.id)
+    return attempt
+
+
+async def _load_current_attempt(
+    db: DbSession,
+    context: CurrentStudentExamSession,
+) -> AttemptResponse:
+    attempt = await AttemptService.get_current(db, context=context)
+    return await _attach_option_media(db, attempt)
+
+
 @student_router.post("/current/start", response_model=AttemptResponse)
 async def start_current_attempt(
     db: DbSession,
     context: CurrentStudentExamSession,
 ) -> AttemptResponse:
     try:
-        return await AttemptService.start_current(db, context=context)
+        attempt = await AttemptService.start_current(db, context=context)
+        return await _attach_option_media(db, attempt)
     except (AttemptStateError, ExamNotFound, ExamStateError, ValueError) as exc:
         raise _http_error(exc) from exc
 
@@ -57,9 +88,89 @@ async def get_current_attempt(
     context: CurrentStudentExamSession,
 ) -> AttemptResponse:
     try:
-        return await AttemptService.get_current(db, context=context)
+        return await _load_current_attempt(db, context)
     except (AttemptStateError, ExamNotFound, ExamStateError, ValueError) as exc:
         raise _http_error(exc) from exc
+
+
+@student_router.get("/current/questions/{attempt_question_id}/image")
+async def get_current_question_image(
+    attempt_question_id: UUID,
+    db: DbSession,
+    context: CurrentStudentExamSession,
+) -> Response:
+    try:
+        attempt = await _load_current_attempt(db, context)
+    except (AttemptStateError, ExamNotFound, ExamStateError, ValueError) as exc:
+        raise _http_error(exc) from exc
+
+    question = next(
+        (item for item in attempt.questions if item.id == attempt_question_id),
+        None,
+    )
+    if question is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Question does not belong to this attempt.",
+        )
+    if question.image_asset_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Question does not have an image.",
+        )
+
+    content = await MediaService.load_asset_content(db, asset_id=question.image_asset_id)
+    return Response(
+        content=content.data,
+        media_type=content.mime_type,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@student_router.get(
+    "/current/questions/{attempt_question_id}/options/{attempt_option_id}/image"
+)
+async def get_current_option_image(
+    attempt_question_id: UUID,
+    attempt_option_id: UUID,
+    db: DbSession,
+    context: CurrentStudentExamSession,
+) -> Response:
+    try:
+        attempt = await _load_current_attempt(db, context)
+    except (AttemptStateError, ExamNotFound, ExamStateError, ValueError) as exc:
+        raise _http_error(exc) from exc
+
+    question = next(
+        (item for item in attempt.questions if item.id == attempt_question_id),
+        None,
+    )
+    if question is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Question does not belong to this attempt.",
+        )
+    option = next(
+        (item for item in question.options if item.id == attempt_option_id),
+        None,
+    )
+    if option is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Answer option does not belong to this question.",
+        )
+    if option.image_asset_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Answer option does not have an image.",
+        )
+
+    content = await MediaService.load_asset_content(db, asset_id=option.image_asset_id)
+    return Response(
+        content=content.data,
+        media_type=content.mime_type,
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @student_router.put(
