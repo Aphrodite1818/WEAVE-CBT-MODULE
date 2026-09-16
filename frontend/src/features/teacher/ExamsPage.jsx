@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { RiAddLine, RiCalendarTodoLine, RiSearchLine } from '@remixicon/react'
+import { Icon } from '../../shared/icons/Icon'
 import { Notice, StatusBadge } from '../../shared/ui'
 
 const PAGE_SIZE = 10
@@ -62,7 +63,10 @@ export function ExamsPage({ state, dispatch, teacherData }) {
     <div className="teacher-reference-page">
       <div className="teacher-page-heading">
         <div>
-          <h1>Examinations</h1>
+          <div className="teacher-page-title-line">
+            <span className="teacher-page-title-icon"><Icon name="calendar" size={27} /></span>
+            <h1>Examinations</h1>
+          </div>
           <p>Create and track the examinations visible to you through your teaching or invigilation access.</p>
         </div>
         <button className="teacher-primary-action" type="button" onClick={() => dispatch({ type: 'staff', patch: { section: 'create-exam' } })}>
@@ -242,7 +246,10 @@ export function CreateExamPage({ dispatch, teacherData, gateway }) {
       <div className="teacher-page-heading">
         <div>
           <button className="text-button" type="button" onClick={() => dispatch({ type: 'staff', patch: { section: 'exams' } })}>Back to exams</button>
-          <h1>Create Examination</h1>
+          <div className="teacher-page-title-line">
+            <span className="teacher-page-title-icon"><Icon name="calendar" size={27} /></span>
+            <h1>Create Examination</h1>
+          </div>
           <p>Create a draft paper from the academic context already synchronized from Weave.</p>
         </div>
       </div>
