@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../../shared/icons/Icon'
 import { getLocalBrandLogoSrc } from '../../api/branding'
 
@@ -9,18 +9,39 @@ function teacherNavActive(current, section) {
   return current === section
 }
 
+const sectionTitles = {
+  overview: 'Overview',
+  'question-banks': 'Question Banks',
+  'bank-detail': 'Question Banks',
+  questions: 'Questions',
+  'create-question': 'Questions',
+  exams: 'Exams',
+  'create-exam': 'Exams',
+}
+
 export function TeacherLayout({ state, dispatch, signOut, children }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [accountOpen, setAccountOpen] = useState(false)
+  const accountRef = useRef(null)
   const teacherName = state.session?.actor?.display_name || state.session?.name || 'Teacher'
   const teacherRole = state.session?.actor?.role || 'teacher'
   const schoolName = state.branding?.school_name || state.installation?.status?.tenant_name || 'Weave CBT'
   const serverName = state.installation?.status?.server_name || 'Local node'
+  const currentTitle = sectionTitles[state.staff.section] || 'Teacher Portal'
   const nav = [
     ['overview', 'home', 'Overview'],
     ['question-banks', 'database', 'Question Banks'],
     ['questions', 'fileText', 'Questions'],
     ['exams', 'calendar', 'Exams'],
   ]
+
+  useEffect(() => {
+    const closeMenu = (event) => {
+      if (accountRef.current && !accountRef.current.contains(event.target)) setAccountOpen(false)
+    }
+    document.addEventListener('pointerdown', closeMenu)
+    return () => document.removeEventListener('pointerdown', closeMenu)
+  }, [])
 
   return (
     <main className={`teacher-shell${sidebarOpen ? '' : ' teacher-shell--collapsed'}`}>
@@ -37,26 +58,39 @@ export function TeacherLayout({ state, dispatch, signOut, children }) {
           ))}
         </nav>
       </aside>
+
       <section className="teacher-main">
         <header className="teacher-topbar">
-          <button className="teacher-icon-button teacher-sidebar-toggle" type="button" aria-label={sidebarOpen ? 'Collapse sidebar' : 'Open sidebar'} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>
-            <Icon name={sidebarOpen ? 'back' : 'menu'} size={19} />
-          </button>
-          <label className="teacher-search">
-            <Icon name="search" size={18} />
-            <input type="search" placeholder="Search anything..." />
-          </label>
+          <div className="teacher-topbar__leading">
+            <button className="teacher-icon-button teacher-sidebar-toggle" type="button" aria-label={sidebarOpen ? 'Collapse sidebar' : 'Open sidebar'} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>
+              <Icon name={sidebarOpen ? 'back' : 'menu'} size={19} />
+            </button>
+            <strong className="teacher-topbar__title">{currentTitle}</strong>
+          </div>
+
           <div className="teacher-topbar__actions">
-            <button className="teacher-icon-button" type="button" aria-label="Notifications"><Icon name="bell" size={20} /></button>
-            <div className="teacher-account">
-              <span className="teacher-avatar">{initials(teacherName)}</span>
-              <div><strong>{teacherName}</strong><small>{teacherRole}</small></div>
-              <Icon name="chevronDown" size={18} />
-              <div className="teacher-account__menu">
-                <button type="button"><Icon name="profile" size={17} /> My Profile</button>
-                <button type="button"><Icon name="settings" size={17} /> Account Settings</button>
-                <button type="button" onClick={signOut}><Icon name="logout" size={17} /> Logout</button>
-              </div>
+            <button className="teacher-icon-button" type="button" aria-label="Notifications" title="Notifications will appear here when the notification feed is available">
+              <Icon name="bell" size={20} />
+            </button>
+            <div className="teacher-account" ref={accountRef}>
+              <button
+                className="teacher-account__trigger"
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={accountOpen}
+                onClick={() => setAccountOpen((open) => !open)}
+              >
+                <span className="teacher-avatar">{initials(teacherName)}</span>
+                <span className="teacher-account__identity"><strong>{teacherName}</strong><small>{teacherRole}</small></span>
+                <Icon name="chevronDown" size={18} />
+              </button>
+              {accountOpen && (
+                <div className="teacher-account__menu teacher-account__menu--open" role="menu">
+                  <button type="button" disabled title="Profile management is not available yet"><Icon name="profile" size={17} /> My Profile</button>
+                  <button type="button" disabled title="Account settings are not available yet"><Icon name="settings" size={17} /> Account Settings</button>
+                  <button type="button" onClick={signOut}><Icon name="logout" size={17} /> Logout</button>
+                </div>
+              )}
             </div>
           </div>
         </header>
@@ -67,5 +101,5 @@ export function TeacherLayout({ state, dispatch, signOut, children }) {
 }
 
 function initials(name) {
-  return name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
+  return name.split(' ').filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'T'
 }
