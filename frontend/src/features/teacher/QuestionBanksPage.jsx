@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { RiArrowLeftLine, RiArrowRightLine, RiInformationLine, RiRefreshLine, RiSearchLine, RiStackLine } from '@remixicon/react'
+import { RiArrowLeftLine, RiArrowRightLine, RiInformationLine, RiRefreshLine, RiSearchLine } from '@remixicon/react'
+import { Icon } from '../../shared/icons/Icon'
 import { Notice, PageTitle, StatusBadge } from '../../shared/ui'
 import { QuestionRows } from './components'
 import { statusTone } from './utils'
@@ -36,7 +37,10 @@ export function QuestionBanksPage({ dispatch, teacherData }) {
     <div className="teacher-reference-page">
       <div className="teacher-page-heading teacher-page-heading--with-search">
         <div>
-          <h1>Question Banks</h1>
+          <div className="teacher-page-title-line">
+            <span className="teacher-page-title-icon"><Icon name="bank" size={27} /></span>
+            <h1>Question Banks</h1>
+          </div>
           <p>These are the question banks you are currently authorized to contribute to.</p>
         </div>
         <label className="teacher-search-control">
@@ -50,7 +54,7 @@ export function QuestionBanksPage({ dispatch, teacherData }) {
       {teacherData.loading && <div className="teacher-page-loading">Loading your question banks…</div>}
       {!teacherData.loading && teacherData.banks.length === 0 && (
         <div className="teacher-reference-empty teacher-reference-empty--large">
-          <RiStackLine size={30} aria-hidden="true" />
+          <Icon name="bank" size={30} />
           <div><strong>No authorable question banks</strong><p>Your administrator creates question banks. Banks assigned to your teaching scope will appear here automatically.</p></div>
         </div>
       )}
@@ -58,7 +62,7 @@ export function QuestionBanksPage({ dispatch, teacherData }) {
       <section className="teacher-bank-grid" aria-label="Authorable question banks">
         {banks.map((bank) => (
           <article key={bank.id} className="teacher-bank-card">
-            <span className="teacher-bank-card__icon"><RiStackLine size={22} aria-hidden="true" /></span>
+            <span className="teacher-bank-card__icon"><Icon name="bank" size={22} /></span>
             <div className="teacher-bank-card__body">
               <h2>{bank.name}</h2>
               <p>{bank.description || 'Question bank available for your current teaching assignment.'}</p>
@@ -128,10 +132,13 @@ export function BankDetailPage({ state, dispatch, teacherData }) {
   return (
     <div className="teacher-reference-page teacher-bank-detail">
       <div className="teacher-bank-detail__heading">
-        <PageTitle
-          title={bank.name}
-          subtitle={`${questions.length} ${questions.length === 1 ? 'question' : 'questions'} in this bank`}
-        />
+        <div className="teacher-page-title-line">
+          <span className="teacher-page-title-icon"><Icon name="bank" size={27} /></span>
+          <PageTitle
+            title={bank.name}
+            subtitle={`${questions.length} ${questions.length === 1 ? 'question' : 'questions'} in this bank`}
+          />
+        </div>
         <button className="teacher-bank-detail__back" onClick={() => dispatch({ type: 'staff', patch: { section: 'question-banks' } })}>
           <RiArrowLeftLine size={18} aria-hidden="true" /> Back to question banks
         </button>
