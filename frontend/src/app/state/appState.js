@@ -20,6 +20,8 @@ export const initialExam = {
 export const initialStaff = {
   section: 'overview',
   selectedBankId: '',
+  selectedQuestionId: null,
+  editingQuestion: null,
   teacher: {
     name: 'Teacher',
     shortName: 'Teacher',
