@@ -1,10 +1,54 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { CreateQuestionPage } from '../src/features/teacher/QuestionsPage'
+import { CreateQuestionPage, QuestionsPage } from '../src/features/teacher/QuestionsPage'
 
 const bank = { id: 'bank-1', name: 'Mathematics', count: 0, status: 'Ready' }
 
-describe('Teacher question creation', () => {
+describe('Teacher questions', () => {
+  it('renders question cards and wires edit and lifecycle actions', async () => {
+    const dispatch = vi.fn()
+    const refresh = vi.fn().mockResolvedValue(undefined)
+    const archiveQuestion = vi.fn().mockResolvedValue({})
+    const question = {
+      id: 'question-1',
+      bankId: bank.id,
+      bankName: bank.name,
+      prompt: 'What is 2 + 2?',
+      instruction: null,
+      type: 'Single choice',
+      image: false,
+      status: 'Ready',
+      version: 1,
+      updated: 'v1',
+      options: [],
+    }
+
+    render(
+      <QuestionsPage
+        dispatch={dispatch}
+        teacherData={{ banks: [bank], questions: [question], loading: false, error: '', refresh }}
+        gateway={{ questions: { archiveQuestion, reactivateQuestion: vi.fn() } }}
+      />,
+    )
+
+    expect(screen.getByRole('heading', { name: 'What is 2 + 2?' })).toBeInTheDocument()
+    expect(screen.getByText('Mathematics')).toBeInTheDocument()
+    expect(screen.getByText('Version 1')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /^edit$/i }))
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'staff',
+      patch: { section: 'edit-question', selectedBankId: bank.id, selectedQuestionId: question.id },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /question lifecycle for what is 2 \+ 2/i }))
+    expect(screen.getByRole('dialog', { name: /lifecycle for what is 2 \+ 2/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /archive question/i }))
+
+    await waitFor(() => expect(archiveQuestion).toHaveBeenCalledWith(question.id))
+    expect(refresh).toHaveBeenCalled()
+  })
+
   it('uploads a selected image and sends its asset id with the question payload', async () => {
     const dispatch = vi.fn()
     const refresh = vi.fn().mockResolvedValue(undefined)
@@ -13,9 +57,9 @@ describe('Teacher question creation', () => {
 
     render(
       <CreateQuestionPage
-        state={{ staff: { selectedBankId: bank.id } }}
+        state={{ staff: { section: 'create-question', selectedBankId: bank.id } }}
         dispatch={dispatch}
-        teacherData={{ banks: [bank], refresh }}
+        teacherData={{ banks: [bank], questions: [], refresh }}
         gateway={{
           media: { uploadQuestionImage },
           questions: { createSingleChoiceQuestion, createMultipleChoiceQuestion: vi.fn() },
@@ -42,5 +86,52 @@ describe('Teacher question creation', () => {
     })
     expect(refresh).toHaveBeenCalled()
     expect(dispatch).toHaveBeenCalledWith({ type: 'staff', patch: { section: 'bank-detail', selectedBankId: bank.id } })
+  })
+
+  it('edits an existing question without pretending its type can change', async () => {
+    const dispatch = vi.fn()
+    const refresh = vi.fn().mockResolvedValue(undefined)
+    const updateQuestion = vi.fn().mockResolvedValue({})
+    const question = {
+      id: 'question-1',
+      bankId: bank.id,
+      bankName: bank.name,
+      prompt: 'Original prompt',
+      instruction: 'Choose one answer.',
+      type: 'Single choice',
+      image: false,
+      status: 'Ready',
+      version: 1,
+      updated: 'v1',
+      options: [
+        { text: 'Option A', is_correct: true },
+        { text: 'Option B', is_correct: false },
+      ],
+    }
+
+    render(
+      <CreateQuestionPage
+        state={{ staff: { section: 'edit-question', selectedBankId: bank.id, selectedQuestionId: question.id } }}
+        dispatch={dispatch}
+        teacherData={{ banks: [bank], questions: [question], refresh }}
+        gateway={{ media: { uploadQuestionImage: vi.fn() }, questions: { updateQuestion } }}
+      />,
+    )
+
+    expect(screen.getByText(/question type is fixed after creation/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/question instruction/i)).toHaveValue('Choose one answer.')
+    fireEvent.change(screen.getByLabelText(/question prompt/i), { target: { value: 'Updated prompt' } })
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => expect(updateQuestion).toHaveBeenCalledWith(question.id, {
+      prompt: 'Updated prompt',
+      instruction: 'Choose one answer.',
+      options: [
+        { text: 'Option A', is_correct: true },
+        { text: 'Option B', is_correct: false },
+      ],
+    }))
+    expect(refresh).toHaveBeenCalled()
+    expect(dispatch).toHaveBeenCalledWith({ type: 'staff', patch: { section: 'questions', selectedQuestionId: null } })
   })
 })
