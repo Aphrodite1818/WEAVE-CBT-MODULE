@@ -5,7 +5,7 @@ import { CreateQuestionPage, QuestionsPage } from '../src/features/teacher/Quest
 const bank = { id: 'bank-1', name: 'Mathematics', count: 0, status: 'Ready' }
 
 describe('Teacher questions', () => {
-  it('renders question cards and wires edit and lifecycle actions', async () => {
+  it('renders the question list and wires edit and lifecycle actions', async () => {
     const dispatch = vi.fn()
     const refresh = vi.fn().mockResolvedValue(undefined)
     const archiveQuestion = vi.fn().mockResolvedValue({})
@@ -33,7 +33,7 @@ describe('Teacher questions', () => {
 
     expect(screen.getByRole('heading', { name: 'What is 2 + 2?' })).toBeInTheDocument()
     expect(screen.getAllByText('Mathematics').length).toBeGreaterThan(0)
-    expect(screen.getByText('Version 1')).toBeInTheDocument()
+    expect(screen.getByText('v1')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /^edit$/i }))
     expect(dispatch).toHaveBeenCalledWith({
