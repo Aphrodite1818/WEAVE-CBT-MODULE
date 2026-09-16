@@ -7,6 +7,9 @@ import './questions-page.css'
 const MAX_QUESTION_IMAGE_SIZE = 5 * 1024 * 1024
 const QUESTION_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const PAGE_SIZE = 10
+const LIFECYCLE_POPOVER_WIDTH = 320
+const LIFECYCLE_POPOVER_GAP = 8
+const LIFECYCLE_VIEWPORT_PADDING = 12
 
 export function QuestionsPage({ dispatch, teacherData, gateway }) {
   const [query, setQuery] = useState('')
@@ -14,6 +17,7 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
   const [tab, setTab] = useState('all')
   const [page, setPage] = useState(1)
   const [lifecycleQuestionId, setLifecycleQuestionId] = useState(null)
+  const [lifecyclePosition, setLifecyclePosition] = useState(null)
   const [lifecycleBusyId, setLifecycleBusyId] = useState(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState(null)
   const [lifecycleError, setLifecycleError] = useState('')
@@ -46,27 +50,35 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
     if (page > pageCount) setPage(pageCount)
   }, [page, pageCount])
 
+  const closeLifecycle = () => {
+    setLifecycleQuestionId(null)
+    setLifecyclePosition(null)
+    setDeleteConfirmId(null)
+  }
+
   useEffect(() => {
     if (!lifecycleQuestionId) return undefined
 
     const closeOnOutsideClick = (event) => {
-      if (!lifecycleRef.current?.contains(event.target)) {
-        setLifecycleQuestionId(null)
-        setDeleteConfirmId(null)
-      }
+      if (!lifecycleRef.current?.contains(event.target)) closeLifecycle()
     }
     const closeOnEscape = (event) => {
-      if (event.key === 'Escape') {
-        setLifecycleQuestionId(null)
-        setDeleteConfirmId(null)
-      }
+      if (event.key === 'Escape') closeLifecycle()
+    }
+    const closeOnViewportChange = (event) => {
+      if (lifecycleRef.current?.contains(event.target)) return
+      closeLifecycle()
     }
 
     document.addEventListener('pointerdown', closeOnOutsideClick)
     document.addEventListener('keydown', closeOnEscape)
+    window.addEventListener('resize', closeOnViewportChange)
+    window.addEventListener('scroll', closeOnViewportChange, true)
     return () => {
       document.removeEventListener('pointerdown', closeOnOutsideClick)
       document.removeEventListener('keydown', closeOnEscape)
+      window.removeEventListener('resize', closeOnViewportChange)
+      window.removeEventListener('scroll', closeOnViewportChange, true)
     }
   }, [lifecycleQuestionId])
 
@@ -83,8 +95,7 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
       if (question.status === 'Archived') await gateway.questions.reactivateQuestion(question.id)
       else await gateway.questions.archiveQuestion(question.id)
       await teacherData.refresh()
-      setLifecycleQuestionId(null)
-      setDeleteConfirmId(null)
+      closeLifecycle()
     } catch (error) {
       setLifecycleError(error.userMessage || `Weave could not ${question.status === 'Archived' ? 'reactivate' : 'archive'} this question.`)
     } finally {
@@ -103,8 +114,7 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
     try {
       await gateway.questions.deleteUnusedQuestion(question.id)
       await teacherData.refresh()
-      setLifecycleQuestionId(null)
-      setDeleteConfirmId(null)
+      closeLifecycle()
     } catch (error) {
       setLifecycleError(error.userMessage || 'Weave could not delete this question. Questions already used by an exam must be archived instead.')
     } finally {
@@ -129,11 +139,24 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
     })
   }
 
+  const toggleLifecycle = (question, trigger) => {
+    if (lifecycleQuestionId === question.id) {
+      closeLifecycle()
+      return
+    }
+    setDeleteConfirmId(null)
+    setLifecyclePosition(getLifecyclePopoverPosition(trigger))
+    setLifecycleQuestionId(question.id)
+  }
+
   return (
     <div className="teacher-reference-page teacher-questions-page">
       <div className="teacher-page-heading">
         <div>
-          <h1>Questions</h1>
+          <div className="teacher-page-title-line">
+            <span className="teacher-page-title-icon"><Icon name="fileText" size={27} /></span>
+            <h1>Questions</h1>
+          </div>
           <p>Browse and author questions inside the banks available to your current teaching scope.</p>
         </div>
         <button
@@ -208,17 +231,21 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
                   type="button"
                   className="teacher-question-lifecycle__trigger"
                   aria-label={`Question lifecycle for ${question.prompt}`}
+                  aria-haspopup="dialog"
                   aria-expanded={lifecycleQuestionId === question.id}
-                  onClick={() => {
-                    setDeleteConfirmId(null)
-                    setLifecycleQuestionId((current) => current === question.id ? null : question.id)
-                  }}
+                  onClick={(event) => toggleLifecycle(question, event.currentTarget)}
                 >
                   <RiMore2Line size={20} aria-hidden="true" />
                 </button>
 
-                {lifecycleQuestionId === question.id && (
-                  <div className="teacher-question-lifecycle__card" role="dialog" aria-label={`Lifecycle for ${question.prompt}`}>
+                {lifecycleQuestionId === question.id && lifecyclePosition && (
+                  <div
+                    className="teacher-question-lifecycle__card"
+                    role="dialog"
+                    aria-label={`Lifecycle for ${question.prompt}`}
+                    data-placement={lifecyclePosition.placement}
+                    style={lifecyclePosition.style}
+                  >
                     <div className="teacher-question-lifecycle__heading">
                       <strong>Question lifecycle</strong>
                       <span>{question.status}</span>
@@ -273,6 +300,45 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
 
 function TabButton({ label, value, current, count, onClick }) {
   return <button type="button" className={current === value ? 'active' : ''} onClick={() => onClick(value)}>{label} <span>{count}</span></button>
+}
+
+function getLifecyclePopoverPosition(trigger) {
+  const viewportWidth = typeof window === 'undefined' ? 1280 : window.innerWidth
+  const viewportHeight = typeof window === 'undefined' ? 800 : window.innerHeight
+  const rect = trigger.getBoundingClientRect()
+  const width = Math.min(LIFECYCLE_POPOVER_WIDTH, Math.max(240, viewportWidth - (LIFECYCLE_VIEWPORT_PADDING * 2)))
+  const left = Math.max(
+    LIFECYCLE_VIEWPORT_PADDING,
+    Math.min(rect.right - width, viewportWidth - width - LIFECYCLE_VIEWPORT_PADDING),
+  )
+  const availableBelow = Math.max(0, viewportHeight - rect.bottom - LIFECYCLE_POPOVER_GAP - LIFECYCLE_VIEWPORT_PADDING)
+  const availableAbove = Math.max(0, rect.top - LIFECYCLE_POPOVER_GAP - LIFECYCLE_VIEWPORT_PADDING)
+  const placement = availableBelow < 230 && availableAbove > availableBelow ? 'top' : 'bottom'
+  const maxHeight = Math.max(150, Math.min(320, placement === 'top' ? availableAbove : availableBelow))
+
+  if (placement === 'top') {
+    return {
+      placement,
+      style: {
+        left,
+        width,
+        maxHeight,
+        bottom: viewportHeight - rect.top + LIFECYCLE_POPOVER_GAP,
+        top: 'auto',
+      },
+    }
+  }
+
+  return {
+    placement,
+    style: {
+      left,
+      width,
+      maxHeight,
+      top: rect.bottom + LIFECYCLE_POPOVER_GAP,
+      bottom: 'auto',
+    },
+  }
 }
 
 export function CreateQuestionPage({ state, dispatch, teacherData, gateway }) {
