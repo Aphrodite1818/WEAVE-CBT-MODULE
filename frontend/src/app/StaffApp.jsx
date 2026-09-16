@@ -5,13 +5,16 @@ import { SetupFlow } from '../features/setup/SetupFlow'
 import { isSetupView } from '../features/setup/setupViews'
 import { InitialSyncPage } from '../features/sync/InitialSyncPage'
 import { TeacherWorkspace } from '../features/teacher/TeacherWorkspace'
-import { buildBrandingThemeStyle, createDefaultBranding } from './theme/branding'
-import { weaveGateway } from './gateway'
 import { ProductLoadingScreen } from './ProductLoadingScreen'
+import { staffGateway } from './staffGateway'
+import { buildBrandingThemeStyle, createDefaultBranding } from './theme/branding'
 import { useAppController } from './useAppController'
 
 export default function StaffApp() {
-  const { state, dispatch, boot, pair, signInStaff, signOut } = useAppController({ application: 'staff' })
+  const { state, dispatch, boot, pair, signInStaff, signOut } = useAppController({
+    application: 'staff',
+    gateway: staffGateway,
+  })
   const branding = state.installation.configured ? state.branding : createDefaultBranding()
   const currentRole = state.session?.role || state.session?.type
 
@@ -63,7 +66,7 @@ export default function StaffApp() {
           state={state}
           dispatch={dispatch}
           signOut={signOut}
-          gateway={weaveGateway}
+          gateway={staffGateway}
         />
       )}
       {state.view === 'staff' && currentRole === 'admin' && (
@@ -71,7 +74,7 @@ export default function StaffApp() {
           state={state}
           dispatch={dispatch}
           signOut={signOut}
-          gateway={weaveGateway}
+          gateway={staffGateway}
         />
       )}
     </div>
