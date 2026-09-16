@@ -64,7 +64,7 @@ describe('Teacher question editing', () => {
 })
 
 describe('Teacher question lifecycle deletion', () => {
-  it('requires confirmation and then deletes an unused question through the backend route', async () => {
+  it('opens a centered confirmation modal before deleting an unused question', async () => {
     const refresh = vi.fn().mockResolvedValue(undefined)
     const deleteUnusedQuestion = vi.fn().mockResolvedValue(undefined)
     const question = {
@@ -96,9 +96,11 @@ describe('Teacher question lifecycle deletion', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /question lifecycle for what is a noun/i }))
     fireEvent.click(screen.getByRole('button', { name: /delete permanently/i }))
-    expect(deleteUnusedQuestion).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: /confirm permanent delete/i }))
+    expect(deleteUnusedQuestion).not.toHaveBeenCalled()
+    expect(screen.getByRole('alertdialog', { name: /delete this question permanently/i })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /confirm delete/i }))
     await waitFor(() => expect(deleteUnusedQuestion).toHaveBeenCalledWith(question.id))
     expect(refresh).toHaveBeenCalled()
   })
