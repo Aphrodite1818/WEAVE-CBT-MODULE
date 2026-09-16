@@ -3,21 +3,23 @@ import {
   RiAddLine,
   RiBookOpenLine,
   RiCalendarTodoLine,
-  RiDatabase2Line,
   RiFileAddLine,
   RiFileList3Line,
   RiGraduationCapLine,
   RiMoonClearLine,
-  RiStackLine,
   RiSunLine,
 } from '@remixicon/react'
 import { getLocalBrandLogoSrc } from '../../api/branding'
 import { Icon } from '../../shared/icons/Icon'
 import { Notice } from '../../shared/ui'
 
+function BankStatIcon({ size = 20 }) {
+  return <Icon name="bank" size={size} />
+}
+
 const statConfig = [
   { key: 'subjects', tone: 'blue', icon: RiBookOpenLine, label: 'My Subjects', caption: 'Assigned subjects', section: null },
-  { key: 'banks', tone: 'green', icon: RiStackLine, label: 'Question Banks', caption: 'Available to author', section: 'question-banks' },
+  { key: 'banks', tone: 'green', icon: BankStatIcon, label: 'Question Banks', caption: 'Available to author', section: 'question-banks' },
   { key: 'drafts', tone: 'amber', icon: RiFileList3Line, label: 'Draft Exams', caption: 'Need completion', section: 'exams' },
   { key: 'submitted', tone: 'rose', icon: RiCalendarTodoLine, label: 'Submitted Exams', caption: 'Awaiting administration', section: 'exams' },
 ]
@@ -47,7 +49,10 @@ export function OverviewPage({ state, dispatch, teacherData }) {
   return (
     <div className="teacher-overview-page">
       <header className="teacher-overview-heading">
-        <h1>Teacher&apos;s Dashboard</h1>
+        <div className="teacher-page-title-line">
+          <span className="teacher-page-title-icon"><Icon name="home" size={27} /></span>
+          <h1>Teacher&apos;s Dashboard</h1>
+        </div>
         <TeacherQuickActions
           banks={teacherData.banks}
           onNavigate={goTo}
@@ -205,7 +210,7 @@ function TeacherQuickActions({ banks, onNavigate }) {
             <span><strong>Create Exam</strong><small>Start a new examination</small></span>
           </button>
           <button type="button" role="menuitem" onClick={() => selectAction('question-banks')}>
-            <RiDatabase2Line size={19} aria-hidden="true" />
+            <Icon name="bank" size={19} />
             <span><strong>Question Banks</strong><small>Manage authored questions</small></span>
           </button>
           <button type="button" role="menuitem" onClick={() => selectAction('exams')}>
