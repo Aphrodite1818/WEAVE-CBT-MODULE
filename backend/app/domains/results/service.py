@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AcademicAuthorizationError
+from app.domains.academics.authorization import AcademicAuthorizationService
 from app.domains.attempts.models import AttemptStatus, ExamAttempt
 from app.domains.attempts.repository import AttemptRepository
 from app.domains.auth.models import LocalActor
@@ -115,23 +116,42 @@ class ResultService:
     ) -> None:
         if not actor.is_active:
             raise AcademicAuthorizationError("Active local actor is required")
+
+        exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id)
+        if exam is None:
+            raise ExamNotFound("Examination does not exist")
+
         if actor.role == "admin":
             return
+
         if actor.role != "teacher" or actor.weave_membership_id is None:
             raise AcademicAuthorizationError(
-                "Administrator or invigilator access is required"
+                "Administrator, invigilator, or authorized subject-teacher access is required"
             )
+
         try:
             teacher_id = UUID(actor.weave_membership_id)
         except ValueError as exc:
             raise AcademicAuthorizationError(
                 "Teacher has an invalid Weave membership identity"
             ) from exc
-        invigilator = await ExamRepository.get_invigilator(db, exam_id, teacher_id)
-        if invigilator is None:
-            raise AcademicAuthorizationError(
-                "Only assigned invigilators may view these results"
+
+        invigilator = await ExamRepository.get_invigilator(db, exam.id, teacher_id)
+        if invigilator is not None:
+            return
+
+        try:
+            await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+                db,
+                actor=actor,
+                curriculum_subject_id=exam.curriculum_subject_id,
+                academic_term_id=exam.term_id,
             )
+        except AcademicAuthorizationError as exc:
+            raise AcademicAuthorizationError(
+                "Only assigned invigilators or currently authorized subject teachers "
+                "may view these results"
+            ) from exc
 
     @classmethod
     async def get_result(
