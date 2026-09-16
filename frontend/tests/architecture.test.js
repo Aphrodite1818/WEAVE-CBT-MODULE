@@ -52,10 +52,14 @@ describe('frontend architecture', () => {
     expect(studentGateway).not.toContain("../api/staffAttempts")
   })
 
-  it('keeps separate Vite roots for staff and student applications', () => {
+  it('keeps separate Vite roots and ports for staff and student applications', () => {
     expect(existsSync(resolve(frontendRoot, 'apps/staff/index.html'))).toBe(true)
     expect(existsSync(resolve(frontendRoot, 'apps/student/index.html'))).toBe(true)
-    expect(existsSync(resolve(frontendRoot, 'vite.staff.config.js'))).toBe(true)
-    expect(existsSync(resolve(frontendRoot, 'vite.student.config.js'))).toBe(true)
+
+    const staffConfig = readFileSync(resolve(frontendRoot, 'vite.staff.config.js'), 'utf8')
+    const studentConfig = readFileSync(resolve(frontendRoot, 'vite.student.config.js'), 'utf8')
+
+    expect(staffConfig).toContain('port: 3001')
+    expect(studentConfig).toContain('port: 3002')
   })
 })
