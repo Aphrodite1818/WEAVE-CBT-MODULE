@@ -37,24 +37,31 @@ function LandingWordmarkTypewriter() {
   )
 }
 
-export function LandingPage({ dispatch }) {
+export function LandingPage({ dispatch, audience = 'combined' }) {
   const openLogin = (kind) => {
     dispatch({ type: 'view', view: kind === 'student' ? 'student-login' : 'staff-login' })
   }
 
+  const showStudentLogin = audience === 'combined' || audience === 'student'
+  const showStaffLogin = audience === 'combined' || audience === 'staff'
+
   return (
     <main className="landing-page">
       <nav className="landing-nav" aria-label="Sign in">
-        <button className="landing-primary" type="button" onClick={() => openLogin('student')}>
-          Login as Student <Pictogram name="student" size={18} />
-        </button>
-        <button
-          className="landing-primary landing-primary--ghost"
-          type="button"
-          onClick={() => openLogin('staff')}
-        >
-          Login as Staff <Pictogram name="staff" size={18} />
-        </button>
+        {showStudentLogin && (
+          <button className="landing-primary" type="button" onClick={() => openLogin('student')}>
+            Login as Student <Pictogram name="student" size={18} />
+          </button>
+        )}
+        {showStaffLogin && (
+          <button
+            className={`landing-primary${showStudentLogin ? ' landing-primary--ghost' : ''}`}
+            type="button"
+            onClick={() => openLogin('staff')}
+          >
+            Login as Staff <Pictogram name="staff" size={18} />
+          </button>
+        )}
       </nav>
 
       <section className="landing-center landing-enter" aria-label="Weave">
