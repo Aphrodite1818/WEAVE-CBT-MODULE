@@ -4,6 +4,7 @@ import { TeacherLayout } from './TeacherLayout'
 import { OverviewPage } from './OverviewPage'
 import { BankDetailPage, QuestionBanksPage } from './QuestionBanksPage'
 import { CreateQuestionPage, QuestionsPage } from './QuestionsPage'
+import { EditQuestionPage } from './EditQuestionPage'
 import { CreateExamPage, ExamsPage } from './ExamsPage'
 import './teacher-dashboard.css'
 import './teacher-selects.css'
@@ -29,7 +30,16 @@ export function TeacherWorkspace({ state, dispatch, signOut, gateway = weaveGate
       {state.staff.section === 'question-banks' && <QuestionBanksPage dispatch={dispatch} teacherData={teacherData} />}
       {state.staff.section === 'bank-detail' && <BankDetailPage state={state} dispatch={dispatch} teacherData={teacherData} />}
       {state.staff.section === 'questions' && <QuestionsPage dispatch={dispatch} teacherData={teacherData} gateway={gateway} />}
-      {(state.staff.section === 'create-question' || state.staff.section === 'edit-question') && <CreateQuestionPage state={state} dispatch={dispatch} teacherData={teacherData} gateway={gateway} />}
+      {state.staff.section === 'create-question' && <CreateQuestionPage state={state} dispatch={dispatch} teacherData={teacherData} gateway={gateway} />}
+      {state.staff.section === 'edit-question' && (
+        <EditQuestionPage
+          key={state.staff.selectedQuestionId || 'teacher-question-editor'}
+          state={state}
+          dispatch={dispatch}
+          teacherData={teacherData}
+          gateway={gateway}
+        />
+      )}
       {state.staff.section === 'exams' && <ExamsPage state={state} dispatch={dispatch} teacherData={teacherData} />}
       {state.staff.section === 'create-exam' && <CreateExamPage dispatch={dispatch} teacherData={teacherData} gateway={gateway} />}
     </TeacherLayout>
