@@ -8,7 +8,7 @@ domain; exam/question authorization belongs to their respective services.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from typing import Any, TypeVar
 from uuid import UUID
 
@@ -310,13 +310,10 @@ class AcademicRepository:
     ) -> AcademicSubject | None:
         return await cls._get_by_id(db, AcademicSubject, subject_id)
 
-
-
-    @staticmethod 
+    @staticmethod
     async def list_subjects_by_ids(
-        db : AsyncSession,
-        subject_ids : Sequence[UUID]
-    ) ->list[AcademicSubject]:
+        db: AsyncSession, subject_ids: Sequence[UUID]
+    ) -> list[AcademicSubject]:
         unique_ids = set(subject_ids)
 
         if not unique_ids:
@@ -326,13 +323,12 @@ class AcademicRepository:
             select(AcademicSubject)
             .where(
                 AcademicSubject.id.in_(unique_ids),
-                AcademicSubject.source_deleted_at.is_(None)
+                AcademicSubject.source_deleted_at.is_(None),
             )
             .order_by(AcademicSubject.name.asc())
         )
         return list(result.scalars().all())
 
-    
     @classmethod
     async def get_curriculum_by_id(
         cls, db: AsyncSession, curriculum_id: UUID
@@ -528,8 +524,70 @@ class AcademicRepository:
         return await cls._get_by_id(db, TeacherAssignment, assignment_id)
 
     @staticmethod
+    async def list_effective_teacher_assignments(
+        db: AsyncSession, *, teacher_membership_id: UUID | None = None
+    ) -> list[TeacherAssignment]:
+        query = select(TeacherAssignment).where(
+            TeacherAssignment.source_deleted_at.is_(None),
+            *AcademicRepository._effective_assignment_predicates(),
+        )
+
+        if teacher_membership_id is not None:
+            query = query.where(
+                TeacherAssignment.teacher_membership_id == teacher_membership_id
+            )
+
+        result = await db.execute(
+            query.order_by(
+                TeacherAssignment.class_id.asc(),
+                TeacherAssignment.curriculum_subject_id.asc(),
+                TeacherAssignment.teacher_membership_id.asc(),
+            )
+        )
+
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_classes_by_ids(
+        db: AsyncSession, class_ids: Sequence[UUID]
+    ) -> list[AcademicClass]:
+        unique_ids = set(class_ids)
+
+        if not unique_ids:
+            return []
+
+        result = await db.execute(
+            select(AcademicClass)
+            .where(
+                AcademicClass.id.in_(unique_ids),
+                AcademicClass.source_deleted_at.is_(None),
+            )
+            .order_by(AcademicClass.display_name.asc())
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_curriculum_subjects_by_ids(
+        db: AsyncSession, curriculum_subject_ids: Sequence[UUID]
+    ) -> list[CurriculumSubject]:
+        unique_ids = set(curriculum_subject_ids)
+
+        if not unique_ids:
+            return []
+
+        result = await db.execute(
+            select(CurriculumSubject)
+            .where(
+                CurriculumSubject.id.in_(unique_ids),
+                CurriculumSubject.source_deleted_at.is_(None),
+            )
+            .order_by(CurriculumSubject.id.asc())
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
     def _effective_assignment_predicates() -> tuple[Any, Any]:
-        today = date.today()
+        today = datetime.now(UTC).date()
         return (
             TeacherAssignment.effective_from <= today,
             or_(

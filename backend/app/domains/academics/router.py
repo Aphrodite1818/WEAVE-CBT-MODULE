@@ -8,13 +8,11 @@ from app.domains.academics.repository import AcademicRepository
 from app.domains.academics.schemas import (
     AcademicSessionResponse,
     AcademicTermResponse,
-    AuthorableCurriculumSubjectResponse
+    AuthorableCurriculumSubjectResponse,
+    TeacherAssignmentResponse,
 )
-
 from app.domains.academics.service import AcademicQueryService
 from app.domains.auth.dependencies import CurrentLocalActor
-
-
 
 router = APIRouter(
     prefix = "/academics",
@@ -104,3 +102,28 @@ async def list_authorable_curriculum_subject(
             status_code = status.HTTP_409_CONFLICT,
             detail = str(exc)
         )from exc
+
+
+@router.get(
+    "/teacher-assignments/effective",
+    response_model=list[TeacherAssignmentResponse],
+)
+async def list_effective_teacher_assignments(
+    db: DbSession,
+    actor: CurrentLocalActor,
+) -> list[TeacherAssignmentResponse]:
+    try:
+        return await AcademicQueryService.list_effective_teacher_assignments(
+            db,
+            actor=actor,
+        )
+    except AcademicAuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except AcademicScopeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc

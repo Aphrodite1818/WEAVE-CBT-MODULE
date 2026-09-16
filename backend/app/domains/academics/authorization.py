@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AcademicAuthorizationError, AcademicScopeError
 from app.domains.academics.eligibility import AcademicEligibilityService
-from app.domains.academics.models import CurriculumSubject
+from app.domains.academics.models import CurriculumSubject, TeacherAssignment
 from app.domains.academics.repository import AcademicRepository
 from app.domains.auth.models import LocalActor
 
@@ -266,3 +266,35 @@ class AcademicAuthorizationService:
 
         if teacher.status != "active":
             raise AcademicAuthorizationError("Teacher is not currently active")
+
+    @classmethod
+    async def list_actor_effective_teacher_assignments(
+        cls,
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+    ) -> list[TeacherAssignment]:
+        if not actor.is_active:
+            raise AcademicAuthorizationError("Active local actor is required")
+
+        if actor.role == "admin":
+            return await AcademicRepository.list_effective_teacher_assignments(
+                db
+            )
+
+        if actor.role != "teacher":
+            raise AcademicAuthorizationError(
+                "Only administrators and teachers can access teacher assignments"
+            )
+
+        teacher_membership_id = cls._teacher_membership_id(actor)
+
+        await cls._require_live_teacher(
+            db,
+            teacher_membership_id=teacher_membership_id,
+        )
+
+        return await AcademicRepository.list_effective_teacher_assignments(
+            db,
+            teacher_membership_id=teacher_membership_id,
+        )
