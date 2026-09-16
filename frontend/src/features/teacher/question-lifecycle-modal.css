@@ -1,0 +1,162 @@
+.teacher-lifecycle-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 220;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(15 23 42 / .34);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.teacher-lifecycle-confirm-modal {
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 18px;
+  background: rgb(var(--color-surface-raised));
+  padding: 24px;
+  box-shadow: 0 28px 80px rgb(0 0 0 / .24), 0 10px 34px rgb(var(--color-primary) / .12);
+}
+
+.teacher-lifecycle-confirm-modal__heading {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.teacher-lifecycle-confirm-modal__icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgb(var(--color-primary-soft));
+  color: rgb(var(--color-primary));
+}
+
+.teacher-lifecycle-confirm-modal--danger .teacher-lifecycle-confirm-modal__icon {
+  background: rgb(254 226 226);
+  color: rgb(185 28 28);
+}
+
+.teacher-lifecycle-confirm-modal__heading h2 {
+  margin: 0;
+  color: rgb(var(--color-text));
+  font-size: 20px;
+  font-weight: 820;
+  line-height: 1.2;
+  letter-spacing: -.015em;
+}
+
+.teacher-lifecycle-confirm-modal__heading p {
+  margin: 5px 0 0;
+  color: rgb(var(--color-text-muted));
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.teacher-lifecycle-confirm-modal__question {
+  margin-top: 18px;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 12px;
+  background: color-mix(in srgb, rgb(var(--color-primary-soft)) 24%, rgb(var(--color-surface)));
+  padding: 13px 14px;
+}
+
+.teacher-lifecycle-confirm-modal__question span {
+  display: block;
+  margin-bottom: 5px;
+  color: rgb(var(--color-text-muted));
+  font-size: 11px;
+  font-weight: 790;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+
+.teacher-lifecycle-confirm-modal__question strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: rgb(var(--color-text));
+  font-size: 14px;
+  font-weight: 720;
+  line-height: 1.5;
+}
+
+.teacher-lifecycle-confirm-modal__warning {
+  margin: 16px 0 0;
+  color: rgb(var(--color-text-muted));
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.teacher-lifecycle-confirm-modal--danger .teacher-lifecycle-confirm-modal__warning {
+  color: rgb(153 27 27);
+}
+
+.teacher-lifecycle-confirm-modal__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.teacher-lifecycle-confirm-modal__actions button {
+  min-height: 42px;
+  border-radius: 9px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 780;
+  cursor: pointer;
+}
+
+.teacher-lifecycle-confirm-modal__cancel {
+  border: 1px solid rgb(var(--color-border));
+  background: rgb(var(--color-surface));
+  color: rgb(var(--color-text));
+}
+
+.teacher-lifecycle-confirm-modal__confirm {
+  border: 1px solid rgb(var(--color-primary));
+  background: rgb(var(--color-primary));
+  color: rgb(var(--color-on-primary));
+  box-shadow: 0 8px 20px rgb(var(--color-primary) / .18);
+}
+
+.teacher-lifecycle-confirm-modal__confirm--danger {
+  border-color: rgb(185 28 28);
+  background: rgb(185 28 28);
+  color: #fff;
+  box-shadow: 0 8px 20px rgb(185 28 28 / .2);
+}
+
+.teacher-lifecycle-confirm-modal__actions button:hover:not(:disabled) {
+  filter: brightness(.96);
+}
+
+.teacher-lifecycle-confirm-modal__actions button:disabled {
+  cursor: wait;
+  opacity: .58;
+}
+
+@media (max-width: 560px) {
+  .teacher-lifecycle-confirm-backdrop {
+    padding: 16px;
+  }
+
+  .teacher-lifecycle-confirm-modal {
+    width: 100%;
+    padding: 20px;
+  }
+
+  .teacher-lifecycle-confirm-modal__actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
