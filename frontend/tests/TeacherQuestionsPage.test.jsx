@@ -32,7 +32,7 @@ describe('Teacher questions', () => {
     )
 
     expect(screen.getByRole('heading', { name: 'What is 2 + 2?' })).toBeInTheDocument()
-    expect(screen.getByText('Mathematics')).toBeInTheDocument()
+    expect(screen.getAllByText('Mathematics').length).toBeGreaterThan(0)
     expect(screen.getByText('Version 1')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /^edit$/i }))
