@@ -23,7 +23,7 @@ export function ExamOperations() {
           </div>
           <table className="premium-table">
             <thead><tr><th>Title</th><th>Subject</th><th>Class/Level</th><th>Status</th><th>Actions</th></tr></thead>
-            <tbody><tr><td><strong>Mathematics First Term</strong><br/><small>5 Sep 2026</small></td><td>Mathematics</td><td>SS 2</td><td><span className="status-pill ongoing">Active</span></td><td><button className="btn-secondary" style={{padding: '6px 10px'}}>Manage</button></td></tr></tbody>
+            <tbody><EmptyRow colSpan={5} message="No backend-backed exam collection is loaded yet." /></tbody>
           </table>
         </div>
       </div>
@@ -40,19 +40,23 @@ function CreateExamView({ onCancel }) {
       <div className="premium-content">
         <div className="form-card">
           <div className="form-grid">
-            <div className="form-group full"><label>Exam title</label><input type="text" placeholder="e.g. Mathematics First Term Examination" /></div>
+            <div className="form-group full"><label>Exam title</label><input type="text" placeholder="Enter exam title" /></div>
             <div className="form-group"><label>Subject</label><select><option>Select subject</option></select></div>
             <div className="form-group"><label>Class / Level</label><select><option>Select class</option></select></div>
             <div className="form-group"><label>Term</label><select><option>Select term</option></select></div>
             <div className="form-group"><label>Start time</label><input type="time" /></div>
             <div className="form-group"><label>Start date</label><input type="date" /></div>
-            <div className="form-group"><label>Duration (minutes)</label><input type="number" placeholder="e.g. 60" /></div>
-            <div className="form-group"><label>Total questions</label><input type="number" placeholder="e.g. 30" /></div>
+            <div className="form-group"><label>Duration (minutes)</label><input type="number" placeholder="Duration in minutes" /></div>
+            <div className="form-group"><label>Total questions</label><input type="number" placeholder="Total questions" /></div>
             <div className="form-group full"><label>Instructions for students (optional)</label><textarea placeholder="Enter any special instructions..."></textarea></div>
           </div>
-          <div className="form-actions"><button className="btn-secondary" onClick={onCancel}>Save as draft</button><button className="btn-primary" onClick={onCancel}>Create exam</button></div>
+          <div className="form-actions"><button className="btn-secondary" onClick={onCancel}>Cancel</button><button className="btn-primary" disabled>Create exam</button></div>
         </div>
       </div>
     </>
   )
+}
+
+function EmptyRow({ colSpan, message }) {
+  return <tr><td colSpan={colSpan}><div className="admin-empty-state"><strong>No records</strong><p>{message}</p></div></td></tr>
 }

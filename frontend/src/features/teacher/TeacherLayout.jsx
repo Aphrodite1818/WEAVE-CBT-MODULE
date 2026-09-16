@@ -1,5 +1,5 @@
+import { useState } from 'react'
 import { Icon } from '../../shared/icons/Icon'
-import { WeaveLogo } from '../../shared/ui'
 import { getLocalBrandLogoSrc } from '../../api/branding'
 
 function teacherNavActive(current, section) {
@@ -10,49 +10,56 @@ function teacherNavActive(current, section) {
 }
 
 export function TeacherLayout({ state, dispatch, signOut, children }) {
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const teacherName = state.session?.actor?.display_name || state.session?.name || 'Teacher'
   const teacherRole = state.session?.actor?.role || 'teacher'
   const schoolName = state.branding?.school_name || state.installation?.status?.tenant_name || 'Weave CBT'
   const serverName = state.installation?.status?.server_name || 'Local node'
   const nav = [
-    ['overview', 'dashboard', 'Overview'],
-    ['question-banks', 'book', 'Question Banks'],
-    ['questions', 'questions', 'Questions'],
-    ['exams', 'exams', 'Exams'],
+    ['overview', 'home', 'Overview'],
+    ['question-banks', 'database', 'Question Banks'],
+    ['questions', 'fileText', 'Questions'],
+    ['exams', 'calendar', 'Exams'],
   ]
-  const pageTitle = {
-    overview: 'Overview',
-    'question-banks': 'Question Banks',
-    'bank-detail': 'Question Banks',
-    questions: 'Questions',
-    'create-question': 'Create Question',
-    exams: 'Exams',
-    'create-exam': 'Create Exam',
-  }[state.staff.section] || 'Overview'
 
   return (
-    <main className="teacher-shell">
+    <main className={`teacher-shell${sidebarOpen ? '' : ' teacher-shell--collapsed'}`}>
       <aside className="teacher-sidebar">
-        <WeaveLogo />
-        <div className="teacher-profile">
-          <span className="teacher-avatar">{initials(teacherName)}</span>
-          <div><strong>{teacherName}</strong><small>{teacherRole}</small></div>
-        </div>
         <div className="school-card">
           <span>{getLocalBrandLogoSrc(state.branding) ? <img className="school-brand-logo" src={getLocalBrandLogoSrc(state.branding)} alt="School logo" /> : <Icon name="school" size={20} />}</span>
           <div><strong>{schoolName}</strong><small>{serverName}</small></div>
         </div>
-        <nav>
+        <nav aria-label="Teacher navigation">
           {nav.map(([section, icon, label]) => (
-            <button key={section} className={teacherNavActive(state.staff.section, section) ? 'active' : ''} onClick={() => dispatch({ type: 'staff', patch: { section } })}>
-              <Icon name={icon} size={18} />{label}
+            <button key={section} className={teacherNavActive(state.staff.section, section) ? 'active' : ''} onClick={() => dispatch({ type: 'staff', patch: { section } })} title={sidebarOpen ? undefined : label}>
+              <Icon name={icon} size={17} /><span>{label}</span>
             </button>
           ))}
         </nav>
-        <button className="sidebar-signout" onClick={signOut}><Icon name="logout" size={18} />Sign out</button>
       </aside>
       <section className="teacher-main">
-        <header className="teacher-topbar"><strong>{pageTitle}</strong></header>
+        <header className="teacher-topbar">
+          <button className="teacher-icon-button teacher-sidebar-toggle" type="button" aria-label={sidebarOpen ? 'Collapse sidebar' : 'Open sidebar'} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>
+            <Icon name={sidebarOpen ? 'back' : 'menu'} size={19} />
+          </button>
+          <label className="teacher-search">
+            <Icon name="search" size={18} />
+            <input type="search" placeholder="Search anything..." />
+          </label>
+          <div className="teacher-topbar__actions">
+            <button className="teacher-icon-button" type="button" aria-label="Notifications"><Icon name="bell" size={20} /></button>
+            <div className="teacher-account">
+              <span className="teacher-avatar">{initials(teacherName)}</span>
+              <div><strong>{teacherName}</strong><small>{teacherRole}</small></div>
+              <Icon name="chevronDown" size={18} />
+              <div className="teacher-account__menu">
+                <button type="button"><Icon name="profile" size={17} /> My Profile</button>
+                <button type="button"><Icon name="settings" size={17} /> Account Settings</button>
+                <button type="button" onClick={signOut}><Icon name="logout" size={17} /> Logout</button>
+              </div>
+            </div>
+          </div>
+        </header>
         <div className="teacher-content">{children}</div>
       </section>
     </main>

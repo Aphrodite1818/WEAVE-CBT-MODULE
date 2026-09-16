@@ -7,25 +7,10 @@ import { isSetupView } from '../features/setup/setupViews'
 import { StudentWorkspace } from '../features/student/StudentWorkspace'
 import { InitialSyncPage } from '../features/sync/InitialSyncPage'
 import { TeacherWorkspace } from '../features/teacher/TeacherWorkspace'
-import { Notice, WeaveMark } from '../shared/ui'
+import { ProductLoadingScreen } from './ProductLoadingScreen'
 import { buildBrandingThemeStyle, createDefaultBranding } from './theme/branding'
 import { weaveGateway } from './gateway'
 import { useAppController } from './useAppController'
-
-function ProductLoadingScreen({ title, copy, error, onRetry }) {
-  return (
-    <main className="product-loading-page">
-      <section className="product-loading-card" aria-live="polite">
-        <div className="product-loading-orbit"><WeaveMark /></div>
-        <span className="product-kicker">WEAVE CBT</span>
-        <h1>{title}</h1>
-        <p>{copy}</p>
-        {error && <Notice tone="danger">{error}</Notice>}
-        {error && onRetry && <button className="button button--primary" onClick={onRetry}>Try again</button>}
-      </section>
-    </main>
-  )
-}
 
 export default function App() {
   const { state, dispatch, boot, pair, signInStaff, signInStudent, signOut } = useAppController({ gateway: weaveGateway })

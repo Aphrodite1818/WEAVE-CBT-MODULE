@@ -17,7 +17,7 @@ export function QuestionBank() {
           <div className="premium-table-header"><div className="premium-search"><Icon name="search" size={16} /><input type="text" placeholder="Search questions..." /></div></div>
           <table className="premium-table">
             <thead><tr><th>Question Stem</th><th>Subject</th><th>Type</th><th>Actions</th></tr></thead>
-            <tbody><tr><td>What is the value of x in the equation 2x + 3 = 11?</td><td>Mathematics</td><td>Multiple Choice</td><td><button className="btn-secondary" style={{padding: '6px 10px'}}>Edit</button></td></tr></tbody>
+            <tbody><tr><td colSpan={4}><div className="admin-empty-state"><strong>No questions loaded</strong><p>Use the teacher question-bank workflow or connect this admin page to the question bank API.</p></div></td></tr></tbody>
           </table>
         </div>
       </div>
@@ -38,11 +38,11 @@ function CreateQuestionView({ onCancel }) {
           <div className="form-group full" style={{marginTop:'24px'}}>
             <label>Answer options</label>
             <div style={{display:'flex', flexDirection:'column', gap:'12px'}}>
-              {['A', 'B', 'C', 'D'].map((option) => <div key={option} style={{display:'flex', alignItems:'center', gap:'12px'}}><div style={{width:'32px', height:'32px', background:'#F1F5F9', borderRadius:'50%', display:'grid', placeItems:'center', color:'#64748B', fontWeight:'600'}}>{option}</div><input type="text" placeholder={`Enter option ${option}`} style={{flex:1}} /><button style={{background:'transparent', border:'none', color:'#EF4444', cursor:'pointer'}}><Icon name="trash" size={18} /></button></div>)}
+              {['A', 'B', 'C', 'D'].map((option) => <div key={option} style={{display:'flex', alignItems:'center', gap:'12px'}}><div style={{width:'32px', height:'32px', background:'#F1F5F9', borderRadius:'50%', display:'grid', placeItems:'center', color:'#64748B', fontWeight:'600'}}>{option}</div><input type="text" placeholder={`Option ${option}`} style={{flex:1}} /><button style={{background:'transparent', border:'none', color:'#EF4444', cursor:'pointer'}}><Icon name="trash" size={18} /></button></div>)}
             </div>
           </div>
           <div className="form-group full" style={{marginTop:'24px'}}><label>Correct answer</label><select><option>Select correct option</option><option>A</option><option>B</option></select></div>
-          <div className="form-actions"><button className="btn-secondary" onClick={onCancel}>Cancel</button><button className="btn-primary" onClick={onCancel}>Save question</button></div>
+          <div className="form-actions"><button className="btn-secondary" onClick={onCancel}>Cancel</button><button className="btn-primary" disabled>Save question</button></div>
         </div>
       </div>
     </>

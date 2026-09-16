@@ -7,7 +7,7 @@ export function StudentsView() {
       <div className="premium-content">
         <div className="premium-table-wrap">
           <div className="premium-table-header"><div className="premium-search"><Icon name="search" size={16} /><input type="text" placeholder="Search by name or admission number..." /></div></div>
-          <table className="premium-table"><thead><tr><th>Name</th><th>Admission No.</th><th>Class</th><th>Status</th></tr></thead><tbody><tr><td><strong>Amina Okafor</strong></td><td>GRN/2026/0042</td><td>SS 3A</td><td><span className="status-pill ongoing">Eligible</span></td></tr></tbody></table>
+          <table className="premium-table"><thead><tr><th>Name</th><th>Admission No.</th><th>Class</th><th>Status</th></tr></thead><tbody><tr><td colSpan={4}><div className="admin-empty-state"><strong>No students loaded</strong><p>Student roster data needs a backend-backed admin roster endpoint.</p></div></td></tr></tbody></table>
         </div>
       </div>
     </>

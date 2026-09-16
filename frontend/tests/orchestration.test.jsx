@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { BrowserRouter } from 'react-router-dom'
 import App from '../src/App'
@@ -204,7 +204,12 @@ describe('Weave setup and first sync orchestration', () => {
     const fetchMock = routes({ 'POST /api/v1/auth/login': () => reply(teacher), 'GET /api/v1/questions/banks/authorable': () => reply([]) })
     renderApp()
     await openStaff()
-    expect(await screen.findByRole('button', { name: /question banks/i })).toBeInTheDocument()
+    const teacherNavigation = await screen.findByRole('navigation', { name: /teacher navigation/i })
+    expect(within(teacherNavigation).getByRole('button', { name: /question banks/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /teacher dashboard/i })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: /teacher quick actions/i })).toBeInTheDocument()
+    expect(screen.getByText(/no recent exams to show yet/i)).toBeInTheDocument()
+    expect(within(screen.getByLabelText(/teacher workspace summary/i)).queryByText('320')).not.toBeInTheDocument()
     expect(fetchMock.mock.calls.some(([url]) => url === '/api/v1/sync/status')).toBe(false)
   })
 
