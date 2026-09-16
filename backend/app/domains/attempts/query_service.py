@@ -7,9 +7,10 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domains.attempts.models import AttemptStatus
+from app.domains.attempts.models import AttemptStatus, ExamAttempt
 from app.domains.attempts.query_repository import AttemptQueryRepository
 from app.domains.attempts.query_schemas import AttemptMonitorResponse
+from app.domains.attempts.runtime_repository import AttemptRuntimeRepository
 from app.domains.attempts.service import AttemptService, AttemptStateError
 from app.domains.auth.models import LocalActor
 from app.domains.candidates.repository import CandidateRepository
@@ -19,6 +20,28 @@ from app.domains.exams.repository import ExamRepository
 
 class AttemptQueryService:
     """Provide authorized invigilation reads over durable attempt state."""
+
+    @staticmethod
+    def _remaining_seconds(
+        attempt: ExamAttempt,
+        *,
+        suspensions: list,
+        at: datetime,
+    ) -> int:
+        consumed = attempt.elapsed_seconds
+
+        if attempt.status == AttemptStatus.IN_PROGRESS and attempt.active_since is not None:
+            total = max(0, int((at - attempt.active_since).total_seconds()))
+            suspended = 0
+            for suspension in suspensions:
+                end = suspension.resumed_at or at
+                overlap_start = max(attempt.active_since, suspension.suspended_at)
+                overlap_end = min(at, end)
+                if overlap_end > overlap_start:
+                    suspended += int((overlap_end - overlap_start).total_seconds())
+            consumed += max(0, total - suspended)
+
+        return max(0, attempt.time_limit_seconds - consumed)
 
     @staticmethod
     async def list_exam_attempts(
@@ -65,6 +88,7 @@ class AttemptQueryService:
             limit=None,
         )
         candidates_by_id = {candidate.id: candidate for candidate in candidates}
+        suspensions = await AttemptRuntimeRepository.list_exam_suspensions(db, exam.id)
         now = datetime.now(UTC)
 
         response: list[AttemptMonitorResponse] = []
@@ -74,13 +98,6 @@ class AttemptQueryService:
                 raise AttemptStateError(
                     "Attempt references an unavailable examination candidate"
                 )
-
-            remaining = await AttemptService.remaining_seconds(
-                db,
-                attempt=attempt,
-                exam_id=exam.id,
-                at=now,
-            )
 
             response.append(
                 AttemptMonitorResponse(
@@ -95,7 +112,11 @@ class AttemptQueryService:
                     end_reason=attempt.end_reason,
                     termination_reason=attempt.termination_reason,
                     time_limit_seconds=attempt.time_limit_seconds,
-                    remaining_seconds=remaining,
+                    remaining_seconds=AttemptQueryService._remaining_seconds(
+                        attempt,
+                        suspensions=suspensions,
+                        at=now,
+                    ),
                     last_heartbeat_at=attempt.last_heartbeat_at,
                     last_activity_at=attempt.last_activity_at,
                 )
