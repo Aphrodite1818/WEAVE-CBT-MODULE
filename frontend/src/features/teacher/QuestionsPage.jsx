@@ -65,10 +65,7 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
     const closeOnEscape = (event) => {
       if (event.key === 'Escape') closeLifecycle()
     }
-    const closeOnViewportChange = (event) => {
-      if (lifecycleRef.current?.contains(event.target)) return
-      closeLifecycle()
-    }
+    const closeOnViewportChange = () => closeLifecycle()
 
     document.addEventListener('pointerdown', closeOnOutsideClick)
     document.addEventListener('keydown', closeOnEscape)
