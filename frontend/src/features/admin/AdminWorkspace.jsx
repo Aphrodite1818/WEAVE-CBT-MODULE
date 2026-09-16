@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { Icon } from '../../shared/icons/Icon'
+import { DashboardAccountMenu, DashboardSchoolIdentity } from '../../shared/ui'
 import { getLocalBrandLogoSrc } from '../../api/branding'
 import { AdminDashboard } from './pages/AdminDashboard'
 import { ExamOperations } from './pages/ExamOperations'
@@ -22,29 +24,32 @@ const adminNav = [
 ]
 
 export function AdminWorkspace({ state, dispatch, signOut }) {
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const section = state.staff.section === 'overview' ? 'dashboard' : state.staff.section
   const actor = state.session?.actor
   const adminName = actor?.display_name || state.session?.name || 'Administrator'
-  const adminInitials = adminName
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('') || 'AD'
+  const schoolName = state.branding?.school_name || state.installation?.status?.tenant_name || 'Weave CBT'
+  const serverName = state.installation?.status?.server_name || 'Local CBT server'
+  const schoolLogoSrc = getLocalBrandLogoSrc(state.branding)
 
   const handleNavClick = (item) => {
     dispatch({ type: 'staff', patch: { section: item } })
   }
 
   return (
-    <div className="premium-admin-shell">
+    <div className={`premium-admin-shell${sidebarOpen ? '' : ' premium-admin-shell--collapsed'}`}>
       <aside className="premium-sidebar">
-        <div className="premium-school-badge">
-          <div className="school-icon">{getLocalBrandLogoSrc(state.branding) ? <img src={getLocalBrandLogoSrc(state.branding)} alt="School logo" /> : <Icon name="school" size={22} />}</div>
-          <div className="school-info">
-            <strong>{state.branding?.school_name || state.installation?.status?.tenant_name || 'Weave CBT'}</strong>
-            <small>{state.installation?.status?.server_name || 'Local CBT server'}</small>
+        <div className="premium-sidebar__header">
+          <div className="premium-school-badge">
+            <div className="school-icon">{schoolLogoSrc ? <img src={schoolLogoSrc} alt="School logo" /> : <Icon name="school" size={22} />}</div>
+            <div className="school-info">
+              <strong>{schoolName}</strong>
+              <small>{serverName}</small>
+            </div>
           </div>
+          <button className="dashboard-sidebar-toggle" type="button" aria-label={sidebarOpen ? 'Collapse sidebar' : 'Open sidebar'} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>
+            <Icon name={sidebarOpen ? 'back' : 'menu'} size={18} />
+          </button>
         </div>
 
         <nav className="premium-nav" aria-label="Admin navigation">
@@ -64,25 +69,15 @@ export function AdminWorkspace({ state, dispatch, signOut }) {
 
       <main className="premium-main">
         <header className="premium-topbar">
-          <label className="premium-searchbox">
-            <Icon name="search" size={18} />
-            <input type="search" placeholder="Search anything..." />
-          </label>
+          <div className="premium-topbar__leading">
+            <DashboardSchoolIdentity schoolName={schoolName} logoSrc={schoolLogoSrc} />
+            <label className="premium-searchbox">
+              <Icon name="search" size={18} />
+              <input type="search" placeholder="Search anything..." />
+            </label>
+          </div>
           <div className="premium-account">
-            <button className="premium-icon-button" type="button" aria-label="Notifications"><Icon name="bell" size={20} /></button>
-            <div className="premium-user-menu">
-              <span>{adminInitials}</span>
-              <div>
-                <strong>{adminName}</strong>
-                <small>Administrator</small>
-              </div>
-              <Icon name="chevronDown" size={18} />
-              <div className="premium-user-menu__dropdown">
-                <button type="button"><Icon name="profile" size={17} /> My Profile</button>
-                <button type="button"><Icon name="settings" size={17} /> Account Settings</button>
-                <button type="button" onClick={signOut}><Icon name="logout" size={17} /> Logout</button>
-              </div>
-            </div>
+            <DashboardAccountMenu actor={actor} fallbackName={adminName} roleLabel="Administrator" onSignOut={signOut} />
           </div>
         </header>
         {section === 'dashboard' && <AdminDashboard adminName={adminName} onNavigate={handleNavClick} />}

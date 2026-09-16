@@ -642,6 +642,11 @@ input:checked + .slider:before {
     linear-gradient(180deg, color-mix(in srgb, rgb(var(--color-primary-soft)) 54%, #fff), rgb(var(--color-background))),
     rgb(var(--color-background));
   color: rgb(var(--color-text));
+  transition: grid-template-columns .22s ease;
+}
+
+.premium-admin-shell--collapsed {
+  grid-template-columns: 88px minmax(0, 1fr);
 }
 
 .premium-sidebar {
@@ -671,11 +676,20 @@ input:checked + .slider:before {
   z-index: 1;
 }
 
+.premium-sidebar__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+
 .premium-school-badge {
+  min-width: 0;
+  flex: 1 1 auto;
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
   gap: 12px;
-  margin: 0 0 28px;
+  margin: 0;
   padding: 0;
 }
 
@@ -738,6 +752,30 @@ input:checked + .slider:before {
   color: rgb(var(--color-on-primary) / .52);
 }
 
+.premium-admin-shell--collapsed .premium-sidebar {
+  padding-inline: 14px;
+}
+
+.premium-admin-shell--collapsed .premium-sidebar__header {
+  flex-direction: column;
+}
+
+.premium-admin-shell--collapsed .premium-school-badge {
+  grid-template-columns: 1fr;
+  justify-items: center;
+}
+
+.premium-admin-shell--collapsed .premium-school-badge .school-info,
+.premium-admin-shell--collapsed .premium-nav button span,
+.premium-admin-shell--collapsed .premium-sidebar-tagline span {
+  display: none;
+}
+
+.premium-admin-shell--collapsed .premium-nav button {
+  justify-content: center;
+  padding: 0;
+}
+
 .premium-main {
   height: auto;
   min-width: 0;
@@ -745,35 +783,45 @@ input:checked + .slider:before {
 }
 
 .premium-topbar {
-  min-height: 92px;
+  position: relative;
+  z-index: 40;
+  min-height: 68px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: 18px;
   border-bottom: 1px solid rgb(var(--color-border));
   background: color-mix(in srgb, rgb(var(--color-surface)) 86%, transparent);
-  padding: 0 clamp(24px, 3vw, 46px);
+  padding: 0 clamp(24px, 3vw, 36px);
   backdrop-filter: blur(18px);
+}
+
+.premium-topbar__leading {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: clamp(20px, 3vw, 38px);
 }
 
 .premium-searchbox {
   width: min(440px, 48vw);
-  min-height: 48px;
+  min-height: 42px;
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
   gap: 12px;
   border: 1px solid rgb(var(--color-border));
-  border-radius: 12px;
+  border-radius: 999px;
   background: rgb(var(--color-surface));
   padding: 0 16px;
   color: rgb(var(--color-text-muted));
-  box-shadow: 0 16px 40px rgb(var(--color-primary) / .08);
+  box-shadow: none;
 }
 
 .premium-searchbox input {
   width: 100%;
-  min-height: 44px;
+  min-height: 40px;
   border: 0;
   outline: 0;
   background: transparent;
@@ -783,59 +831,6 @@ input:checked + .slider:before {
 .premium-account {
   display: flex;
   align-items: center;
-  gap: 18px;
-}
-
-.premium-user-menu {
-  position: relative;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  padding-left: 18px;
-  border-left: 1px solid rgb(var(--color-border));
-}
-
-.premium-user-menu > span {
-  width: 48px;
-  height: 48px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: rgb(var(--color-primary));
-  color: rgb(var(--color-on-primary));
-  font-weight: 780;
-}
-
-.premium-user-menu strong {
-  display: block;
-  color: rgb(var(--color-text));
-  font-size: 14px;
-}
-
-.premium-user-menu small {
-  color: rgb(var(--color-text-muted));
-  font-size: 12px;
-}
-
-.premium-user-menu__dropdown {
-  position: absolute;
-  top: calc(100% + 14px);
-  right: 0;
-  width: 240px;
-  display: none;
-  gap: 4px;
-  border: 1px solid rgb(var(--color-border));
-  border-radius: 12px;
-  background: rgb(var(--color-surface));
-  padding: 12px;
-  box-shadow: 0 24px 70px rgb(var(--color-primary) / .16);
-  z-index: 20;
-}
-
-.premium-user-menu:hover .premium-user-menu__dropdown,
-.premium-user-menu:focus-within .premium-user-menu__dropdown {
-  display: grid;
 }
 
 .premium-header {

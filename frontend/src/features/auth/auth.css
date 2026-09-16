@@ -8,7 +8,7 @@
   color: rgb(var(--color-text));
   background:
     radial-gradient(ellipse at 88% 12%, rgb(var(--color-primary-soft) / .9) 0 17%, transparent 42%),
-    linear-gradient(180deg, #fff 0%, rgb(var(--color-background)) 100%);
+    linear-gradient(180deg, rgb(var(--color-surface)) 0%, rgb(var(--color-background)) 100%);
 }
 
 .weave-login-page::before {

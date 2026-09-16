@@ -8,7 +8,7 @@
   background:
     radial-gradient(ellipse at 50% 31%, rgb(var(--color-primary-soft)) 0 16%, transparent 48%),
     radial-gradient(ellipse at 86% 12%, rgb(var(--color-accent-soft)) 0 12%, transparent 37%),
-    linear-gradient(180deg, #fff 0%, rgb(var(--color-background)) 100%);
+    linear-gradient(180deg, rgb(var(--color-surface)) 0%, rgb(var(--color-background)) 100%);
   color: rgb(var(--color-text));
 }
 .initial-sync-page::before,

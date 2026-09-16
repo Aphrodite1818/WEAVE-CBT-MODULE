@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { RiCloseLine, RiImageAddLine, RiSearchLine } from '@remixicon/react'
+import { RiArchiveLine, RiCloseLine, RiEditLine, RiImageAddLine, RiMore2Line, RiRefreshLine, RiSearchLine } from '@remixicon/react'
 import { Icon } from '../../shared/icons/Icon'
 import { Notice, PageTitle, Panel, SegmentedControl, StatusBadge } from '../../shared/ui'
 
@@ -7,11 +7,15 @@ const MAX_QUESTION_IMAGE_SIZE = 5 * 1024 * 1024
 const QUESTION_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const PAGE_SIZE = 10
 
-export function QuestionsPage({ dispatch, teacherData }) {
+export function QuestionsPage({ dispatch, teacherData, gateway }) {
   const [query, setQuery] = useState('')
   const [bankId, setBankId] = useState('all')
   const [tab, setTab] = useState('all')
   const [page, setPage] = useState(1)
+  const [lifecycleQuestionId, setLifecycleQuestionId] = useState(null)
+  const [lifecycleBusyId, setLifecycleBusyId] = useState(null)
+  const [lifecycleError, setLifecycleError] = useState('')
+  const lifecycleRef = useRef(null)
 
   const counts = useMemo(() => ({
     all: teacherData.questions.length,
@@ -40,10 +44,43 @@ export function QuestionsPage({ dispatch, teacherData }) {
     if (page > pageCount) setPage(pageCount)
   }, [page, pageCount])
 
+  useEffect(() => {
+    if (!lifecycleQuestionId) return undefined
+
+    const closeOnOutsideClick = (event) => {
+      if (!lifecycleRef.current?.contains(event.target)) setLifecycleQuestionId(null)
+    }
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setLifecycleQuestionId(null)
+    }
+
+    document.addEventListener('pointerdown', closeOnOutsideClick)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [lifecycleQuestionId])
+
   const changeFilter = (setter) => (eventOrValue) => {
     const value = eventOrValue?.target ? eventOrValue.target.value : eventOrValue
     setter(value)
     setPage(1)
+  }
+
+  const changeLifecycle = async (question) => {
+    setLifecycleError('')
+    setLifecycleBusyId(question.id)
+    try {
+      if (question.status === 'Archived') await gateway.questions.reactivateQuestion(question.id)
+      else await gateway.questions.archiveQuestion(question.id)
+      await teacherData.refresh()
+      setLifecycleQuestionId(null)
+    } catch (error) {
+      setLifecycleError(error.userMessage || `Weave could not ${question.status === 'Archived' ? 'reactivate' : 'archive'} this question.`)
+    } finally {
+      setLifecycleBusyId(null)
+    }
   }
 
   return (
@@ -64,6 +101,7 @@ export function QuestionsPage({ dispatch, teacherData }) {
       </div>
 
       {teacherData.error && <Notice tone="danger">{teacherData.error}</Notice>}
+      {lifecycleError && <Notice tone="danger">{lifecycleError}</Notice>}
 
       <div className="teacher-question-toolbar">
         <select aria-label="Question bank filter" value={bankId} onChange={changeFilter(setBankId)}>
@@ -83,48 +121,66 @@ export function QuestionsPage({ dispatch, teacherData }) {
         <TabButton label="Archived" value="archived" current={tab} count={counts.archived} onClick={changeFilter(setTab)} />
       </nav>
 
-      <section className="teacher-table-card" aria-busy={teacherData.loading}>
-        <div className="teacher-table-wrap">
-          <table className="teacher-reference-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Question</th>
-                <th>Bank</th>
-                <th>Type</th>
-                <th>Status</th>
-                <th>Version</th>
-                <th><span className="sr-only">Actions</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleQuestions.map((question, index) => (
-                <tr key={question.id}>
-                  <td>{(page - 1) * PAGE_SIZE + index + 1}</td>
-                  <td><strong className="teacher-question-prompt">{question.prompt}</strong>{question.image && <small className="teacher-inline-note">Includes image</small>}</td>
-                  <td>{question.bankName}</td>
-                  <td><span className="teacher-type-pill">{question.type}</span></td>
-                  <td><StatusBadge tone={question.status === 'Ready' ? 'success' : 'warning'}>{question.status}</StatusBadge></td>
-                  <td>{question.updated}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="teacher-row-action"
-                      aria-label={`Open ${question.bankName}`}
-                      onClick={() => dispatch({ type: 'staff', patch: { section: 'bank-detail', selectedBankId: question.bankId } })}
-                    >
-                      <Icon name="chevronRight" size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {!teacherData.loading && visibleQuestions.length === 0 && (
-                <tr className="teacher-empty-table-row"><td colSpan="7">No questions match the current filters.</td></tr>
-              )}
-              {teacherData.loading && <tr className="teacher-empty-table-row"><td colSpan="7">Loading questions…</td></tr>}
-            </tbody>
-          </table>
+      <section className="teacher-question-catalog" aria-busy={teacherData.loading} aria-label="Questions">
+        <div className="teacher-question-catalog__header" aria-hidden="true">
+          <span>Question</span>
+          <span>Bank</span>
+          <span>Type</span>
+          <span>Status</span>
+          <span>Version</span>
+          <span>Actions</span>
         </div>
+
+        {visibleQuestions.map((question, index) => (
+          <article className="teacher-question-catalog__row" key={question.id}>
+            <span className="teacher-question-catalog__number">{(page - 1) * PAGE_SIZE + index + 1}</span>
+            <div className="teacher-question-catalog__prompt">
+              <strong>{question.prompt}</strong>
+              {question.image && <small>Includes an image</small>}
+            </div>
+            <span className="teacher-question-catalog__bank">{question.bankName}</span>
+            <span className="teacher-type-pill">{question.type}</span>
+            <StatusBadge tone={question.status === 'Ready' ? 'success' : 'warning'}>{question.status}</StatusBadge>
+            <span className="teacher-question-catalog__version">{question.updated}</span>
+            <div className="teacher-question-catalog__actions">
+              <button
+                type="button"
+                className="teacher-question-edit"
+                disabled={question.status === 'Archived'}
+                title={question.status === 'Archived' ? 'Reactivate this question before editing it.' : undefined}
+                onClick={() => dispatch({ type: 'staff', patch: { section: 'edit-question', selectedBankId: question.bankId, selectedQuestionId: question.id } })}
+              >
+                <RiEditLine size={16} aria-hidden="true" /> Edit
+              </button>
+              <div ref={lifecycleQuestionId === question.id ? lifecycleRef : undefined} className="teacher-question-lifecycle">
+                <button
+                  type="button"
+                  className="teacher-question-lifecycle__trigger"
+                  aria-label={`Question lifecycle for ${question.prompt}`}
+                  aria-expanded={lifecycleQuestionId === question.id}
+                  onClick={() => setLifecycleQuestionId((current) => current === question.id ? null : question.id)}
+                >
+                  <RiMore2Line size={19} aria-hidden="true" />
+                </button>
+                {lifecycleQuestionId === question.id && (
+                  <div className="teacher-question-lifecycle__card" role="dialog" aria-label={`Lifecycle for ${question.prompt}`}>
+                    <div>
+                      <strong>Question lifecycle</strong>
+                      <p>{question.status === 'Archived' ? 'Reactivate this question to make it available for authoring again.' : 'Archive this question to remove it from active authoring without deleting its history.'}</p>
+                    </div>
+                    <button type="button" disabled={lifecycleBusyId === question.id} onClick={() => changeLifecycle(question)}>
+                      {question.status === 'Archived' ? <RiRefreshLine size={17} aria-hidden="true" /> : <RiArchiveLine size={17} aria-hidden="true" />}
+                      {lifecycleBusyId === question.id ? 'Updating…' : question.status === 'Archived' ? 'Reactivate question' : 'Archive question'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </article>
+        ))}
+
+        {!teacherData.loading && visibleQuestions.length === 0 && <div className="teacher-question-catalog__empty">No questions match the current filters.</div>}
+        {teacherData.loading && <div className="teacher-question-catalog__empty">Loading questions…</div>}
 
         <div className="teacher-table-footer">
           <span>{filtered.length === 0 ? '0 questions' : `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filtered.length)} of ${filtered.length} questions`}</span>
@@ -144,15 +200,24 @@ function TabButton({ label, value, current, count, onClick }) {
 }
 
 export function CreateQuestionPage({ state, dispatch, teacherData, gateway }) {
-  const selectedBank = teacherData.banks.find((bank) => bank.id === state.staff.selectedBankId) || teacherData.banks[0]
+  const selectedQuestion = teacherData.questions?.find((question) => question.id === state.staff.selectedQuestionId)
+  const isEditing = state.staff.section === 'edit-question'
+  const selectedBankId = selectedQuestion?.bankId || state.staff.selectedBankId
+  const selectedBank = teacherData.banks.find((bank) => bank.id === selectedBankId) || teacherData.banks[0]
   const [bankId, setBankId] = useState(selectedBank?.id || '')
-  const [type, setType] = useState('single')
-  const [correct, setCorrect] = useState(['A'])
-  const [prompt, setPrompt] = useState('')
-  const [instruction, setInstruction] = useState('')
-  const [options, setOptions] = useState([['A', ''], ['B', ''], ['C', ''], ['D', '']])
+  const [type, setType] = useState(selectedQuestion?.type === 'Multiple choice' ? 'multiple' : 'single')
+  const initialOptions = selectedQuestion?.options?.length
+    ? selectedQuestion.options.map((option, index) => [String.fromCharCode(65 + index), option.text])
+    : [['A', ''], ['B', ''], ['C', ''], ['D', '']]
+  const [correct, setCorrect] = useState(() => selectedQuestion?.options?.length
+    ? selectedQuestion.options.flatMap((option, index) => option.is_correct ? [String.fromCharCode(65 + index)] : [])
+    : ['A'])
+  const [prompt, setPrompt] = useState(selectedQuestion?.prompt || '')
+  const [instruction, setInstruction] = useState(selectedQuestion?.instruction || '')
+  const [options, setOptions] = useState(initialOptions)
   const [imageFile, setImageFile] = useState(null)
   const [imagePreviewUrl, setImagePreviewUrl] = useState('')
+  const [removeExistingImage, setRemoveExistingImage] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveStage, setSaveStage] = useState('')
@@ -213,12 +278,15 @@ export function CreateQuestionPage({ state, dispatch, teacherData, gateway }) {
         setSaveStage('Uploading image…')
         const asset = await gateway.media.uploadQuestionImage(imageFile)
         payload.image_asset_id = asset.id
+      } else if (isEditing && selectedQuestion.image && removeExistingImage) {
+        payload.image_asset_id = null
       }
       setSaveStage('Saving question…')
-      if (type === 'single') await gateway.questions.createSingleChoiceQuestion(bankId, payload)
+      if (isEditing) await gateway.questions.updateQuestion(selectedQuestion.id, payload)
+      else if (type === 'single') await gateway.questions.createSingleChoiceQuestion(bankId, payload)
       else await gateway.questions.createMultipleChoiceQuestion(bankId, payload)
       await teacherData.refresh()
-      dispatch({ type: 'staff', patch: { section: 'bank-detail', selectedBankId: bankId } })
+      dispatch({ type: 'staff', patch: isEditing ? { section: 'questions', selectedQuestionId: null } : { section: 'bank-detail', selectedBankId: bankId } })
     } catch (error) {
       setError(error.userMessage || 'Weave could not save this question.')
     } finally {
@@ -227,20 +295,20 @@ export function CreateQuestionPage({ state, dispatch, teacherData, gateway }) {
     }
   }
 
-  if (!selectedBank) {
+  if (!selectedBank || (isEditing && !selectedQuestion)) {
     return <><PageTitle title="Create Question" subtitle="No authorable bank is available." /><Notice tone="warning">The backend did not return any question bank you can author into.</Notice></>
   }
 
   return (
     <div className="teacher-reference-page">
       <div className="teacher-page-head">
-        <div><button className="text-button" onClick={() => dispatch({ type: 'staff', patch: { section: 'questions' } })}>Back to questions</button><PageTitle title="Create Question" subtitle="Save directly to the selected backend question bank." /></div>
-        <div className="toolbar"><button className="button button--primary" disabled={saving} onClick={saveQuestion}>{saving ? saveStage || 'Saving…' : 'Save Question'}</button></div>
+        <div><button className="text-button" onClick={() => dispatch({ type: 'staff', patch: { section: 'questions', selectedQuestionId: null } })}>Back to questions</button><PageTitle title={isEditing ? 'Edit Question' : 'Create Question'} subtitle={isEditing ? 'Update this question. Saving a change creates its next version.' : 'Save directly to the selected backend question bank.'} /></div>
+        <div className="toolbar"><button className="button button--primary" disabled={saving} onClick={saveQuestion}>{saving ? saveStage || 'Saving…' : isEditing ? 'Save Changes' : 'Save Question'}</button></div>
       </div>
       {error && <Notice tone="danger">{error}</Notice>}
       <div className="authoring-grid">
         <Panel title="Question content">
-          <label className="field-stack"><span>Question Bank</span><select aria-label="Question Bank" value={bankId} onChange={(event) => setBankId(event.target.value)}>{teacherData.banks.map((bank) => <option key={bank.id} value={bank.id}>{bank.name}</option>)}</select></label>
+          <label className="field-stack"><span>Question Bank</span><select aria-label="Question Bank" value={bankId} disabled={isEditing} onChange={(event) => setBankId(event.target.value)}>{teacherData.banks.map((bank) => <option key={bank.id} value={bank.id}>{bank.name}</option>)}</select></label>
           <label className="field-stack"><span>Prompt</span><textarea aria-label="Question prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} /></label>
           <label className="field-stack"><span>Instruction</span><textarea aria-label="Question instruction" value={instruction} onChange={(event) => setInstruction(event.target.value)} /></label>
           <div className="field-stack">
@@ -248,11 +316,12 @@ export function CreateQuestionPage({ state, dispatch, teacherData, gateway }) {
             <div className="upload-zone question-image-upload">
               {imagePreviewUrl ? <img src={imagePreviewUrl} alt="Selected question" /> : <span className="question-image-placeholder"><RiImageAddLine size={30} aria-hidden="true" /></span>}
               <div className="question-image-upload__copy">
-                <strong>{imageFile ? imageFile.name : 'Add a diagram or reference image'}</strong>
-                <p>{imageFile ? formatFileSize(imageFile.size) : 'PNG, JPEG, or WebP. Maximum 5 MB.'}</p>
+                <strong>{imageFile ? imageFile.name : isEditing && selectedQuestion.image && !removeExistingImage ? 'Current question image' : 'Add a diagram or reference image'}</strong>
+                <p>{imageFile ? formatFileSize(imageFile.size) : isEditing && selectedQuestion.image && !removeExistingImage ? 'Choose a new image to replace it, or remove it.' : 'PNG, JPEG, or WebP. Maximum 5 MB.'}</p>
                 <div className="toolbar">
                   <label className="button button--secondary" htmlFor="question-image-upload">{imageFile ? 'Replace image' : 'Choose image'}</label>
                   {imageFile && <button className="button button--ghost" type="button" onClick={removeImage}><RiCloseLine size={16} /> Remove</button>}
+                  {!imageFile && isEditing && selectedQuestion.image && !removeExistingImage && <button className="button button--ghost" type="button" onClick={() => setRemoveExistingImage(true)}><RiCloseLine size={16} /> Remove current image</button>}
                 </div>
                 <input ref={imageInputRef} id="question-image-upload" className="question-image-input" type="file" accept="image/png,image/jpeg,image/webp" onChange={selectImage} />
               </div>

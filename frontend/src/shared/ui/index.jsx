@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Icon } from '../icons/Icon'
 
 export function WeaveMark({ className = '' }) {
@@ -53,6 +53,60 @@ export function TenantIdentity({ tenant, inverse = false }) {
       {!inverse && <Icon name="chevronDown" size={18} />}
     </div>
   )
+}
+
+export function DashboardSchoolIdentity({ schoolName, logoSrc }) {
+  return (
+    <div className="dashboard-school-identity">
+      <span className="dashboard-school-identity__mark">
+        {logoSrc ? <img src={logoSrc} alt="" /> : <Icon name="school" size={20} />}
+      </span>
+      <strong title={schoolName}>{schoolName}</strong>
+    </div>
+  )
+}
+
+export function DashboardAccountMenu({ actor, fallbackName, roleLabel, onSignOut }) {
+  const [open, setOpen] = useState(false)
+  const accountRef = useRef(null)
+  const displayName = actor?.display_name?.trim()
+  const primaryLabel = displayName || actor?.email || fallbackName
+
+  useEffect(() => {
+    const closeMenu = (event) => {
+      if (accountRef.current && !accountRef.current.contains(event.target)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', closeMenu)
+    return () => document.removeEventListener('pointerdown', closeMenu)
+  }, [])
+
+  return (
+    <div className="dashboard-account" ref={accountRef}>
+      <button
+        className="dashboard-account__trigger"
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className="dashboard-account__avatar">{accountInitial(primaryLabel)}</span>
+        <span className="dashboard-account__identity">
+          <strong>{primaryLabel}</strong>
+          <small>{roleLabel}</small>
+        </span>
+        <Icon name="chevronDown" size={16} />
+      </button>
+      {open && (
+        <div className="dashboard-account__menu" role="menu">
+          <button type="button" onClick={onSignOut}><Icon name="logout" size={17} /> Logout</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function accountInitial(value) {
+  return String(value || 'User').trim().charAt(0).toUpperCase() || 'U'
 }
 
 export function SegmentedControl({ label, value, options, onChange }) {

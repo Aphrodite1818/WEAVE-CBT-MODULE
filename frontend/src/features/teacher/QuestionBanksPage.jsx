@@ -1,17 +1,36 @@
-import { useMemo, useState } from 'react'
-import { RiArrowRightLine, RiInformationLine, RiRefreshLine, RiSearchLine, RiStackLine } from '@remixicon/react'
-import { Icon } from '../../shared/icons/Icon'
-import { Notice, PageTitle, Panel, StatusBadge } from '../../shared/ui'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { RiArrowLeftLine, RiArrowRightLine, RiInformationLine, RiRefreshLine, RiSearchLine, RiStackLine } from '@remixicon/react'
+import { Notice, PageTitle, StatusBadge } from '../../shared/ui'
 import { QuestionRows } from './components'
 import { statusTone } from './utils'
 
 export function QuestionBanksPage({ dispatch, teacherData }) {
   const [query, setQuery] = useState('')
+  const [helpOpen, setHelpOpen] = useState(false)
+  const helpRef = useRef(null)
   const banks = useMemo(() => {
     const needle = query.trim().toLowerCase()
     if (!needle) return teacherData.banks
     return teacherData.banks.filter((bank) => `${bank.name} ${bank.description || ''}`.toLowerCase().includes(needle))
   }, [query, teacherData.banks])
+
+  useEffect(() => {
+    if (!helpOpen) return undefined
+
+    const closeOnOutsideClick = (event) => {
+      if (!helpRef.current?.contains(event.target)) setHelpOpen(false)
+    }
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setHelpOpen(false)
+    }
+
+    document.addEventListener('pointerdown', closeOnOutsideClick)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [helpOpen])
 
   return (
     <div className="teacher-reference-page">
@@ -63,13 +82,36 @@ export function QuestionBanksPage({ dispatch, teacherData }) {
         <div className="teacher-reference-empty teacher-reference-empty--compact"><div><strong>No matching banks</strong><p>Try another bank name or clear the search.</p></div></div>
       )}
 
-      <aside className="teacher-info-banner">
-        <span><RiInformationLine size={20} aria-hidden="true" /></span>
-        <div>
-          <strong>Can’t find a bank?</strong>
-          <p>You only see banks that match your current Weave teaching authorization. If something is missing, ask your school administrator to check your assignment.</p>
-        </div>
-        <button type="button" onClick={teacherData.refresh}><RiRefreshLine size={16} /> Refresh</button>
+      <aside ref={helpRef} className="teacher-bank-help">
+        <button
+          type="button"
+          className="teacher-bank-help__trigger"
+          aria-label="Question bank help"
+          aria-expanded={helpOpen}
+          aria-controls="question-bank-help-card"
+          onClick={() => setHelpOpen((open) => !open)}
+        >
+          <RiInformationLine size={22} aria-hidden="true" />
+        </button>
+        {helpOpen && (
+          <div id="question-bank-help-card" className="teacher-bank-help__card" role="dialog" aria-label="Question bank help">
+            <div className="teacher-bank-help__title">
+              <span><RiInformationLine size={20} aria-hidden="true" /></span>
+              <strong>Can’t find a bank?</strong>
+            </div>
+            <p>You only see banks that match your current Weave teaching authorization. If something is missing, ask your school administrator to check your assignment.</p>
+            <button
+              type="button"
+              className="teacher-bank-help__refresh"
+              onClick={() => {
+                setHelpOpen(false)
+                teacherData.refresh()
+              }}
+            >
+              <RiRefreshLine size={17} aria-hidden="true" /> Refresh banks
+            </button>
+          </div>
+        )}
       </aside>
     </div>
   )
@@ -84,15 +126,17 @@ export function BankDetailPage({ state, dispatch, teacherData }) {
   }
 
   return (
-    <div className="teacher-reference-page">
-      <div className="teacher-page-head">
-        <div><button className="text-button" onClick={() => dispatch({ type: 'staff', patch: { section: 'question-banks' } })}>Back to banks</button><PageTitle title={bank.name} subtitle={`${bank.count} questions`} /></div>
-        <div className="toolbar">
-          <button className="button button--secondary" onClick={teacherData.refresh}><Icon name="sync" size={17} /> Refresh</button>
-          <button className="button button--primary" onClick={() => dispatch({ type: 'staff', patch: { section: 'create-question', selectedBankId: bank.id } })}><Icon name="plus" size={17} /> Add Question</button>
-        </div>
+    <div className="teacher-reference-page teacher-bank-detail">
+      <div className="teacher-bank-detail__heading">
+        <PageTitle
+          title={bank.name}
+          subtitle={`${questions.length} ${questions.length === 1 ? 'question' : 'questions'} in this bank`}
+        />
+        <button className="teacher-bank-detail__back" onClick={() => dispatch({ type: 'staff', patch: { section: 'question-banks' } })}>
+          <RiArrowLeftLine size={18} aria-hidden="true" /> Back to question banks
+        </button>
       </div>
-      <Panel title="Questions"><QuestionRows questions={questions} banks={teacherData.banks} /></Panel>
+      <QuestionRows questions={questions} />
     </div>
   )
 }

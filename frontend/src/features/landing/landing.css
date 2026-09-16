@@ -3,7 +3,7 @@
   min-height: 100vh;
   overflow: hidden;
   color: rgb(var(--color-text));
-  background: #fff;
+  background: rgb(var(--color-background));
 }
 
 .landing-nav {

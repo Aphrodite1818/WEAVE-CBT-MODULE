@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import {
   RiAddLine,
   RiBookOpenLine,
@@ -6,8 +7,12 @@ import {
   RiFileAddLine,
   RiFileList3Line,
   RiGraduationCapLine,
+  RiMoonClearLine,
   RiStackLine,
+  RiSunLine,
 } from '@remixicon/react'
+import { getLocalBrandLogoSrc } from '../../api/branding'
+import { Icon } from '../../shared/icons/Icon'
 import { Notice } from '../../shared/ui'
 
 const statConfig = [
@@ -20,6 +25,11 @@ const statConfig = [
 export function OverviewPage({ state, dispatch, teacherData }) {
   const teacherName = state.session?.actor?.display_name || state.session?.name || 'Teacher'
   const firstName = teacherName.split(' ').filter(Boolean)[0] || 'Teacher'
+  const greeting = greetingForHour(new Date().getHours())
+  const isEvening = greeting === 'evening'
+  const GreetingIcon = isEvening ? RiMoonClearLine : RiSunLine
+  const schoolName = state.branding?.school_name || state.installation?.status?.tenant_name || 'Weave CBT'
+  const schoolLogoSrc = getLocalBrandLogoSrc(state.branding)
   const draftExams = teacherData.exams.filter((exam) => exam.status === 'draft')
   const submittedExams = teacherData.exams.filter((exam) => exam.status === 'submitted')
   const teachingScope = groupAssignments(teacherData.assignments)
@@ -31,30 +41,53 @@ export function OverviewPage({ state, dispatch, teacherData }) {
   }
 
   const goTo = (section, patch = {}) => dispatch({ type: 'staff', patch: { section, ...patch } })
-  const academicContext = [teacherData.session?.name, teacherData.term?.name].filter(Boolean).join('  •  ')
+  const sessionName = teacherData.session?.name
+  const termName = teacherData.term?.name
 
   return (
     <div className="teacher-overview-page">
+      <header className="teacher-overview-heading">
+        <h1>Teacher&apos;s Dashboard</h1>
+        <TeacherQuickActions
+          banks={teacherData.banks}
+          onNavigate={goTo}
+        />
+      </header>
+
       <section className="teacher-overview-hero" aria-labelledby="teacher-overview-title">
-        <div className="teacher-overview-hero__greeting">
-          <span className="teacher-overview-sun" aria-hidden="true">☀</span>
-          <div>
-            <h1 id="teacher-overview-title">Good morning, {firstName}!</h1>
-            <p>{academicContext || 'Academic context will appear after the local projection is available.'}</p>
+        <div className="teacher-overview-hero__content">
+          <div className="teacher-overview-school">
+            <span className="teacher-overview-school__logo">
+              {schoolLogoSrc ? <img src={schoolLogoSrc} alt={`${schoolName} logo`} /> : <Icon name="school" size={28} />}
+            </span>
+            <strong>{schoolName}</strong>
           </div>
+          <div className="teacher-overview-greeting">
+            <span className="teacher-overview-time-icon" data-time-icon={isEvening ? 'moon' : 'sun'} aria-hidden="true">
+              <GreetingIcon size={26} />
+            </span>
+            <h2 id="teacher-overview-title">Good {greeting}, {firstName}!</h2>
+          </div>
+          {(sessionName || termName) ? (
+            <div className="teacher-overview-context" aria-label="Current academic context">
+              {sessionName && <span>{sessionName}</span>}
+              {termName && <span>{termName}</span>}
+            </div>
+          ) : (
+            <p>Academic context will appear after the local projection is available.</p>
+          )}
         </div>
-        <blockquote>“Better teachers build<br />brighter futures.”</blockquote>
       </section>
 
       {teacherData.error && <Notice tone="danger">{teacherData.error}</Notice>}
       {!teacherData.error && teacherData.warning && <Notice tone="warning">Some dashboard data could not be refreshed. Available local data is still shown below.</Notice>}
 
       <section className="teacher-overview-stats" aria-label="Teacher workspace summary" aria-busy={teacherData.loading}>
-        {statConfig.map((stat) => (
+        {statConfig.map(({ key, ...stat }) => (
           <OverviewStat
-            key={stat.key}
+            key={key}
             {...stat}
-            value={stats[stat.key]}
+            value={stats[key]}
             onClick={stat.section ? () => goTo(stat.section) : undefined}
           />
         ))}
@@ -117,19 +150,70 @@ export function OverviewPage({ state, dispatch, teacherData }) {
         </article>
       </section>
 
-      <section className="teacher-reference-panel teacher-quick-actions-card">
-        <div className="teacher-reference-panel__head">
-          <div><h2>Quick Actions</h2><p>Jump directly into the teacher workflows you use most.</p></div>
-        </div>
-        <nav className="teacher-quick-actions" aria-label="Teacher quick actions">
-          <button type="button" className="primary" disabled={teacherData.banks.length === 0} onClick={() => goTo('create-question', { selectedBankId: teacherData.banks[0]?.id })}>
-            <RiAddLine size={18} /> Create Question
+    </div>
+  )
+}
+
+function TeacherQuickActions({ banks, onNavigate }) {
+  const [open, setOpen] = useState(false)
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return undefined
+
+    const closeOnOutsidePress = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) setOpen(false)
+    }
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+
+    document.addEventListener('pointerdown', closeOnOutsidePress)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePress)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [open])
+
+  const selectAction = (section, patch) => {
+    setOpen(false)
+    onNavigate(section, patch)
+  }
+
+  return (
+    <div className="teacher-quick-menu" ref={menuRef}>
+      <button
+        type="button"
+        className="teacher-quick-menu__trigger"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls="teacher-quick-actions-menu"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <RiAddLine size={18} aria-hidden="true" />
+        Quick Actions
+      </button>
+      {open && (
+        <div className="teacher-quick-menu__dropdown" id="teacher-quick-actions-menu" role="menu" aria-label="Teacher quick actions">
+          <button type="button" role="menuitem" disabled={banks.length === 0} onClick={() => selectAction('create-question', { selectedBankId: banks[0]?.id })}>
+            <RiAddLine size={19} aria-hidden="true" />
+            <span><strong>Create Question</strong><small>Add a question to your bank</small></span>
           </button>
-          <button type="button" onClick={() => goTo('create-exam')}><RiFileAddLine size={18} /> Create Exam</button>
-          <button type="button" onClick={() => goTo('question-banks')}><RiDatabase2Line size={18} /> Question Banks</button>
-          <button type="button" onClick={() => goTo('exams')}><RiGraduationCapLine size={18} /> View All Exams</button>
-        </nav>
-      </section>
+          <button type="button" role="menuitem" onClick={() => selectAction('create-exam')}>
+            <RiFileAddLine size={19} aria-hidden="true" />
+            <span><strong>Create Exam</strong><small>Start a new examination</small></span>
+          </button>
+          <button type="button" role="menuitem" onClick={() => selectAction('question-banks')}>
+            <RiDatabase2Line size={19} aria-hidden="true" />
+            <span><strong>Question Banks</strong><small>Manage authored questions</small></span>
+          </button>
+          <button type="button" role="menuitem" onClick={() => selectAction('exams')}>
+            <RiGraduationCapLine size={19} aria-hidden="true" />
+            <span><strong>View All Exams</strong><small>Open the exam workspace</small></span>
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -161,4 +245,10 @@ function groupAssignments(assignments) {
 
 function formatSelectionMode(mode) {
   return String(mode || 'random').toLowerCase() === 'manual' ? 'Manual selection' : 'Random selection'
+}
+
+function greetingForHour(hour) {
+  if (hour < 12) return 'morning'
+  if (hour < 17) return 'afternoon'
+  return 'evening'
 }
