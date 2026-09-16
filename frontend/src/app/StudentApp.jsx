@@ -1,13 +1,16 @@
 import { StudentLoginPage } from '../features/auth/StudentLoginPage'
 import { LandingPage } from '../features/landing/LandingPage'
 import { StudentWorkspace } from '../features/student/StudentWorkspace'
-import { buildBrandingThemeStyle, createDefaultBranding } from './theme/branding'
-import { weaveGateway } from './gateway'
 import { ProductLoadingScreen } from './ProductLoadingScreen'
+import { studentGateway } from './studentGateway'
+import { buildBrandingThemeStyle, createDefaultBranding } from './theme/branding'
 import { useAppController } from './useAppController'
 
 export default function StudentApp() {
-  const { state, dispatch, boot, signInStudent, signOut } = useAppController({ application: 'student' })
+  const { state, dispatch, boot, signInStudent, signOut } = useAppController({
+    application: 'student',
+    gateway: studentGateway,
+  })
   const branding = state.installation.configured ? state.branding : createDefaultBranding()
 
   return (
@@ -40,7 +43,7 @@ export default function StudentApp() {
         <StudentWorkspace
           exam={state.exam}
           resolution={state.studentResolution}
-          gateway={weaveGateway}
+          gateway={studentGateway}
           dispatch={dispatch}
           returnToSignIn={signOut}
         />
