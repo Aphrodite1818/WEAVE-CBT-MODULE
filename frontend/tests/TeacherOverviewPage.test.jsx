@@ -1,25 +1,43 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { OverviewPage } from '../src/features/teacher/OverviewPage'
 
 describe('Teacher overview', () => {
-  it('renders the reference layout with visible KPI icon SVGs and real empty states', () => {
+  it('renders real academic and exam data in the reference dashboard layout', () => {
     const dispatch = vi.fn()
     const { container } = render(
       <OverviewPage
+        state={{ session: { actor: { display_name: 'Taiwo A.', role: 'teacher' } } }}
         dispatch={dispatch}
-        teacherData={{ banks: [], questions: [], loading: false, error: '' }}
+        teacherData={{
+          banks: [{ id: 'bank-1', name: 'Mathematics', count: 12 }],
+          questions: [],
+          subjects: [{ id: 'subject-1', name: 'Mathematics' }, { id: 'subject-2', name: 'Physics' }],
+          assignments: [{ curriculumSubjectId: 'subject-1', subjectName: 'Mathematics', className: 'SS2 A' }],
+          exams: [
+            { id: 'exam-1', title: 'Mathematics CA 1', subjectName: 'Mathematics', questionCount: 30, selectionMode: 'manual', status: 'draft' },
+            { id: 'exam-2', title: 'Physics Test', subjectName: 'Physics', questionCount: 20, selectionMode: 'random', status: 'submitted' },
+          ],
+          session: { id: 'session-1', name: '2026/2027 Academic Session' },
+          term: { id: 'term-1', name: 'First Term' },
+          loading: false,
+          error: '',
+          warning: '',
+        }}
       />,
     )
 
-    const summary = screen.getByLabelText(/teacher workspace summary/i)
-    expect(within(summary).getAllByRole('article')).toHaveLength(4)
-    expect(container.querySelectorAll('.teacher-stat-card__icon .teacher-kpi-icon')).toHaveLength(4)
-    expect(screen.getByText(/no recent exams to show yet/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /good morning, taiwo/i })).toBeInTheDocument()
+    expect(screen.getByText(/2026\/2027 academic session/i)).toBeInTheDocument()
+    expect(container.querySelectorAll('.teacher-overview-stat')).toHaveLength(4)
+    expect(screen.getByText('Mathematics CA 1')).toBeInTheDocument()
+    expect(screen.getByText('SS2 A')).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: /teacher quick actions/i })).toBeInTheDocument()
-    expect(screen.queryByText('320')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /manage question banks/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^question banks$/i }))
     expect(dispatch).toHaveBeenCalledWith({ type: 'staff', patch: { section: 'question-banks' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+    expect(dispatch).toHaveBeenCalledWith({ type: 'staff', patch: { section: 'exams', selectedExamId: 'exam-1' } })
   })
 })
