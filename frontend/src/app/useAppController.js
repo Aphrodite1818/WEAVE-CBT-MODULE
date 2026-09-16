@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { weaveGateway } from './gateway'
 import { appReducer, createInitialState } from './state/appState'
 
 const NAV_STATE_KEY = 'weave.cbt.navigation'
@@ -28,9 +27,12 @@ function toStudentResolution(session) {
   }
 }
 
-export function useAppController({ application = 'combined' } = {}) {
+export function useAppController({ application = 'combined', gateway } = {}) {
   if (!applications.has(application)) {
     throw new Error(`Unsupported Weave CBT frontend application: ${application}`)
+  }
+  if (!gateway) {
+    throw new Error('A scoped Weave CBT frontend gateway is required')
   }
 
   const navigate = useNavigate()
@@ -68,10 +70,10 @@ export function useAppController({ application = 'combined' } = {}) {
     const navigationTarget = { ...savedNavigation, ...routeNavigation }
 
     if (application === 'staff') {
-      return restoreStaffSession(rawDispatch, navigationTarget, navigateRef.current)
+      return restoreStaffSession(rawDispatch, navigationTarget, navigateRef.current, gateway)
     }
     if (application === 'student') {
-      return restoreStudentSession(rawDispatch, navigationTarget, navigateRef.current)
+      return restoreStudentSession(rawDispatch, navigationTarget, navigateRef.current, gateway)
     }
 
     const preferredType = navigationTarget?.sessionType
@@ -80,18 +82,18 @@ export function useAppController({ application = 'combined' } = {}) {
       : [restoreStaffSession, restoreStudentSession]
 
     for (const restore of restorers) {
-      if (await restore(rawDispatch, navigationTarget, navigateRef.current)) return true
+      if (await restore(rawDispatch, navigationTarget, navigateRef.current, gateway)) return true
     }
     return false
-  }, [application])
+  }, [application, gateway])
 
   const boot = useCallback(async (signal) => {
     rawDispatch({ type: 'bootStart' })
-    weaveGateway.branding.getBranding({ signal })
+    gateway.branding.getBranding({ signal })
       .then((branding) => rawDispatch({ type: 'brandingSuccess', branding }))
       .catch(() => null)
     try {
-      const status = await weaveGateway.installation.getInstallationStatus({ signal })
+      const status = await gateway.installation.getInstallationStatus({ signal })
       rawDispatch({
         type: 'bootSuccess',
         status,
@@ -128,7 +130,7 @@ export function useAppController({ application = 'combined' } = {}) {
         rawDispatch({ type: 'bootFailure', message: error.userMessage || 'Weave could not reach the local backend.' })
       }
     }
-  }, [application, restoreSession])
+  }, [application, gateway, restoreSession])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -176,20 +178,20 @@ export function useAppController({ application = 'combined' } = {}) {
     rawDispatch({ type: 'setupStart' })
     navigate('/setup/pairing')
     try {
-      const status = await weaveGateway.installation.pairInstallation(form)
+      const status = await gateway.installation.pairInstallation(form)
       rawDispatch({ type: 'setupSuccess', status })
       navigate('/setup/paired-success', { replace: true })
-      weaveGateway.branding.getBranding()
+      gateway.branding.getBranding()
         .then((branding) => rawDispatch({ type: 'brandingSuccess', branding }))
         .catch(() => null)
     } catch (error) {
       if (error.status === 409) {
         try {
-          const status = await weaveGateway.installation.getInstallationStatus()
+          const status = await gateway.installation.getInstallationStatus()
           if (status.configured) {
             rawDispatch({ type: 'setupSuccess', status })
             navigate('/setup/paired-success', { replace: true })
-            weaveGateway.branding.getBranding()
+            gateway.branding.getBranding()
               .then((branding) => rawDispatch({ type: 'brandingSuccess', branding }))
               .catch(() => null)
             return
@@ -200,13 +202,13 @@ export function useAppController({ application = 'combined' } = {}) {
     } finally {
       pairPending.current = false
     }
-  }, [application, navigate])
+  }, [application, gateway, navigate])
 
   const signInStaff = useCallback(async ({ email, password }) => {
     if (application === 'student') return
     rawDispatch({ type: 'authStart' })
     try {
-      const session = await weaveGateway.auth.loginStaff({ email, password })
+      const session = await gateway.auth.loginStaff({ email, password })
       if (session.role === 'teacher') {
         rawDispatch({ type: 'authSuccess', session, view: 'staff' })
         rawDispatch({ type: 'staff', patch: { section: 'overview' } })
@@ -216,7 +218,7 @@ export function useAppController({ application = 'combined' } = {}) {
         rawDispatch({ type: 'syncChecking' })
         navigate('/sync/check', { replace: true })
         try {
-          const status = await weaveGateway.sync.getSyncStatus()
+          const status = await gateway.sync.getSyncStatus()
           rawDispatch({ type: 'syncStatus', status })
           navigate(status.bootstrap_completed_at ? '/admin/dashboard' : '/sync/initial', { replace: true })
         } catch (error) {
@@ -224,26 +226,26 @@ export function useAppController({ application = 'combined' } = {}) {
           navigate('/sync/initial', { replace: true })
         }
       } else {
-        weaveGateway.auth.signOutStaff().catch(() => weaveGateway.auth.clearStaffSession())
+        gateway.auth.signOutStaff().catch(() => gateway.auth.clearStaffSession())
         rawDispatch({ type: 'authFailure', message: 'This account has no CBT staff workspace.' })
       }
     } catch (error) {
       rawDispatch({ type: 'authFailure', message: error.userMessage || 'Staff sign in failed.' })
     }
-  }, [application, navigate])
+  }, [application, gateway, navigate])
 
   const signInStudent = useCallback(async ({ admissionNumber, password }) => {
     if (application === 'staff') return
     rawDispatch({ type: 'authStart' })
     try {
-      const session = await weaveGateway.auth.loginStudent({ admissionNumber, password })
+      const session = await gateway.auth.loginStudent({ admissionNumber, password })
       rawDispatch({ type: 'authSuccess', session, view: 'student', examStage: 'lobby' })
       rawDispatch({ type: 'studentResolution', resolution: toStudentResolution(session) })
       navigate('/student', { replace: true })
     } catch (error) {
       rawDispatch({ type: 'authFailure', message: error.userMessage || 'Student sign in failed.' })
     }
-  }, [application, navigate])
+  }, [application, gateway, navigate])
 
   useEffect(() => {
     if (application === 'staff') return undefined
@@ -260,7 +262,7 @@ export function useAppController({ application = 'combined' } = {}) {
     let cancelled = false
     const refresh = async () => {
       try {
-        const session = await weaveGateway.auth.getStudentStatus()
+        const session = await gateway.auth.getStudentStatus()
         if (!cancelled) {
           rawDispatch({ type: 'studentResolution', resolution: toStudentResolution(session) })
         }
@@ -279,6 +281,7 @@ export function useAppController({ application = 'combined' } = {}) {
     }
   }, [
     application,
+    gateway,
     state.session?.type,
     state.view,
     state.exam.stage,
@@ -298,22 +301,22 @@ export function useAppController({ application = 'combined' } = {}) {
 
   const signOut = useCallback(async () => {
     if (state.session?.type === 'student' && application !== 'staff') {
-      await weaveGateway.auth.logoutStudent().catch(() => null)
+      await gateway.auth.logoutStudent().catch(() => null)
     }
     if (state.session?.type === 'staff' && application !== 'student') {
-      await weaveGateway.auth.signOutStaff().catch(() => weaveGateway.auth.clearStaffSession())
+      await gateway.auth.signOutStaff().catch(() => gateway.auth.clearStaffSession())
     }
     clearNavigationState()
     rawDispatch({ type: 'signOut' })
     navigate('/', { replace: true })
-  }, [application, navigate, state.session])
+  }, [application, gateway, navigate, state.session])
 
   return { state, dispatch: routeDispatch, boot, pair, signInStaff, signInStudent, signOut }
 }
 
-async function restoreStudentSession(dispatch, savedNavigation, navigate) {
+async function restoreStudentSession(dispatch, savedNavigation, navigate, gateway) {
   try {
-    const session = await weaveGateway.auth.getStudentStatus()
+    const session = await gateway.auth.getStudentStatus()
     const examStage = savedNavigation?.examStage === 'active' ? 'active' : 'lobby'
     dispatch({ type: 'authSuccess', session, view: 'student', examStage })
     dispatch({ type: 'studentResolution', resolution: toStudentResolution(session) })
@@ -324,9 +327,9 @@ async function restoreStudentSession(dispatch, savedNavigation, navigate) {
   }
 }
 
-async function restoreStaffSession(dispatch, savedNavigation, navigate) {
+async function restoreStaffSession(dispatch, savedNavigation, navigate, gateway) {
   try {
-    const session = await weaveGateway.auth.refreshStaff()
+    const session = await gateway.auth.refreshStaff()
     if (session.role === 'teacher') {
       const section = staffSectionForRole(session.role, savedNavigation?.staffSection)
       dispatch({ type: 'authSuccess', session, view: 'staff' })
@@ -341,7 +344,7 @@ async function restoreStaffSession(dispatch, savedNavigation, navigate) {
       dispatch({ type: 'syncChecking' })
       navigate('/sync/check', { replace: true })
       try {
-        const status = await weaveGateway.sync.getSyncStatus()
+        const status = await gateway.sync.getSyncStatus()
         dispatch({ type: 'syncStatus', status })
         navigate(status.bootstrap_completed_at ? `/admin/${section}` : '/sync/initial', { replace: true })
       } catch (error) {
@@ -350,10 +353,10 @@ async function restoreStaffSession(dispatch, savedNavigation, navigate) {
       }
       return true
     }
-    await weaveGateway.auth.signOutStaff().catch(() => weaveGateway.auth.clearStaffSession())
+    await gateway.auth.signOutStaff().catch(() => gateway.auth.clearStaffSession())
     return false
   } catch {
-    weaveGateway.auth.clearStaffSession()
+    gateway.auth.clearStaffSession()
     return false
   }
 }
