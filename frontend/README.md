@@ -19,10 +19,10 @@ The applications intentionally use different browser origins.
 
 ```bash
 npm run dev:staff
-# http://localhost:5173
+# http://localhost:3001
 
 npm run dev:student
-# http://localhost:5174
+# http://localhost:3002
 ```
 
 Both development servers proxy `/api/v1` to the same local FastAPI backend.
