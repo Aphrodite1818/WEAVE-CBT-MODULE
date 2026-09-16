@@ -90,7 +90,8 @@ async function loadTeacherData(gateway) {
   const optional = async (request, fallback) => {
     if (typeof request !== 'function') return fallback
     try {
-      return await request()
+      const value = await request()
+      return value ?? fallback
     } catch (error) {
       warnings.push(error.userMessage || error.message || 'Some teacher data could not be loaded.')
       return fallback
