@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { RiArchiveLine, RiCloseLine, RiEditLine, RiImageAddLine, RiMore2Line, RiRefreshLine, RiSearchLine } from '@remixicon/react'
+import { RiArchiveLine, RiCloseLine, RiImageAddLine, RiMore2Line, RiRefreshLine, RiSearchLine } from '@remixicon/react'
 import { Icon } from '../../shared/icons/Icon'
 import { Notice, PageTitle, Panel, SegmentedControl, StatusBadge } from '../../shared/ui'
 import './questions-page.css'
 
 const MAX_QUESTION_IMAGE_SIZE = 5 * 1024 * 1024
 const QUESTION_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
-const PAGE_SIZE = 9
+const PAGE_SIZE = 10
 
 export function QuestionsPage({ dispatch, teacherData, gateway }) {
   const [query, setQuery] = useState('')
@@ -127,25 +127,32 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
         <TabButton label="Archived" value="archived" current={tab} count={counts.archived} onClick={changeFilter(setTab)} />
       </nav>
 
-      <section className="teacher-question-grid" aria-busy={teacherData.loading} aria-label="Questions">
-        {visibleQuestions.map((question, index) => (
-          <article className="teacher-question-card" key={question.id}>
-            <div className="teacher-question-card__top">
-              <span className="teacher-question-card__number">{(page - 1) * PAGE_SIZE + index + 1}</span>
-              <StatusBadge tone={question.status === 'Ready' ? 'success' : 'warning'}>{question.status}</StatusBadge>
-            </div>
+      <section className="teacher-question-list" aria-busy={teacherData.loading} aria-label="Questions">
+        <div className="teacher-question-list__header" aria-hidden="true">
+          <span>Question</span>
+          <span>Bank</span>
+          <span>Type</span>
+          <span>Status</span>
+          <span>Version</span>
+          <span>Actions</span>
+        </div>
 
-            <div className="teacher-question-card__body">
-              <span className="teacher-question-card__bank">{question.bankName}</span>
-              <h2>{question.prompt}</h2>
-              {question.image && <span className="teacher-question-card__image-note"><RiImageAddLine size={16} aria-hidden="true" /> Includes an image</span>}
-              <div className="teacher-question-card__meta">
-                <span className="teacher-type-pill">{question.type}</span>
-                <span>Version {question.version}</span>
+        {visibleQuestions.map((question, index) => (
+          <article className="teacher-question-row" key={question.id}>
+            <div className="teacher-question-row__question">
+              <span className="teacher-question-row__number">{(page - 1) * PAGE_SIZE + index + 1}</span>
+              <div>
+                <h2>{question.prompt}</h2>
+                {question.image && <small><RiImageAddLine size={15} aria-hidden="true" /> Includes an image</small>}
               </div>
             </div>
 
-            <div className="teacher-question-card__actions">
+            <span className="teacher-question-row__bank" title={question.bankName}>{question.bankName}</span>
+            <span><span className="teacher-type-pill">{question.type}</span></span>
+            <span><StatusBadge tone={question.status === 'Ready' ? 'success' : 'warning'}>{question.status}</StatusBadge></span>
+            <span className="teacher-question-row__version">v{question.version}</span>
+
+            <div className="teacher-question-row__actions">
               <button
                 type="button"
                 className="teacher-question-edit"
@@ -153,7 +160,7 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
                 title={question.status === 'Archived' ? 'Reactivate this question before editing it.' : undefined}
                 onClick={() => dispatch({ type: 'staff', patch: { section: 'edit-question', selectedBankId: question.bankId, selectedQuestionId: question.id } })}
               >
-                <RiEditLine size={17} aria-hidden="true" /> Edit
+                Edit
               </button>
 
               <div ref={lifecycleQuestionId === question.id ? lifecycleRef : undefined} className="teacher-question-lifecycle">
@@ -164,7 +171,7 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
                   aria-expanded={lifecycleQuestionId === question.id}
                   onClick={() => setLifecycleQuestionId((current) => current === question.id ? null : question.id)}
                 >
-                  Lifecycle <RiMore2Line size={18} aria-hidden="true" />
+                  <RiMore2Line size={20} aria-hidden="true" />
                 </button>
 
                 {lifecycleQuestionId === question.id && (
@@ -187,14 +194,15 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
             </div>
           </article>
         ))}
-      </section>
 
-      {!teacherData.loading && visibleQuestions.length === 0 && (
-        <div className="teacher-reference-empty teacher-reference-empty--large">
-          <div><strong>No matching questions</strong><p>Try another bank, filter, or search term.</p></div>
-        </div>
-      )}
-      {teacherData.loading && <div className="teacher-page-loading">Loading questions…</div>}
+        {!teacherData.loading && visibleQuestions.length === 0 && (
+          <div className="teacher-question-list__empty">
+            <strong>No matching questions</strong>
+            <p>Try another bank, filter, or search term.</p>
+          </div>
+        )}
+        {teacherData.loading && <div className="teacher-question-list__empty">Loading questions…</div>}
+      </section>
 
       <div className="teacher-question-pagination">
         <span>{filtered.length === 0 ? '0 questions' : `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filtered.length)} of ${filtered.length} questions`}</span>
