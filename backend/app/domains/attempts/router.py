@@ -46,7 +46,7 @@ async def _attach_option_media(
     db: DbSession,
     attempt: AttemptResponse,
 ) -> AttemptResponse:
-    """Attach immutable option-media snapshot IDs without changing service policy."""
+    """Attach immutable option-media snapshot IDs with one batched lookup."""
 
     question_ids = [question.id for question in attempt.questions]
     allocations = await AttemptRepository.list_option_allocations_for_questions(
@@ -68,6 +68,16 @@ async def _load_current_attempt(
 ) -> AttemptResponse:
     attempt = await AttemptService.get_current(db, context=context)
     return await _attach_option_media(db, attempt)
+
+
+async def _current_attempt_row(db: DbSession, context: CurrentStudentExamSession):
+    attempt = await AttemptRepository.get_attempt_by_candidate_id(
+        db,
+        context.candidate_id,
+    )
+    if attempt is None:
+        raise AttemptStateError("Candidate has not started this examination")
+    return attempt
 
 
 @student_router.post("/current/start", response_model=AttemptResponse)
@@ -100,15 +110,15 @@ async def get_current_question_image(
     context: CurrentStudentExamSession,
 ) -> Response:
     try:
-        attempt = await _load_current_attempt(db, context)
-    except (AttemptStateError, ExamNotFound, ExamStateError, ValueError) as exc:
+        attempt = await _current_attempt_row(db, context)
+        question = await AttemptRepository.get_question_allocation_by_id(
+            db,
+            attempt_question_id,
+        )
+    except (AttemptStateError, ValueError) as exc:
         raise _http_error(exc) from exc
 
-    question = next(
-        (item for item in attempt.questions if item.id == attempt_question_id),
-        None,
-    )
-    if question is None:
+    if question is None or question.attempt_id != attempt.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Question does not belong to this attempt.",
@@ -137,24 +147,24 @@ async def get_current_option_image(
     context: CurrentStudentExamSession,
 ) -> Response:
     try:
-        attempt = await _load_current_attempt(db, context)
-    except (AttemptStateError, ExamNotFound, ExamStateError, ValueError) as exc:
+        attempt = await _current_attempt_row(db, context)
+        question = await AttemptRepository.get_question_allocation_by_id(
+            db,
+            attempt_question_id,
+        )
+        option = await AttemptRepository.get_option_allocation_by_id(
+            db,
+            attempt_option_id,
+        )
+    except (AttemptStateError, ValueError) as exc:
         raise _http_error(exc) from exc
 
-    question = next(
-        (item for item in attempt.questions if item.id == attempt_question_id),
-        None,
-    )
-    if question is None:
+    if question is None or question.attempt_id != attempt.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Question does not belong to this attempt.",
         )
-    option = next(
-        (item for item in question.options if item.id == attempt_option_id),
-        None,
-    )
-    if option is None:
+    if option is None or option.attempt_question_id != question.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Answer option does not belong to this question.",
