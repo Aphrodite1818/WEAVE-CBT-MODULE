@@ -46,10 +46,7 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
           <header className="premium-exam-header">
             <div className="premium-exam-header-left">
               <WeaveLogo />
-              <div className="premium-exam-title">
-                <strong>{resolution?.exam?.title || 'Current examination'}</strong>
-                <span>Preparing questions</span>
-              </div>
+              <div className="premium-exam-title"><strong>{resolution?.exam?.title || 'Current examination'}</strong><span>Preparing questions</span></div>
             </div>
             <button className="premium-student-logout" type="button" onClick={returnToSignIn}>Logout</button>
           </header>
@@ -67,10 +64,7 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
         <header className="premium-exam-header">
           <div className="premium-exam-header-left">
             <WeaveLogo />
-            <div className="premium-exam-title">
-              <strong>{attempt.exam_title}</strong>
-              <span>{attempt.is_makeup ? 'Makeup examination' : 'Normal examination'}</span>
-            </div>
+            <div className="premium-exam-title"><strong>{attempt.exam_title}</strong><span>{attempt.is_makeup ? 'Makeup examination' : 'Normal examination'}</span></div>
           </div>
           <div className="premium-exam-header-right">
             <div className="student-avatar" style={{fontSize: '10px'}}>(AD)</div>
@@ -80,10 +74,7 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
         </header>
         <div className="premium-exam-layout">
           <aside className="premium-exam-sidebar">
-            <div className="premium-timer-box">
-              <span>Time remaining</span>
-              <strong>{formatRemaining(attempt.remaining_seconds)}</strong>
-            </div>
+            <div className="premium-timer-box"><span>Time remaining</span><strong>{formatRemaining(attempt.remaining_seconds)}</strong></div>
             <div className="premium-question-nav">
               <h3>Questions</h3>
               <div className="premium-nav-grid">
@@ -102,36 +93,46 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
           <div className="premium-exam-content">
             <div className="premium-question-header">
               <h2>Question {exam.index + 1} of {questions.length}</h2>
-              <label className="premium-mark-review"><input type="checkbox" /> Mark for review</label>
+              <label className="premium-mark-review"><input type="checkbox" checked={Boolean(current.is_flagged)} readOnly /> Mark for review</label>
             </div>
-            <div className="premium-question-prompt">{current.prompt || 'What is the value of x in the equation 2x + 3 = 11?'}</div>
+            {current.instruction && <p className="premium-question-instruction">{current.instruction}</p>}
+            <div className="premium-question-prompt">{current.prompt}</div>
+            {current.image_asset_id && (
+              <div className="premium-question-media">
+                <AttemptMedia gateway={gateway} questionId={current.id} alt="Question illustration" />
+              </div>
+            )}
             <div className="premium-options-list">
-              {current.options.map((option, index) => (
-                <label key={option.id} className={`premium-option ${current.selected_option_ids.includes(option.id) ? 'selected' : ''}`}>
-                  <input
-                    type="radio"
-                    style={{display: 'none'}}
-                    checked={current.selected_option_ids.includes(option.id)}
-                    onChange={() => saveAnswer({ question: current, optionId: option.id, gateway, setAttempt, setSavingByQuestion, setAttemptError })}
-                  />
-                  <div className="premium-option-letter">{['A', 'B', 'C', 'D', 'E'][index % 5]}</div>
-                  <div className="premium-option-text">{option.text || option.position}</div>
-                </label>
-              ))}
+              {current.options.map((option, index) => {
+                const selected = current.selected_option_ids.includes(option.id)
+                return (
+                  <label key={option.id} className={`premium-option ${selected ? 'selected' : ''}`}>
+                    <input
+                      type={current.question_type === 'multiple_choice' ? 'checkbox' : 'radio'}
+                      style={{display: 'none'}}
+                      checked={selected}
+                      onChange={() => saveAnswer({ question: current, optionId: option.id, gateway, setAttempt, setSavingByQuestion, setAttemptError })}
+                    />
+                    <div className="premium-option-letter">{optionLetter(index)}</div>
+                    <div className="premium-option-content">
+                      {option.text && <div className="premium-option-text">{option.text}</div>}
+                      {option.image_asset_id && (
+                        <div className="premium-option-media">
+                          <AttemptMedia gateway={gateway} questionId={current.id} optionId={option.id} alt={`Option ${optionLetter(index)}`} />
+                        </div>
+                      )}
+                    </div>
+                  </label>
+                )
+              })}
             </div>
             {attemptError && <div style={{marginTop: '24px'}}><Notice tone="danger">{attemptError}</Notice></div>}
             <div className="premium-exam-footer">
-              <button className="premium-btn-secondary" onClick={() => dispatch({ type: 'exam', patch: { index: Math.max(0, exam.index - 1) } })} disabled={exam.index === 0}>
-                &lt; Previous
-              </button>
+              <button className="premium-btn-secondary" onClick={() => dispatch({ type: 'exam', patch: { index: Math.max(0, exam.index - 1) } })} disabled={exam.index === 0}>&lt; Previous</button>
               {exam.index < questions.length - 1 ? (
-                <button className="premium-btn-primary" onClick={() => dispatch({ type: 'exam', patch: { index: exam.index + 1 } })}>
-                  Save and next &gt;
-                </button>
+                <button className="premium-btn-primary" onClick={() => dispatch({ type: 'exam', patch: { index: exam.index + 1 } })}>Save and next &gt;</button>
               ) : (
-                <button className="premium-btn-primary" onClick={() => submitAttempt({ gateway, setSubmitted, dispatch, setAttemptError })}>
-                  Submit exam
-                </button>
+                <button className="premium-btn-primary" onClick={() => submitAttempt({ gateway, setSubmitted, dispatch, setAttemptError })}>Submit exam</button>
               )}
             </div>
           </div>
@@ -145,16 +146,8 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
   const waiting = state === 'waiting_for_activation'
   const unavailable = noExam || waiting
   const ready = state === 'ready' || state === 'makeup'
-  const title = noExam
-    ? 'No exam available yet'
-    : resolution?.exam?.title || 'Current examination'
-  const statusLabel = noExam
-    ? 'Waiting room'
-    : waiting
-      ? 'Waiting for activation'
-      : state === 'makeup'
-        ? 'Makeup exam ready'
-        : 'Exam ready'
+  const title = noExam ? 'No exam available yet' : resolution?.exam?.title || 'Current examination'
+  const statusLabel = noExam ? 'Waiting room' : waiting ? 'Waiting for activation' : state === 'makeup' ? 'Makeup exam ready' : 'Exam ready'
 
   return (
     <main className="premium-exam-shell" style={{justifyContent: 'center', alignItems: 'center'}}>
@@ -165,18 +158,34 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
         {unavailable && <Notice>Weave is checking the local CBT server automatically. You do not need to sign in again.</Notice>}
         {ready && <Notice>Your examination has been resolved from the local CBT server and is ready to open.</Notice>}
         {attemptError && <Notice tone="danger">{attemptError}</Notice>}
-        <button
-          className="premium-btn-primary"
-          style={{width: '100%', marginTop: '24px'}}
-          disabled={unavailable}
-          onClick={() => startAttempt({ gateway, setAttempt, dispatch, setAttemptError })}
-        >
+        <button className="premium-btn-primary" style={{width: '100%', marginTop: '24px'}} disabled={unavailable} onClick={() => startAttempt({ gateway, setAttempt, dispatch, setAttemptError })}>
           {noExam ? 'Waiting for an exam...' : waiting ? 'Waiting for activation...' : 'Start Exam ->'}
         </button>
         <button className="premium-btn-secondary" type="button" onClick={returnToSignIn} style={{width: '100%', marginTop: '12px'}}>Logout</button>
       </section>
     </main>
   )
+}
+
+function AttemptMedia({ gateway, questionId, optionId, alt }) {
+  const [url, setUrl] = useState('')
+  useEffect(() => {
+    let cancelled = false
+    let objectUrl = ''
+    const request = optionId
+      ? gateway.attempts.getCurrentOptionImage(questionId, optionId)
+      : gateway.attempts.getCurrentQuestionImage(questionId)
+    request.then((blob) => {
+      if (cancelled) return
+      objectUrl = URL.createObjectURL(blob)
+      setUrl(objectUrl)
+    }).catch(() => null)
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [gateway, optionId, questionId])
+  return url ? <img src={url} alt={alt} /> : <span className="premium-media-loading">Loading image…</span>
 }
 
 async function startAttempt({ gateway, setAttempt, dispatch, setAttemptError }) {
@@ -191,7 +200,11 @@ async function startAttempt({ gateway, setAttempt, dispatch, setAttemptError }) 
 }
 
 async function saveAnswer({ question, optionId, gateway, setAttempt, setSavingByQuestion, setAttemptError }) {
-  const selectedOptionIds = [optionId]
+  const selectedOptionIds = question.question_type === 'multiple_choice'
+    ? question.selected_option_ids.includes(optionId)
+      ? question.selected_option_ids.filter((id) => id !== optionId)
+      : [...question.selected_option_ids, optionId]
+    : [optionId]
   const mutationSequence = question.mutation_sequence + 1
   setAttemptError('')
   setSavingByQuestion((current) => ({ ...current, [question.id]: 'Saving...' }))
@@ -227,6 +240,10 @@ async function submitAttempt({ gateway, setSubmitted, dispatch, setAttemptError 
   } catch (error) {
     setAttemptError(error.userMessage || 'Weave could not submit the attempt.')
   }
+}
+
+function optionLetter(index) {
+  return String.fromCharCode(65 + (index % 26))
 }
 
 function formatRemaining(seconds) {

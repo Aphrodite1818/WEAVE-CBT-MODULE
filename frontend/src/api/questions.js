@@ -1,4 +1,4 @@
-import { weaveRequest, queryString } from './client'
+import { weaveBlobRequest, weaveRequest, queryString } from './client'
 
 export function createQuestionBank(curriculumSubjectId, payload) {
   return weaveRequest(`/questions/banks/${curriculumSubjectId}`, { method: 'POST', body: payload })
@@ -39,6 +39,12 @@ export function updateQuestion(questionId, payload) {
 export const archiveQuestion = (questionId) => weaveRequest(`/questions/${questionId}/archive`, { method: 'POST' })
 export const reactivateQuestion = (questionId) => weaveRequest(`/questions/${questionId}/reactivate`, { method: 'POST' })
 export const deleteUnusedQuestion = (questionId) => weaveRequest(`/questions/${questionId}`, { method: 'DELETE' })
+
+export const getQuestionImage = (questionId, options = {}) => weaveBlobRequest(`/questions/${questionId}/image`, options)
+
+export const getQuestionOptionImage = (questionId, optionId, options = {}) => (
+  weaveBlobRequest(`/questions/${questionId}/options/${optionId}/image`, options)
+)
 
 export function questionImageUrl(questionId) {
   return `${import.meta.env.VITE_WEAVE_API_BASE_URL || '/api/v1'}/questions/${questionId}/image`

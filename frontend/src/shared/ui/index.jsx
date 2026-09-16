@@ -121,6 +121,96 @@ export function SegmentedControl({ label, value, options, onChange }) {
   )
 }
 
+export function SelectControl({
+  label,
+  value,
+  options,
+  onChange,
+  placeholder = 'Select an option',
+  disabled = false,
+  className = '',
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef(null)
+  const listboxId = useId()
+  const normalized = options.map((option) => (
+    Array.isArray(option)
+      ? { value: option[0], label: option[1] }
+      : option
+  ))
+  const selected = normalized.find((option) => String(option.value) === String(value))
+
+  useEffect(() => {
+    if (!open) return undefined
+    const close = (event) => {
+      if (event.type === 'keydown' && event.key === 'Escape') {
+        setOpen(false)
+        return
+      }
+      if (event.type === 'pointerdown' && rootRef.current && !rootRef.current.contains(event.target)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', close)
+    document.addEventListener('keydown', close)
+    return () => {
+      document.removeEventListener('pointerdown', close)
+      document.removeEventListener('keydown', close)
+    }
+  }, [open])
+
+  const select = (next) => {
+    if (next.disabled) return
+    onChange?.(next.value)
+    setOpen(false)
+  }
+
+  return (
+    <div className={`weave-select ${open ? 'is-open' : ''} ${className}`.trim()} ref={rootRef}>
+      <button
+        type="button"
+        className="weave-select__trigger"
+        role="combobox"
+        aria-label={label}
+        aria-controls={listboxId}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && !open) {
+            event.preventDefault()
+            setOpen(true)
+          }
+        }}
+      >
+        <span className={selected ? '' : 'is-placeholder'}>{selected?.label || placeholder}</span>
+        <Icon name="chevronDown" size={17} />
+      </button>
+      {open && !disabled && (
+        <div className="weave-select__menu" id={listboxId} role="listbox" aria-label={label}>
+          {normalized.map((option) => {
+            const active = String(option.value) === String(value)
+            return (
+              <button
+                key={String(option.value)}
+                type="button"
+                role="option"
+                aria-selected={active}
+                className={`weave-select__option ${active ? 'is-selected' : ''}`}
+                disabled={option.disabled}
+                onClick={() => select(option)}
+              >
+                <span><strong>{option.label}</strong>{option.description && <small>{option.description}</small>}</span>
+                {active && <span className="weave-select__selected-mark" aria-hidden="true">✓</span>}
+              </button>
+            )
+          })}
+          {normalized.length === 0 && <span className="weave-select__empty">No options available</span>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function FormField({ label, value, onChange, type = 'text', icon, placeholder }) {
   const [visible, setVisible] = useState(false)
   const inputType = type === 'password' && visible ? 'text' : type

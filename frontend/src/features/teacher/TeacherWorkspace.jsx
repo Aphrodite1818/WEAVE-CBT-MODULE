@@ -3,9 +3,9 @@ import { weaveGateway } from '../../app/gateway'
 import { TeacherLayout } from './TeacherLayout'
 import { OverviewPage } from './OverviewPage'
 import { BankDetailPage, QuestionBanksPage } from './QuestionBanksPage'
-import { CreateQuestionPage, QuestionsPage } from './QuestionsPage'
-import { EditQuestionPage } from './EditQuestionPage'
-import { CreateExamPage, ExamsPage } from './ExamsPage'
+import { QuestionBuilder } from './QuestionBuilder'
+import { TeacherCreateExamPage, TeacherExamsPage } from './TeacherExamsPage'
+import { TeacherQuestionsPage } from './TeacherQuestionsPage'
 import './teacher-dashboard.css'
 import './teacher-selects.css'
 
@@ -29,19 +29,20 @@ export function TeacherWorkspace({ state, dispatch, signOut, gateway = weaveGate
       {state.staff.section === 'overview' && <OverviewPage state={state} dispatch={dispatch} teacherData={teacherData} />}
       {state.staff.section === 'question-banks' && <QuestionBanksPage dispatch={dispatch} teacherData={teacherData} />}
       {state.staff.section === 'bank-detail' && <BankDetailPage state={state} dispatch={dispatch} teacherData={teacherData} />}
-      {state.staff.section === 'questions' && <QuestionsPage dispatch={dispatch} teacherData={teacherData} gateway={gateway} />}
-      {state.staff.section === 'create-question' && <CreateQuestionPage state={state} dispatch={dispatch} teacherData={teacherData} gateway={gateway} />}
+      {state.staff.section === 'questions' && <TeacherQuestionsPage state={state} dispatch={dispatch} teacherData={teacherData} gateway={gateway} />}
+      {state.staff.section === 'create-question' && <QuestionBuilder mode="create" state={state} dispatch={dispatch} teacherData={teacherData} gateway={gateway} />}
       {state.staff.section === 'edit-question' && (
-        <EditQuestionPage
+        <QuestionBuilder
           key={state.staff.selectedQuestionId || 'teacher-question-editor'}
+          mode="edit"
           state={state}
           dispatch={dispatch}
           teacherData={teacherData}
           gateway={gateway}
         />
       )}
-      {state.staff.section === 'exams' && <ExamsPage state={state} dispatch={dispatch} teacherData={teacherData} />}
-      {state.staff.section === 'create-exam' && <CreateExamPage dispatch={dispatch} teacherData={teacherData} gateway={gateway} />}
+      {state.staff.section === 'exams' && <TeacherExamsPage state={state} dispatch={dispatch} teacherData={teacherData} />}
+      {state.staff.section === 'create-exam' && <TeacherCreateExamPage dispatch={dispatch} teacherData={teacherData} gateway={gateway} />}
     </TeacherLayout>
   )
 }
@@ -60,8 +61,8 @@ function useTeacherData(gateway) {
       const loaded = await loadTeacherData(gateway)
       setData(loaded.data)
       setWarning(loaded.warning)
-    } catch (error) {
-      setError(error.userMessage || 'Weave could not load teacher content.')
+    } catch (requestError) {
+      setError(requestError.userMessage || 'Weave could not load teacher content.')
       setData(emptyTeacherData)
     } finally {
       setLoading(false)
@@ -78,9 +79,9 @@ function useTeacherData(gateway) {
         setWarning(loaded.warning)
         setError('')
       })
-      .catch((error) => {
+      .catch((requestError) => {
         if (cancelled) return
-        setError(error.userMessage || 'Weave could not load teacher content.')
+        setError(requestError.userMessage || 'Weave could not load teacher content.')
         setData(emptyTeacherData)
       })
       .finally(() => {
@@ -103,8 +104,8 @@ async function loadTeacherData(gateway) {
     try {
       const value = await request()
       return value ?? fallback
-    } catch (error) {
-      warnings.push(error.userMessage || error.message || 'Some teacher data could not be loaded.')
+    } catch (requestError) {
+      warnings.push(requestError.userMessage || requestError.message || 'Some teacher data could not be loaded.')
       return fallback
     }
   }
@@ -123,8 +124,8 @@ async function loadTeacherData(gateway) {
       gateway.questions
         .listQuestionsForBank(bank.id, { include_archived: true })
         .then((items) => items.map((question) => normalizeQuestion(question, bank)))
-        .catch((error) => {
-          warnings.push(error.userMessage || error.message || `Questions for ${bank.name} could not be loaded.`)
+        .catch((requestError) => {
+          warnings.push(requestError.userMessage || requestError.message || `Questions for ${bank.name} could not be loaded.`)
           return []
         }),
     ),

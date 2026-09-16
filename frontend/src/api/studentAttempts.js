@@ -1,4 +1,4 @@
-import { weaveRequest } from './client'
+import { weaveBlobRequest, weaveRequest } from './client'
 
 export const startCurrentAttempt = () => weaveRequest('/student/attempts/current/start', { method: 'POST', staffAuth: false })
 export const getCurrentAttempt = () => weaveRequest('/student/attempts/current', { staffAuth: false })
@@ -11,3 +11,13 @@ export function saveCurrentAnswer(attemptQuestionId, payload) {
     body: payload,
   })
 }
+
+export const getCurrentQuestionImage = (attemptQuestionId, options = {}) => weaveBlobRequest(
+  `/student/attempts/current/questions/${attemptQuestionId}/image`,
+  { ...options, staffAuth: false },
+)
+
+export const getCurrentOptionImage = (attemptQuestionId, attemptOptionId, options = {}) => weaveBlobRequest(
+  `/student/attempts/current/questions/${attemptQuestionId}/options/${attemptOptionId}/image`,
+  { ...options, staffAuth: false },
+)

@@ -43,6 +43,13 @@ export function clearStaffAccessToken() {
   window.localStorage.removeItem(STAFF_TOKEN_KEY)
 }
 
+function requestHeadersFor({ headers = {}, staffAuth = true } = {}) {
+  const requestHeaders = { ...headers }
+  const token = getStaffAccessToken()
+  if (staffAuth && token) requestHeaders.Authorization = `Bearer ${token}`
+  return requestHeaders
+}
+
 export async function weaveRequest(path, options = {}) {
   const {
     body,
@@ -53,9 +60,7 @@ export async function weaveRequest(path, options = {}) {
     formData = false,
   } = options
 
-  const requestHeaders = { ...headers }
-  const token = getStaffAccessToken()
-  if (staffAuth && token) requestHeaders.Authorization = `Bearer ${token}`
+  const requestHeaders = requestHeadersFor({ headers, staffAuth })
   if (body !== undefined && !formData) requestHeaders['Content-Type'] = 'application/json'
 
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
@@ -69,16 +74,26 @@ export async function weaveRequest(path, options = {}) {
   if (response.status === 204) return null
 
   const payload = await parsePayload(response)
-  if (!response.ok) {
-    throw new WeaveApiError({
-      status: response.status,
-      statusText: response.statusText,
-      detail: extractDetail(payload),
-      payload,
-    })
-  }
+  if (!response.ok) throwApiError(response, payload)
 
   return payload
+}
+
+export async function weaveBlobRequest(path, options = {}) {
+  const { headers = {}, signal, staffAuth = true } = options
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    method: 'GET',
+    headers: requestHeadersFor({ headers, staffAuth }),
+    credentials: 'include',
+    signal,
+  })
+
+  if (!response.ok) {
+    const payload = await parsePayload(response)
+    throwApiError(response, payload)
+  }
+
+  return response.blob()
 }
 
 export function queryString(params) {
@@ -98,6 +113,15 @@ async function parsePayload(response) {
   } catch {
     return { detail: text }
   }
+}
+
+function throwApiError(response, payload) {
+  throw new WeaveApiError({
+    status: response.status,
+    statusText: response.statusText,
+    detail: extractDetail(payload),
+    payload,
+  })
 }
 
 function extractDetail(payload) {

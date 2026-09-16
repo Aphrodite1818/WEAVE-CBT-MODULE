@@ -1,5 +1,7 @@
 export {
   getCurrentAttempt,
+  getCurrentOptionImage,
+  getCurrentQuestionImage,
   saveCurrentAnswer,
   startCurrentAttempt,
   submitCurrentAttempt,
