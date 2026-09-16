@@ -5,7 +5,7 @@ import { getLocalBrandLogoSrc } from '../../api/branding'
 
 function teacherNavActive(current, section) {
   if (section === 'question-banks') return current === 'question-banks' || current === 'bank-detail'
-  if (section === 'questions') return current === 'questions' || current === 'create-question'
+  if (section === 'questions') return current === 'questions' || current === 'create-question' || current === 'edit-question'
   if (section === 'exams') return current === 'exams' || current === 'create-exam'
   return current === section
 }
