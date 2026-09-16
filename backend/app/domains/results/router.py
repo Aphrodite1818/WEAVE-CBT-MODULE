@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.core.database import DbSession
-from app.core.exceptions import AcademicAuthorizationError
+from app.core.exceptions import AcademicAuthorizationError, AcademicScopeError
 from app.domains.auth.dependencies import CurrentLocalActor
 from app.domains.exams.exceptions import ExamNotFound
 from app.domains.results.schemas import ResultListResponse, ResultResponse
@@ -22,6 +22,8 @@ def _http_error(exc: Exception) -> HTTPException:
         return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     if isinstance(exc, AcademicAuthorizationError):
         return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    if isinstance(exc, AcademicScopeError):
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
@@ -33,7 +35,12 @@ async def get_result(
 ) -> ResultResponse:
     try:
         result = await ResultService.get_result(db, actor=actor, result_id=result_id)
-    except (AcademicAuthorizationError, ExamNotFound, ValueError) as exc:
+    except (
+        AcademicAuthorizationError,
+        AcademicScopeError,
+        ExamNotFound,
+        ValueError,
+    ) as exc:
         raise _http_error(exc) from exc
     return ResultResponse.model_validate(result)
 
@@ -54,7 +61,12 @@ async def list_exam_results(
             offset=offset,
             limit=limit,
         )
-    except (AcademicAuthorizationError, ExamNotFound, ValueError) as exc:
+    except (
+        AcademicAuthorizationError,
+        AcademicScopeError,
+        ExamNotFound,
+        ValueError,
+    ) as exc:
         raise _http_error(exc) from exc
     return ResultListResponse(
         exam_id=exam_id,
