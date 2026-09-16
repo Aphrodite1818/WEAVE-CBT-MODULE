@@ -1,19 +1,21 @@
 .teacher-shell select {
   appearance: none;
   -webkit-appearance: none;
-  min-height: 44px;
+  height: 46px;
+  min-height: 46px;
   border: 1px solid rgb(var(--color-border));
   border-radius: 10px;
   background-color: rgb(var(--color-surface));
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2364758b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364758b' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 9.5 5 5 5-5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 14px center;
-  background-size: 16px 16px;
+  background-position: right 16px center;
+  background-size: 14px 14px;
   color: rgb(var(--color-text));
-  padding: 0 42px 0 14px;
+  padding: 0 46px 0 14px;
   font: inherit;
   font-size: 14px;
-  line-height: 1.2;
+  font-weight: 560;
+  line-height: normal;
   cursor: pointer;
   transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
 }
@@ -22,7 +24,8 @@
   border-color: rgb(var(--color-primary) / .34);
 }
 
-.teacher-shell select:focus {
+.teacher-shell select:focus,
+.teacher-shell select:focus-visible {
   outline: 0;
   border-color: rgb(var(--color-primary));
   box-shadow: 0 0 0 3px rgb(var(--color-primary) / .1);
@@ -40,11 +43,12 @@
 }
 
 .teacher-questions-page .teacher-question-toolbar select {
+  width: 100%;
   height: 48px;
   min-height: 48px;
-  padding-top: 0;
-  padding-bottom: 0;
-  background-position: right 14px center;
+  padding: 0 46px 0 14px;
+  background-position: right 16px center;
+  font-size: 15px;
 }
 
 .teacher-field select,
