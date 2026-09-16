@@ -35,6 +35,7 @@ const paths = {
   bolt: <path d="M13 2 4 14h7l-1 8 10-13h-7z"/>,
   bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></>,
   chevronDown: <path d="m6 9 6 6 6-6"/>,
+  chevronRight: <path d="m9 18 6-6-6-6"/>,
   staff: <><circle cx="9" cy="8" r="4"/><path d="M3 21a6 6 0 0 1 12 0M16 4h5M18.5 1.5v5"/></>,
   exam: <><path d="M5 3h14v18H5zM8 7h8M8 11h5"/><path d="m9 16 2 2 4-4"/></>,
   back: <path d="m15 18-6-6 6-6"/>,
