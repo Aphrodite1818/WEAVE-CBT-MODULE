@@ -5,7 +5,7 @@ import { CreateQuestionPage, QuestionsPage } from '../src/features/teacher/Quest
 const bank = { id: 'bank-1', name: 'Mathematics', count: 0, status: 'Ready' }
 
 describe('Teacher questions', () => {
-  it('renders the question list and wires edit and lifecycle actions', async () => {
+  it('renders the question list and confirms lifecycle actions before calling the backend', async () => {
     const dispatch = vi.fn()
     const refresh = vi.fn().mockResolvedValue(undefined)
     const archiveQuestion = vi.fn().mockResolvedValue({})
@@ -27,7 +27,13 @@ describe('Teacher questions', () => {
       <QuestionsPage
         dispatch={dispatch}
         teacherData={{ banks: [bank], questions: [question], loading: false, error: '', refresh }}
-        gateway={{ questions: { archiveQuestion, reactivateQuestion: vi.fn() } }}
+        gateway={{
+          questions: {
+            archiveQuestion,
+            reactivateQuestion: vi.fn(),
+            deleteUnusedQuestion: vi.fn(),
+          },
+        }}
       />,
     )
 
@@ -38,12 +44,22 @@ describe('Teacher questions', () => {
     fireEvent.click(screen.getByRole('button', { name: /^edit$/i }))
     expect(dispatch).toHaveBeenCalledWith({
       type: 'staff',
-      patch: { section: 'edit-question', selectedBankId: bank.id, selectedQuestionId: question.id },
+      patch: {
+        section: 'edit-question',
+        selectedBankId: bank.id,
+        selectedQuestionId: question.id,
+        editingQuestion: question,
+      },
     })
 
     fireEvent.click(screen.getByRole('button', { name: /question lifecycle for what is 2 \+ 2/i }))
     expect(screen.getByRole('dialog', { name: /lifecycle for what is 2 \+ 2/i })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /archive question/i }))
+
+    expect(archiveQuestion).not.toHaveBeenCalled()
+    expect(screen.getByRole('alertdialog', { name: /archive this question/i })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /confirm archive/i }))
 
     await waitFor(() => expect(archiveQuestion).toHaveBeenCalledWith(question.id))
     expect(refresh).toHaveBeenCalled()
@@ -85,7 +101,7 @@ describe('Teacher questions', () => {
       ],
     })
     expect(refresh).toHaveBeenCalled()
-    expect(dispatch).toHaveBeenCalledWith({ type: 'staff', patch: { section: 'bank-detail', selectedBankId: bank.id } })
+    expect(dispatch).toHaveBeenCalledWith({ type: 'staff', patch: { section: 'bank-detail', selectedBankId: bank.id, editingQuestion: null } })
   })
 
   it('edits an existing question without pretending its type can change', async () => {
@@ -132,6 +148,6 @@ describe('Teacher questions', () => {
       ],
     }))
     expect(refresh).toHaveBeenCalled()
-    expect(dispatch).toHaveBeenCalledWith({ type: 'staff', patch: { section: 'questions', selectedQuestionId: null } })
+    expect(dispatch).toHaveBeenCalledWith({ type: 'staff', patch: { section: 'questions', selectedQuestionId: null, editingQuestion: null } })
   })
 })
