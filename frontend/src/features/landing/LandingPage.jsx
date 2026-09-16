@@ -6,7 +6,6 @@ import './landing.css'
 const WORDMARK_TEXT = 'Weave'
 const TYPEWRITER_CHAR_DELAY_MS = 145
 const TYPEWRITER_PAUSE_MS = 3200
-const BOOK_OPEN_DELAY_MS = 760
 
 function LandingWordmarkTypewriter() {
   const [loopKey, setLoopKey] = useState(0)
@@ -39,43 +38,19 @@ function LandingWordmarkTypewriter() {
 }
 
 export function LandingPage({ dispatch }) {
-  const [openingKind, setOpeningKind] = useState('')
-
-  useEffect(() => {
-    if (!openingKind) return undefined
-
-    const nextView = openingKind === 'student' ? 'student-login' : 'staff-login'
-    const canReadMotionPreference = typeof window.matchMedia === 'function'
-    const prefersReducedMotion = canReadMotionPreference
-      && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-    if (!canReadMotionPreference || prefersReducedMotion) {
-      dispatch({ type: 'view', view: nextView })
-      return undefined
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      dispatch({ type: 'view', view: nextView })
-    }, BOOK_OPEN_DELAY_MS)
-
-    return () => window.clearTimeout(timeoutId)
-  }, [dispatch, openingKind])
-
   const openLogin = (kind) => {
-    if (openingKind) return
-    setOpeningKind(kind)
+    dispatch({ type: 'view', view: kind === 'student' ? 'student-login' : 'staff-login' })
   }
 
   return (
-    <main className={`landing-page${openingKind ? ` landing-page--opening landing-page--opening-${openingKind}` : ''}`}>
+    <main className="landing-page">
       <nav className="landing-nav" aria-label="Sign in">
-        <button className="landing-primary" type="button" disabled={Boolean(openingKind)} onClick={() => openLogin('student')}>
+        <button className="landing-primary" type="button" onClick={() => openLogin('student')}>
           Login as Student <Pictogram name="student" size={18} />
         </button>
         <button
           className="landing-primary landing-primary--ghost"
           type="button"
-          disabled={Boolean(openingKind)}
           onClick={() => openLogin('staff')}
         >
           Login as Staff <Pictogram name="staff" size={18} />
@@ -86,12 +61,6 @@ export function LandingPage({ dispatch }) {
         <WeaveMark className="landing-mark" />
         <LandingWordmarkTypewriter />
       </section>
-
-      {openingKind && (
-        <div className="landing-page-turn" aria-hidden="true">
-          <div className="landing-page-turn__sheet" />
-        </div>
-      )}
     </main>
   )
 }
