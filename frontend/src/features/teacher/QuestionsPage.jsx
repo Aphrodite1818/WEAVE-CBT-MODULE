@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { RiArchiveLine, RiCloseLine, RiImageAddLine, RiMore2Line, RiRefreshLine, RiSearchLine } from '@remixicon/react'
+import { RiArchiveLine, RiCloseLine, RiDeleteBinLine, RiImageAddLine, RiMore2Line, RiRefreshLine, RiSearchLine } from '@remixicon/react'
 import { Icon } from '../../shared/icons/Icon'
 import { Notice, PageTitle, Panel, SegmentedControl, StatusBadge } from '../../shared/ui'
 import './questions-page.css'
@@ -15,6 +15,7 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
   const [page, setPage] = useState(1)
   const [lifecycleQuestionId, setLifecycleQuestionId] = useState(null)
   const [lifecycleBusyId, setLifecycleBusyId] = useState(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null)
   const [lifecycleError, setLifecycleError] = useState('')
   const lifecycleRef = useRef(null)
 
@@ -49,10 +50,16 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
     if (!lifecycleQuestionId) return undefined
 
     const closeOnOutsideClick = (event) => {
-      if (!lifecycleRef.current?.contains(event.target)) setLifecycleQuestionId(null)
+      if (!lifecycleRef.current?.contains(event.target)) {
+        setLifecycleQuestionId(null)
+        setDeleteConfirmId(null)
+      }
     }
     const closeOnEscape = (event) => {
-      if (event.key === 'Escape') setLifecycleQuestionId(null)
+      if (event.key === 'Escape') {
+        setLifecycleQuestionId(null)
+        setDeleteConfirmId(null)
+      }
     }
 
     document.addEventListener('pointerdown', closeOnOutsideClick)
@@ -77,6 +84,7 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
       else await gateway.questions.archiveQuestion(question.id)
       await teacherData.refresh()
       setLifecycleQuestionId(null)
+      setDeleteConfirmId(null)
     } catch (error) {
       setLifecycleError(error.userMessage || `Weave could not ${question.status === 'Archived' ? 'reactivate' : 'archive'} this question.`)
     } finally {
@@ -84,9 +92,41 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
     }
   }
 
+  const deleteQuestion = async (question) => {
+    if (deleteConfirmId !== question.id) {
+      setDeleteConfirmId(question.id)
+      return
+    }
+
+    setLifecycleError('')
+    setLifecycleBusyId(question.id)
+    try {
+      await gateway.questions.deleteUnusedQuestion(question.id)
+      await teacherData.refresh()
+      setLifecycleQuestionId(null)
+      setDeleteConfirmId(null)
+    } catch (error) {
+      setLifecycleError(error.userMessage || 'Weave could not delete this question. Questions already used by an exam must be archived instead.')
+    } finally {
+      setLifecycleBusyId(null)
+    }
+  }
+
   const startQuestion = () => {
     const selectedBankId = bankId === 'all' ? teacherData.banks[0]?.id : bankId
-    dispatch({ type: 'staff', patch: { section: 'create-question', selectedBankId } })
+    dispatch({ type: 'staff', patch: { section: 'create-question', selectedBankId, editingQuestion: null } })
+  }
+
+  const editQuestion = (question) => {
+    dispatch({
+      type: 'staff',
+      patch: {
+        section: 'edit-question',
+        selectedBankId: question.bankId,
+        selectedQuestionId: question.id,
+        editingQuestion: question,
+      },
+    })
   }
 
   return (
@@ -158,7 +198,7 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
                 className="teacher-question-edit"
                 disabled={question.status === 'Archived'}
                 title={question.status === 'Archived' ? 'Reactivate this question before editing it.' : undefined}
-                onClick={() => dispatch({ type: 'staff', patch: { section: 'edit-question', selectedBankId: question.bankId, selectedQuestionId: question.id } })}
+                onClick={() => editQuestion(question)}
               >
                 Edit
               </button>
@@ -169,7 +209,10 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
                   className="teacher-question-lifecycle__trigger"
                   aria-label={`Question lifecycle for ${question.prompt}`}
                   aria-expanded={lifecycleQuestionId === question.id}
-                  onClick={() => setLifecycleQuestionId((current) => current === question.id ? null : question.id)}
+                  onClick={() => {
+                    setDeleteConfirmId(null)
+                    setLifecycleQuestionId((current) => current === question.id ? null : question.id)
+                  }}
                 >
                   <RiMore2Line size={20} aria-hidden="true" />
                 </button>
@@ -186,6 +229,18 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
                       <span>
                         <strong>{question.status === 'Archived' ? 'Reactivate question' : 'Archive question'}</strong>
                         <small>{question.status === 'Archived' ? 'Make it available for authoring again.' : 'Hide it from active authoring.'}</small>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="teacher-question-lifecycle__delete"
+                      disabled={lifecycleBusyId === question.id}
+                      onClick={() => deleteQuestion(question)}
+                    >
+                      <RiDeleteBinLine size={18} aria-hidden="true" />
+                      <span>
+                        <strong>{deleteConfirmId === question.id ? 'Confirm permanent delete' : 'Delete permanently'}</strong>
+                        <small>{deleteConfirmId === question.id ? 'Click again to permanently remove this unused question.' : 'Only unused questions can be deleted. Used questions must be archived.'}</small>
                       </span>
                     </button>
                   </div>
@@ -221,7 +276,7 @@ function TabButton({ label, value, current, count, onClick }) {
 }
 
 export function CreateQuestionPage({ state, dispatch, teacherData, gateway }) {
-  const selectedQuestion = teacherData.questions?.find((question) => question.id === state.staff.selectedQuestionId)
+  const selectedQuestion = state.staff.editingQuestion || teacherData.questions?.find((question) => question.id === state.staff.selectedQuestionId)
   const isEditing = state.staff.section === 'edit-question'
   const selectedBankId = selectedQuestion?.bankId || state.staff.selectedBankId
   const selectedBank = teacherData.banks.find((bank) => bank.id === selectedBankId) || teacherData.banks[0]
@@ -282,6 +337,8 @@ export function CreateQuestionPage({ state, dispatch, teacherData, gateway }) {
     if (imageInputRef.current) imageInputRef.current.value = ''
   }
 
+  const leaveEditor = () => dispatch({ type: 'staff', patch: { section: 'questions', selectedQuestionId: null, editingQuestion: null } })
+
   const saveQuestion = async () => {
     setError('')
     if (!bankId) { setError('Select a question bank.'); return }
@@ -307,7 +364,7 @@ export function CreateQuestionPage({ state, dispatch, teacherData, gateway }) {
       else if (type === 'single') await gateway.questions.createSingleChoiceQuestion(bankId, payload)
       else await gateway.questions.createMultipleChoiceQuestion(bankId, payload)
       await teacherData.refresh()
-      dispatch({ type: 'staff', patch: isEditing ? { section: 'questions', selectedQuestionId: null } : { section: 'bank-detail', selectedBankId: bankId } })
+      dispatch({ type: 'staff', patch: isEditing ? { section: 'questions', selectedQuestionId: null, editingQuestion: null } : { section: 'bank-detail', selectedBankId: bankId, editingQuestion: null } })
     } catch (error) {
       setError(error.userMessage || 'Weave could not save this question.')
     } finally {
@@ -317,14 +374,20 @@ export function CreateQuestionPage({ state, dispatch, teacherData, gateway }) {
   }
 
   if (!selectedBank || (isEditing && !selectedQuestion)) {
-    return <><PageTitle title={isEditing ? 'Edit Question' : 'Create Question'} subtitle="No authorable bank is available." /><Notice tone="warning">The backend did not return the question and bank required for this action.</Notice></>
+    return (
+      <div className="teacher-reference-page">
+        <PageTitle title={isEditing ? 'Edit Question' : 'Create Question'} subtitle="The question editor could not be opened." />
+        <Notice tone="warning">The selected question is no longer available in your current teaching scope.</Notice>
+        <div><button className="button button--secondary" type="button" onClick={leaveEditor}>Back to Questions</button></div>
+      </div>
+    )
   }
 
   return (
-    <div className="teacher-reference-page">
+    <div className="teacher-reference-page teacher-question-editor">
       <div className="teacher-page-head">
-        <div><button className="text-button" onClick={() => dispatch({ type: 'staff', patch: { section: 'questions', selectedQuestionId: null } })}>Back to questions</button><PageTitle title={isEditing ? 'Edit Question' : 'Create Question'} subtitle={isEditing ? 'Update this question. Saving a change creates its next version.' : 'Save directly to the selected backend question bank.'} /></div>
-        <div className="toolbar"><button className="button button--primary" disabled={saving} onClick={saveQuestion}>{saving ? saveStage || 'Saving…' : isEditing ? 'Save Changes' : 'Save Question'}</button></div>
+        <div><button className="text-button" type="button" onClick={leaveEditor}>Back to questions</button><PageTitle title={isEditing ? 'Edit Question' : 'Create Question'} subtitle={isEditing ? `Editing ${selectedQuestion.bankName || selectedBank.name}. Saving a change creates the next version.` : 'Save directly to the selected backend question bank.'} /></div>
+        <div className="toolbar"><button className="button button--primary" type="button" disabled={saving} onClick={saveQuestion}>{saving ? saveStage || 'Saving…' : isEditing ? 'Save Changes' : 'Save Question'}</button></div>
       </div>
       {error && <Notice tone="danger">{error}</Notice>}
       <div className="authoring-grid">
