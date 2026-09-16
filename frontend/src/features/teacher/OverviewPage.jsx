@@ -1,174 +1,164 @@
 import {
   RiAddLine,
-  RiArrowRightLine,
-  RiBarChartBoxLine,
+  RiBookOpenLine,
   RiCalendarTodoLine,
   RiDatabase2Line,
   RiFileAddLine,
   RiFileList3Line,
   RiGraduationCapLine,
-  RiMore2Fill,
-  RiQuestionAnswerLine,
-  RiUserStarLine,
+  RiStackLine,
 } from '@remixicon/react'
-import { Notice, StatusBadge } from '../../shared/ui'
+import { Notice } from '../../shared/ui'
 
-const dashboardStats = [
-  { key: 'banks', tone: 'blue', icon: RiFileList3Line, label: 'Question Banks', section: 'question-banks' },
-  { key: 'questions', tone: 'green', icon: RiQuestionAnswerLine, label: 'Total Questions', section: 'questions' },
-  { key: 'exams', tone: 'purple', icon: RiCalendarTodoLine, label: 'Exams Created', section: 'exams' },
-  { key: 'students', tone: 'orange', icon: RiUserStarLine, label: 'Students Assessed' },
+const statConfig = [
+  { key: 'subjects', tone: 'blue', icon: RiBookOpenLine, label: 'My Subjects', caption: 'Assigned subjects', section: null },
+  { key: 'banks', tone: 'green', icon: RiStackLine, label: 'Question Banks', caption: 'Available to author', section: 'question-banks' },
+  { key: 'drafts', tone: 'amber', icon: RiFileList3Line, label: 'Draft Exams', caption: 'Need completion', section: 'exams' },
+  { key: 'submitted', tone: 'rose', icon: RiCalendarTodoLine, label: 'Submitted Exams', caption: 'Awaiting administration', section: 'exams' },
 ]
 
-export function OverviewPage({ dispatch, teacherData }) {
-  const banks = teacherData.banks
-  const questions = teacherData.questions
-  const recentExams = teacherData.exams || []
+export function OverviewPage({ state, dispatch, teacherData }) {
+  const teacherName = state.session?.actor?.display_name || state.session?.name || 'Teacher'
+  const firstName = teacherName.split(' ').filter(Boolean)[0] || 'Teacher'
+  const draftExams = teacherData.exams.filter((exam) => exam.status === 'draft')
+  const submittedExams = teacherData.exams.filter((exam) => exam.status === 'submitted')
+  const teachingScope = groupAssignments(teacherData.assignments)
   const stats = {
-    banks: teacherData.loading ? '—' : banks.length,
-    questions: teacherData.loading ? '—' : questions.length,
-    exams: '—',
-    students: '—',
+    subjects: teacherData.loading ? '—' : teacherData.subjects.length,
+    banks: teacherData.loading ? '—' : teacherData.banks.length,
+    drafts: teacherData.loading ? '—' : draftExams.length,
+    submitted: teacherData.loading ? '—' : submittedExams.length,
   }
 
   const goTo = (section, patch = {}) => dispatch({ type: 'staff', patch: { section, ...patch } })
+  const academicContext = [teacherData.session?.name, teacherData.term?.name].filter(Boolean).join('  •  ')
 
   return (
-    <div className="teacher-dashboard">
-      <section className="teacher-dashboard-hero" aria-labelledby="teacher-dashboard-title">
-        <div>
-          <span>Good morning,</span>
-          <h1 id="teacher-dashboard-title">Teacher Dashboard</h1>
-          <p>Manage your question banks, create exams and keep your assessments organised in one place.</p>
+    <div className="teacher-overview-page">
+      <section className="teacher-overview-hero" aria-labelledby="teacher-overview-title">
+        <div className="teacher-overview-hero__greeting">
+          <span className="teacher-overview-sun" aria-hidden="true">☀</span>
+          <div>
+            <h1 id="teacher-overview-title">Good morning, {firstName}!</h1>
+            <p>{academicContext || 'Academic context will appear after the local projection is available.'}</p>
+          </div>
         </div>
-        <div className="teacher-hero-mark" aria-hidden="true">
-          <RiGraduationCapLine size={72} />
-          <small>Better assessments<br />Brighter futures</small>
-        </div>
+        <blockquote>“Better teachers build<br />brighter futures.”</blockquote>
       </section>
 
       {teacherData.error && <Notice tone="danger">{teacherData.error}</Notice>}
+      {!teacherData.error && teacherData.warning && <Notice tone="warning">Some dashboard data could not be refreshed. Available local data is still shown below.</Notice>}
 
-      <section className="teacher-stat-grid" aria-label="Teacher workspace summary" aria-busy={teacherData.loading}>
-        {dashboardStats.map((stat) => (
-          <DashboardStat
+      <section className="teacher-overview-stats" aria-label="Teacher workspace summary" aria-busy={teacherData.loading}>
+        {statConfig.map((stat) => (
+          <OverviewStat
             key={stat.key}
             {...stat}
             value={stats[stat.key]}
-            unavailable={stat.key === 'exams' || stat.key === 'students'}
             onClick={stat.section ? () => goTo(stat.section) : undefined}
           />
         ))}
       </section>
 
-      <section className="teacher-dashboard-grid">
-        <article className="teacher-dashboard-panel teacher-dashboard-panel--wide">
-          <div className="teacher-panel-heading">
+      <section className="teacher-overview-columns">
+        <article className="teacher-reference-panel teacher-reference-panel--work">
+          <div className="teacher-reference-panel__head">
             <div>
-              <h2>Recent Exams</h2>
-              <p>Your latest authored assessments will appear here.</p>
+              <h2>Continue Working</h2>
+              <p>Draft examinations that still need your attention.</p>
             </div>
             <button type="button" onClick={() => goTo('exams')}>View all</button>
           </div>
 
-          <div className="teacher-exam-list">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Title</th>
-                  <th scope="col">Subject</th>
-                  <th scope="col">Questions</th>
-                  <th scope="col">Created on</th>
-                  <th scope="col">Status</th>
-                  <th scope="col"><span className="sr-only">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentExams.map((exam) => (
-                  <ExamRow key={exam.id} exam={exam} onOpen={() => goTo('exams')} />
-                ))}
-                {!teacherData.loading && recentExams.length === 0 && (
-                  <tr className="teacher-exam-empty-row">
-                    <td colSpan="6">
-                      <span><RiCalendarTodoLine aria-hidden="true" /></span>
-                      <div>
-                        <strong>No recent exams to show yet</strong>
-                        <p>The backend does not currently provide a teacher exam list. Real exams will appear here when that contract is available.</p>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-                {teacherData.loading && (
-                  <tr className="teacher-exam-empty-row">
-                    <td colSpan="6"><div><strong>Loading teacher content…</strong></div></td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div className="teacher-work-list">
+            {draftExams.slice(0, 4).map((exam) => (
+              <div className="teacher-work-row" key={exam.id}>
+                <div>
+                  <strong>{exam.title}</strong>
+                  <span>{exam.subjectName} · {exam.questionCount} questions · {formatSelectionMode(exam.selectionMode)}</span>
+                </div>
+                <span className="teacher-mini-status teacher-mini-status--draft">Draft</span>
+                <button type="button" onClick={() => goTo('exams', { selectedExamId: exam.id })}>Continue</button>
+              </div>
+            ))}
+
+            {!teacherData.loading && draftExams.length === 0 && (
+              <div className="teacher-reference-empty">
+                <RiCalendarTodoLine size={25} aria-hidden="true" />
+                <div><strong>No draft exams right now</strong><p>When you create a paper, unfinished drafts will appear here.</p></div>
+                <button type="button" onClick={() => goTo('create-exam')}>Create exam</button>
+              </div>
+            )}
+            {teacherData.loading && <div className="teacher-reference-loading">Loading your exam workspace…</div>}
           </div>
         </article>
 
-        <article className="teacher-dashboard-panel teacher-dashboard-actions">
-          <div className="teacher-panel-heading">
+        <article className="teacher-reference-panel teacher-reference-panel--scope">
+          <div className="teacher-reference-panel__head">
             <div>
-              <h2>Quick Actions</h2>
-              <p>Get started with common tasks.</p>
+              <h2>Your Teaching Scope</h2>
+              <p>Current Weave assignments available to this CBT server.</p>
             </div>
           </div>
-          <nav className="teacher-action-list" aria-label="Teacher quick actions">
-            <button type="button" onClick={() => goTo('create-exam')}><RiAddLine size={18} /> <span>Create New Exam</span></button>
-            <button type="button" onClick={() => goTo('question-banks')}><RiDatabase2Line size={18} /> <span>Manage Question Banks</span></button>
-            <button type="button" disabled={banks.length === 0} onClick={() => goTo('create-question', { selectedBankId: banks[0]?.id })}><RiFileAddLine size={18} /> <span>Add New Question</span></button>
-            <button type="button" disabled title="Teacher reporting is not available yet"><RiBarChartBoxLine size={18} /> <span>View Reports</span></button>
-          </nav>
+
+          <div className="teacher-scope-list">
+            {teachingScope.slice(0, 5).map((subject) => (
+              <div className="teacher-scope-row" key={subject.key}>
+                <div><strong>{subject.name}</strong><span>{subject.classes.join(', ')}</span></div>
+                <span>{subject.classes.length} {subject.classes.length === 1 ? 'class' : 'classes'}</span>
+              </div>
+            ))}
+            {!teacherData.loading && teachingScope.length === 0 && (
+              <div className="teacher-reference-empty teacher-reference-empty--compact">
+                <div><strong>No effective assignments</strong><p>Assignments will appear here after they are synced from Weave.</p></div>
+              </div>
+            )}
+          </div>
         </article>
       </section>
 
-      <section className="teacher-dashboard-banner">
-        <span><RiGraduationCapLine size={27} aria-hidden="true" /></span>
-        <div>
-          <strong>Create better assessments for brighter futures.</strong>
-          <p>Quality questions. Fair exams. Stronger students.</p>
+      <section className="teacher-reference-panel teacher-quick-actions-card">
+        <div className="teacher-reference-panel__head">
+          <div><h2>Quick Actions</h2><p>Jump directly into the teacher workflows you use most.</p></div>
         </div>
-        <small aria-hidden="true">Exams made simple</small>
+        <nav className="teacher-quick-actions" aria-label="Teacher quick actions">
+          <button type="button" className="primary" disabled={teacherData.banks.length === 0} onClick={() => goTo('create-question', { selectedBankId: teacherData.banks[0]?.id })}>
+            <RiAddLine size={18} /> Create Question
+          </button>
+          <button type="button" onClick={() => goTo('create-exam')}><RiFileAddLine size={18} /> Create Exam</button>
+          <button type="button" onClick={() => goTo('question-banks')}><RiDatabase2Line size={18} /> Question Banks</button>
+          <button type="button" onClick={() => goTo('exams')}><RiGraduationCapLine size={18} /> View All Exams</button>
+        </nav>
       </section>
     </div>
   )
 }
 
-function DashboardStat({ tone, icon: StatIcon, label, value, unavailable, onClick }) {
-  return (
-    <article className={`teacher-stat-card teacher-stat-card--${tone}`}>
-      <span className="teacher-stat-card__icon"><StatIcon className="teacher-kpi-icon" size={28} aria-hidden="true" /></span>
-      <div>
-        <p>{label}</p>
-        <strong>{value}</strong>
-        {unavailable ? (
-          <small>Not available yet</small>
-        ) : (
-          <button type="button" onClick={onClick}>View all <RiArrowRightLine size={13} aria-hidden="true" /></button>
-        )}
-      </div>
-    </article>
+function OverviewStat({ tone, icon: StatIcon, label, caption, value, onClick }) {
+  const content = (
+    <>
+      <span className="teacher-overview-stat__icon"><StatIcon size={23} aria-hidden="true" /></span>
+      <strong>{value}</strong>
+      <span>{label}</span>
+      <small>{caption}</small>
+    </>
   )
+
+  if (!onClick) return <article className={`teacher-overview-stat teacher-overview-stat--${tone}`}>{content}</article>
+  return <button type="button" className={`teacher-overview-stat teacher-overview-stat--${tone}`} onClick={onClick}>{content}</button>
 }
 
-function ExamRow({ exam, onOpen }) {
-  return (
-    <tr>
-      <td><strong>{exam.title}</strong></td>
-      <td>{exam.subject || '—'}</td>
-      <td>{exam.questionCount ?? exam.questions ?? '—'}</td>
-      <td>{formatExamDate(exam.createdAt || exam.createdOn)}</td>
-      <td><StatusBadge tone={exam.status === 'Published' ? 'success' : 'info'}>{exam.status}</StatusBadge></td>
-      <td><button type="button" aria-label={`Open ${exam.title}`} onClick={onOpen}><RiMore2Fill size={17} aria-hidden="true" /></button></td>
-    </tr>
-  )
+function groupAssignments(assignments) {
+  const groups = new Map()
+  assignments.forEach((assignment) => {
+    const key = assignment.curriculumSubjectId || assignment.subjectId || assignment.subjectName
+    if (!groups.has(key)) groups.set(key, { key, name: assignment.subjectName, classes: [] })
+    const group = groups.get(key)
+    if (assignment.className && !group.classes.includes(assignment.className)) group.classes.push(assignment.className)
+  })
+  return [...groups.values()]
 }
 
-function formatExamDate(value) {
-  if (!value) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('en', { day: 'numeric', month: 'short', year: 'numeric' }).format(date)
+function formatSelectionMode(mode) {
+  return String(mode || 'random').toLowerCase() === 'manual' ? 'Manual selection' : 'Random selection'
 }
