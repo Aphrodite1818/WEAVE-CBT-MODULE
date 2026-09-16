@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { RiArchiveLine, RiCloseLine, RiDeleteBinLine, RiImageAddLine, RiMore2Line, RiRefreshLine, RiSearchLine } from '@remixicon/react'
 import { Icon } from '../../shared/icons/Icon'
 import { Notice, PageTitle, Panel, SegmentedControl, StatusBadge } from '../../shared/ui'
 import './questions-page.css'
+import './question-lifecycle-modal.css'
 
 const MAX_QUESTION_IMAGE_SIZE = 5 * 1024 * 1024
 const QUESTION_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
@@ -19,8 +21,8 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
   const [lifecycleQuestionId, setLifecycleQuestionId] = useState(null)
   const [lifecyclePosition, setLifecyclePosition] = useState(null)
   const [lifecycleBusyId, setLifecycleBusyId] = useState(null)
-  const [deleteConfirmId, setDeleteConfirmId] = useState(null)
-  const [lifecycleError, setLifecycleError] = useState('')
+  const [pendingLifecycleAction, setPendingLifecycleAction] = useState(null)
+  const [lifecycleModalError, setLifecycleModalError] = useState('')
   const lifecycleRef = useRef(null)
 
   const counts = useMemo(() => ({
@@ -53,7 +55,12 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
   const closeLifecycle = () => {
     setLifecycleQuestionId(null)
     setLifecyclePosition(null)
-    setDeleteConfirmId(null)
+  }
+
+  const closeLifecycleConfirmation = () => {
+    if (lifecycleBusyId) return
+    setPendingLifecycleAction(null)
+    setLifecycleModalError('')
   }
 
   useEffect(() => {
@@ -79,41 +86,47 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
     }
   }, [lifecycleQuestionId])
 
+  useEffect(() => {
+    if (!pendingLifecycleAction) return undefined
+
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape' && !lifecycleBusyId) closeLifecycleConfirmation()
+    }
+
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [pendingLifecycleAction, lifecycleBusyId])
+
   const changeFilter = (setter) => (eventOrValue) => {
     const value = eventOrValue?.target ? eventOrValue.target.value : eventOrValue
     setter(value)
     setPage(1)
   }
 
-  const changeLifecycle = async (question) => {
-    setLifecycleError('')
-    setLifecycleBusyId(question.id)
-    try {
-      if (question.status === 'Archived') await gateway.questions.reactivateQuestion(question.id)
-      else await gateway.questions.archiveQuestion(question.id)
-      await teacherData.refresh()
-      closeLifecycle()
-    } catch (error) {
-      setLifecycleError(error.userMessage || `Weave could not ${question.status === 'Archived' ? 'reactivate' : 'archive'} this question.`)
-    } finally {
-      setLifecycleBusyId(null)
-    }
+  const requestLifecycleAction = (question, action) => {
+    closeLifecycle()
+    setLifecycleModalError('')
+    setPendingLifecycleAction({ question, action })
   }
 
-  const deleteQuestion = async (question) => {
-    if (deleteConfirmId !== question.id) {
-      setDeleteConfirmId(question.id)
-      return
-    }
+  const confirmLifecycleAction = async () => {
+    if (!pendingLifecycleAction) return
 
-    setLifecycleError('')
+    const { question, action } = pendingLifecycleAction
+    setLifecycleModalError('')
     setLifecycleBusyId(question.id)
+
     try {
-      await gateway.questions.deleteUnusedQuestion(question.id)
+      if (action === 'archive') await gateway.questions.archiveQuestion(question.id)
+      if (action === 'reactivate') await gateway.questions.reactivateQuestion(question.id)
+      if (action === 'delete') await gateway.questions.deleteUnusedQuestion(question.id)
       await teacherData.refresh()
-      closeLifecycle()
+      setPendingLifecycleAction(null)
     } catch (error) {
-      setLifecycleError(error.userMessage || 'Weave could not delete this question. Questions already used by an exam must be archived instead.')
+      const fallback = action === 'delete'
+        ? 'Weave could not delete this question. Questions already used by an exam must be archived instead.'
+        : `Weave could not ${action} this question.`
+      setLifecycleModalError(error.userMessage || fallback)
     } finally {
       setLifecycleBusyId(null)
     }
@@ -141,10 +154,13 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
       closeLifecycle()
       return
     }
-    setDeleteConfirmId(null)
     setLifecyclePosition(getLifecyclePopoverPosition(trigger))
     setLifecycleQuestionId(question.id)
   }
+
+  const lifecycleConfirmation = pendingLifecycleAction
+    ? getLifecycleConfirmationCopy(pendingLifecycleAction.action)
+    : null
 
   return (
     <div className="teacher-reference-page teacher-questions-page">
@@ -167,7 +183,6 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
       </div>
 
       {teacherData.error && <Notice tone="danger">{teacherData.error}</Notice>}
-      {lifecycleError && <Notice tone="danger">{lifecycleError}</Notice>}
 
       <div className="teacher-question-toolbar">
         <select aria-label="Question bank filter" value={bankId} onChange={changeFilter(setBankId)}>
@@ -248,7 +263,10 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
                       <span>{question.status}</span>
                     </div>
                     <p>{question.status === 'Archived' ? 'Reactivate this question to return it to active authoring.' : 'Archive this question without deleting its history or exam references.'}</p>
-                    <button type="button" disabled={lifecycleBusyId === question.id} onClick={() => changeLifecycle(question)}>
+                    <button
+                      type="button"
+                      onClick={() => requestLifecycleAction(question, question.status === 'Archived' ? 'reactivate' : 'archive')}
+                    >
                       {question.status === 'Archived' ? <RiRefreshLine size={18} aria-hidden="true" /> : <RiArchiveLine size={18} aria-hidden="true" />}
                       <span>
                         <strong>{question.status === 'Archived' ? 'Reactivate question' : 'Archive question'}</strong>
@@ -258,13 +276,12 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
                     <button
                       type="button"
                       className="teacher-question-lifecycle__delete"
-                      disabled={lifecycleBusyId === question.id}
-                      onClick={() => deleteQuestion(question)}
+                      onClick={() => requestLifecycleAction(question, 'delete')}
                     >
                       <RiDeleteBinLine size={18} aria-hidden="true" />
                       <span>
-                        <strong>{deleteConfirmId === question.id ? 'Confirm permanent delete' : 'Delete permanently'}</strong>
-                        <small>{deleteConfirmId === question.id ? 'Click again to permanently remove this unused question.' : 'Only unused questions can be deleted. Used questions must be archived.'}</small>
+                        <strong>Delete permanently</strong>
+                        <small>Only unused questions can be deleted. Used questions must be archived.</small>
                       </span>
                     </button>
                   </div>
@@ -291,12 +308,101 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
           <button type="button" disabled={page === pageCount} onClick={() => setPage((current) => current + 1)} aria-label="Next page">›</button>
         </div>
       </div>
+
+      {pendingLifecycleAction && lifecycleConfirmation && typeof document !== 'undefined' && createPortal(
+        <div
+          className="teacher-lifecycle-confirm-backdrop"
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target) closeLifecycleConfirmation()
+          }}
+        >
+          <section
+            className={`teacher-lifecycle-confirm-modal${pendingLifecycleAction.action === 'delete' ? ' teacher-lifecycle-confirm-modal--danger' : ''}`}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="teacher-lifecycle-confirm-title"
+            aria-describedby="teacher-lifecycle-confirm-description"
+          >
+            <div className="teacher-lifecycle-confirm-modal__heading">
+              <span className="teacher-lifecycle-confirm-modal__icon" aria-hidden="true">
+                {pendingLifecycleAction.action === 'delete'
+                  ? <RiDeleteBinLine size={22} />
+                  : pendingLifecycleAction.action === 'reactivate'
+                    ? <RiRefreshLine size={22} />
+                    : <RiArchiveLine size={22} />}
+              </span>
+              <div>
+                <h2 id="teacher-lifecycle-confirm-title">{lifecycleConfirmation.title}</h2>
+                <p id="teacher-lifecycle-confirm-description">{lifecycleConfirmation.subtitle}</p>
+              </div>
+            </div>
+
+            <div className="teacher-lifecycle-confirm-modal__question">
+              <span>Question</span>
+              <strong>{pendingLifecycleAction.question.prompt}</strong>
+            </div>
+
+            <p className="teacher-lifecycle-confirm-modal__warning">{lifecycleConfirmation.warning}</p>
+            {lifecycleModalError && <Notice tone="danger">{lifecycleModalError}</Notice>}
+
+            <div className="teacher-lifecycle-confirm-modal__actions">
+              <button
+                type="button"
+                className="teacher-lifecycle-confirm-modal__cancel"
+                disabled={lifecycleBusyId === pendingLifecycleAction.question.id}
+                onClick={closeLifecycleConfirmation}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={`teacher-lifecycle-confirm-modal__confirm${pendingLifecycleAction.action === 'delete' ? ' teacher-lifecycle-confirm-modal__confirm--danger' : ''}`}
+                disabled={lifecycleBusyId === pendingLifecycleAction.question.id}
+                onClick={confirmLifecycleAction}
+              >
+                {lifecycleBusyId === pendingLifecycleAction.question.id ? lifecycleConfirmation.busyLabel : lifecycleConfirmation.confirmLabel}
+              </button>
+            </div>
+          </section>
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }
 
 function TabButton({ label, value, current, count, onClick }) {
   return <button type="button" className={current === value ? 'active' : ''} onClick={() => onClick(value)}>{label} <span>{count}</span></button>
+}
+
+function getLifecycleConfirmationCopy(action) {
+  if (action === 'delete') {
+    return {
+      title: 'Delete this question permanently?',
+      subtitle: 'This action is only allowed for questions that have never been used by an exam.',
+      warning: 'Permanent deletion cannot be undone. If this question has exam history, the backend will reject the deletion and you should archive it instead.',
+      confirmLabel: 'Confirm delete',
+      busyLabel: 'Deleting…',
+    }
+  }
+
+  if (action === 'reactivate') {
+    return {
+      title: 'Reactivate this question?',
+      subtitle: 'The question will return to active authoring.',
+      warning: 'After reactivation, the question can be selected for future exam papers again, provided its question bank is active.',
+      confirmLabel: 'Confirm reactivate',
+      busyLabel: 'Reactivating…',
+    }
+  }
+
+  return {
+    title: 'Archive this question?',
+    subtitle: 'The question will be removed from active authoring without deleting its history.',
+    warning: 'Existing exam references are preserved. You can reactivate the question later if the containing question bank remains active.',
+    confirmLabel: 'Confirm archive',
+    busyLabel: 'Archiving…',
+  }
 }
 
 function getLifecyclePopoverPosition(trigger) {
