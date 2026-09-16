@@ -28,7 +28,7 @@ function ProductLoadingScreen({ title, copy, error, onRetry }) {
 }
 
 export default function App() {
-  const { state, dispatch, boot, pair, signInStaff, signInStudent, signOut } = useAppController()
+  const { state, dispatch, boot, pair, signInStaff, signInStudent, signOut } = useAppController({ gateway: weaveGateway })
   const branding = state.installation.configured ? state.branding : createDefaultBranding()
   const currentRole = state.session?.role || state.session?.type
 
