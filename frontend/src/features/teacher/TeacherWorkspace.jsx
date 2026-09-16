@@ -6,6 +6,7 @@ import { BankDetailPage, QuestionBanksPage } from './QuestionBanksPage'
 import { CreateQuestionPage, QuestionsPage } from './QuestionsPage'
 import { CreateExamPage, ExamsPage } from './ExamsPage'
 import './teacher-dashboard.css'
+import './teacher-selects.css'
 
 const emptyTeacherData = {
   banks: [],
@@ -178,6 +179,8 @@ function normalizeQuestion(question, bank) {
     version: question.version,
     options: question.options,
     bankName: bank.name,
+    createdByActorId: question.created_by_actor_id,
+    lastEditedByActorId: question.last_edited_by_actor_id,
   }
 }
 
