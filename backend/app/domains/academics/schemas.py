@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -64,3 +65,27 @@ class TeacherAssignmentResponse(OutputBase):
 
     effective_from: date
     effective_to: date | None
+
+
+class EligibleAcademicClassResponse(OutputBase):
+    id: UUID
+    academic_level_id: UUID
+    arm_label_id: UUID
+    display_name: str
+    is_active: bool
+
+
+class AssessmentSchemeResponse(OutputBase):
+    id: UUID
+    name: str
+    status: str
+
+
+class AssessmentComponentResponse(OutputBase):
+    id: UUID
+    assessment_scheme_id: UUID
+    name: str
+    code: str | None
+    maximum_score: Decimal
+    position: int
+    is_active: bool
