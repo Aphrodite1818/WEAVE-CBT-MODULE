@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.core.database import DbSession
 from app.core.exceptions import AcademicAuthorizationError
+from app.domains.attempts.models import AttemptStatus
+from app.domains.attempts.query_schemas import AttemptMonitorListResponse
+from app.domains.attempts.query_service import AttemptQueryService
 from app.domains.attempts.schemas import (
     AttemptAnswerMutation,
     AttemptAnswerResponse,
@@ -24,6 +27,7 @@ from app.domains.exams.exceptions import ExamNotFound, ExamStateError
 
 student_router = APIRouter(prefix="/student/attempts", tags=["Student Attempts"])
 operator_router = APIRouter(prefix="/attempts", tags=["Attempts"])
+exam_router = APIRouter(prefix="/exams", tags=["Attempts"])
 
 
 def _http_error(exc: Exception) -> HTTPException:
@@ -90,6 +94,44 @@ async def submit_current_attempt(
         return await AttemptService.submit_current(db, context=context)
     except (AttemptStateError, ExamNotFound, ExamStateError, ValueError) as exc:
         raise _http_error(exc) from exc
+
+
+@exam_router.get("/{exam_id}/attempts", response_model=AttemptMonitorListResponse)
+async def list_exam_attempts(
+    exam_id: UUID,
+    db: DbSession,
+    actor: CurrentLocalActor,
+    attempt_statuses: list[AttemptStatus] | None = Query(default=None, alias="status"),
+    candidate_id: UUID | None = None,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=200),
+) -> AttemptMonitorListResponse:
+    try:
+        rows, total = await AttemptQueryService.list_exam_attempts(
+            db,
+            actor=actor,
+            exam_id=exam_id,
+            statuses=attempt_statuses,
+            candidate_id=candidate_id,
+            offset=offset,
+            limit=limit,
+        )
+    except (
+        AcademicAuthorizationError,
+        AttemptStateError,
+        ExamNotFound,
+        ExamStateError,
+        ValueError,
+    ) as exc:
+        raise _http_error(exc) from exc
+
+    return AttemptMonitorListResponse(
+        exam_id=exam_id,
+        offset=offset,
+        limit=limit,
+        total=total,
+        attempts=rows,
+    )
 
 
 @operator_router.post("/{attempt_id}/interrupt", response_model=AttemptOperatorResponse)
