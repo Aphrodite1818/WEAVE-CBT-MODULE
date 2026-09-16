@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { RiArchiveLine, RiCloseLine, RiEditLine, RiImageAddLine, RiMore2Line, RiRefreshLine, RiSearchLine } from '@remixicon/react'
 import { Icon } from '../../shared/icons/Icon'
 import { Notice, PageTitle, Panel, SegmentedControl, StatusBadge } from '../../shared/ui'
+import './questions-page.css'
 
 const MAX_QUESTION_IMAGE_SIZE = 5 * 1024 * 1024
 const QUESTION_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
-const PAGE_SIZE = 10
+const PAGE_SIZE = 9
 
 export function QuestionsPage({ dispatch, teacherData, gateway }) {
   const [query, setQuery] = useState('')
@@ -83,8 +84,13 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
     }
   }
 
+  const startQuestion = () => {
+    const selectedBankId = bankId === 'all' ? teacherData.banks[0]?.id : bankId
+    dispatch({ type: 'staff', patch: { section: 'create-question', selectedBankId } })
+  }
+
   return (
-    <div className="teacher-reference-page">
+    <div className="teacher-reference-page teacher-questions-page">
       <div className="teacher-page-heading">
         <div>
           <h1>Questions</h1>
@@ -94,9 +100,9 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
           className="teacher-primary-action"
           type="button"
           disabled={teacherData.banks.length === 0}
-          onClick={() => dispatch({ type: 'staff', patch: { section: 'create-question', selectedBankId: teacherData.banks[0]?.id } })}
+          onClick={startQuestion}
         >
-          <Icon name="plus" size={17} /> Add Question
+          <Icon name="plus" size={18} /> Add Question
         </button>
       </div>
 
@@ -109,7 +115,7 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
           {teacherData.banks.map((bank) => <option key={bank.id} value={bank.id}>{bank.name}</option>)}
         </select>
         <label className="teacher-search-control teacher-search-control--grow">
-          <RiSearchLine size={17} aria-hidden="true" />
+          <RiSearchLine size={19} aria-hidden="true" />
           <input aria-label="Search questions" type="search" value={query} onChange={changeFilter(setQuery)} placeholder="Search questions..." />
         </label>
       </div>
@@ -121,28 +127,25 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
         <TabButton label="Archived" value="archived" current={tab} count={counts.archived} onClick={changeFilter(setTab)} />
       </nav>
 
-      <section className="teacher-question-catalog" aria-busy={teacherData.loading} aria-label="Questions">
-        <div className="teacher-question-catalog__header" aria-hidden="true">
-          <span>Question</span>
-          <span>Bank</span>
-          <span>Type</span>
-          <span>Status</span>
-          <span>Version</span>
-          <span>Actions</span>
-        </div>
-
+      <section className="teacher-question-grid" aria-busy={teacherData.loading} aria-label="Questions">
         {visibleQuestions.map((question, index) => (
-          <article className="teacher-question-catalog__row" key={question.id}>
-            <span className="teacher-question-catalog__number">{(page - 1) * PAGE_SIZE + index + 1}</span>
-            <div className="teacher-question-catalog__prompt">
-              <strong>{question.prompt}</strong>
-              {question.image && <small>Includes an image</small>}
+          <article className="teacher-question-card" key={question.id}>
+            <div className="teacher-question-card__top">
+              <span className="teacher-question-card__number">{(page - 1) * PAGE_SIZE + index + 1}</span>
+              <StatusBadge tone={question.status === 'Ready' ? 'success' : 'warning'}>{question.status}</StatusBadge>
             </div>
-            <span className="teacher-question-catalog__bank">{question.bankName}</span>
-            <span className="teacher-type-pill">{question.type}</span>
-            <StatusBadge tone={question.status === 'Ready' ? 'success' : 'warning'}>{question.status}</StatusBadge>
-            <span className="teacher-question-catalog__version">{question.updated}</span>
-            <div className="teacher-question-catalog__actions">
+
+            <div className="teacher-question-card__body">
+              <span className="teacher-question-card__bank">{question.bankName}</span>
+              <h2>{question.prompt}</h2>
+              {question.image && <span className="teacher-question-card__image-note"><RiImageAddLine size={16} aria-hidden="true" /> Includes an image</span>}
+              <div className="teacher-question-card__meta">
+                <span className="teacher-type-pill">{question.type}</span>
+                <span>Version {question.version}</span>
+              </div>
+            </div>
+
+            <div className="teacher-question-card__actions">
               <button
                 type="button"
                 className="teacher-question-edit"
@@ -150,8 +153,9 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
                 title={question.status === 'Archived' ? 'Reactivate this question before editing it.' : undefined}
                 onClick={() => dispatch({ type: 'staff', patch: { section: 'edit-question', selectedBankId: question.bankId, selectedQuestionId: question.id } })}
               >
-                <RiEditLine size={16} aria-hidden="true" /> Edit
+                <RiEditLine size={17} aria-hidden="true" /> Edit
               </button>
+
               <div ref={lifecycleQuestionId === question.id ? lifecycleRef : undefined} className="teacher-question-lifecycle">
                 <button
                   type="button"
@@ -160,17 +164,22 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
                   aria-expanded={lifecycleQuestionId === question.id}
                   onClick={() => setLifecycleQuestionId((current) => current === question.id ? null : question.id)}
                 >
-                  <RiMore2Line size={19} aria-hidden="true" />
+                  Lifecycle <RiMore2Line size={18} aria-hidden="true" />
                 </button>
+
                 {lifecycleQuestionId === question.id && (
                   <div className="teacher-question-lifecycle__card" role="dialog" aria-label={`Lifecycle for ${question.prompt}`}>
-                    <div>
+                    <div className="teacher-question-lifecycle__heading">
                       <strong>Question lifecycle</strong>
-                      <p>{question.status === 'Archived' ? 'Reactivate this question to make it available for authoring again.' : 'Archive this question to remove it from active authoring without deleting its history.'}</p>
+                      <span>{question.status}</span>
                     </div>
+                    <p>{question.status === 'Archived' ? 'Reactivate this question to return it to active authoring.' : 'Archive this question without deleting its history or exam references.'}</p>
                     <button type="button" disabled={lifecycleBusyId === question.id} onClick={() => changeLifecycle(question)}>
-                      {question.status === 'Archived' ? <RiRefreshLine size={17} aria-hidden="true" /> : <RiArchiveLine size={17} aria-hidden="true" />}
-                      {lifecycleBusyId === question.id ? 'Updating…' : question.status === 'Archived' ? 'Reactivate question' : 'Archive question'}
+                      {question.status === 'Archived' ? <RiRefreshLine size={18} aria-hidden="true" /> : <RiArchiveLine size={18} aria-hidden="true" />}
+                      <span>
+                        <strong>{question.status === 'Archived' ? 'Reactivate question' : 'Archive question'}</strong>
+                        <small>{question.status === 'Archived' ? 'Make it available for authoring again.' : 'Hide it from active authoring.'}</small>
+                      </span>
                     </button>
                   </div>
                 )}
@@ -178,19 +187,23 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
             </div>
           </article>
         ))}
-
-        {!teacherData.loading && visibleQuestions.length === 0 && <div className="teacher-question-catalog__empty">No questions match the current filters.</div>}
-        {teacherData.loading && <div className="teacher-question-catalog__empty">Loading questions…</div>}
-
-        <div className="teacher-table-footer">
-          <span>{filtered.length === 0 ? '0 questions' : `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filtered.length)} of ${filtered.length} questions`}</span>
-          <div>
-            <button type="button" disabled={page === 1} onClick={() => setPage((current) => current - 1)} aria-label="Previous page">‹</button>
-            <span>{page} / {pageCount}</span>
-            <button type="button" disabled={page === pageCount} onClick={() => setPage((current) => current + 1)} aria-label="Next page">›</button>
-          </div>
-        </div>
       </section>
+
+      {!teacherData.loading && visibleQuestions.length === 0 && (
+        <div className="teacher-reference-empty teacher-reference-empty--large">
+          <div><strong>No matching questions</strong><p>Try another bank, filter, or search term.</p></div>
+        </div>
+      )}
+      {teacherData.loading && <div className="teacher-page-loading">Loading questions…</div>}
+
+      <div className="teacher-question-pagination">
+        <span>{filtered.length === 0 ? '0 questions' : `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filtered.length)} of ${filtered.length} questions`}</span>
+        <div>
+          <button type="button" disabled={page === 1} onClick={() => setPage((current) => current - 1)} aria-label="Previous page">‹</button>
+          <span>{page} / {pageCount}</span>
+          <button type="button" disabled={page === pageCount} onClick={() => setPage((current) => current + 1)} aria-label="Next page">›</button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -296,7 +309,7 @@ export function CreateQuestionPage({ state, dispatch, teacherData, gateway }) {
   }
 
   if (!selectedBank || (isEditing && !selectedQuestion)) {
-    return <><PageTitle title="Create Question" subtitle="No authorable bank is available." /><Notice tone="warning">The backend did not return any question bank you can author into.</Notice></>
+    return <><PageTitle title={isEditing ? 'Edit Question' : 'Create Question'} subtitle="No authorable bank is available." /><Notice tone="warning">The backend did not return the question and bank required for this action.</Notice></>
   }
 
   return (
@@ -329,7 +342,15 @@ export function CreateQuestionPage({ state, dispatch, teacherData, gateway }) {
           </div>
         </Panel>
         <Panel title="Question settings">
-          <SegmentedControl label="Question Type" value={type} options={[['single', 'Single Choice'], ['multiple', 'Multiple Choice']]} onChange={setType} />
+          {isEditing ? (
+            <div className="teacher-question-type-lock">
+              <span>Question Type</span>
+              <strong>{selectedQuestion.type}</strong>
+              <small>The question type is fixed after creation. You can still update the prompt, answers, instruction and image.</small>
+            </div>
+          ) : (
+            <SegmentedControl label="Question Type" value={type} options={[["single", "Single Choice"], ["multiple", "Multiple Choice"]]} onChange={setType} />
+          )}
           <div className="answer-options">
             {options.map(([id, text], index) => (
               <label key={id} className="answer-option-row">
@@ -339,7 +360,7 @@ export function CreateQuestionPage({ state, dispatch, teacherData, gateway }) {
                 <button type="button" aria-label={`Delete option ${id}`} onClick={() => setOptions((current) => current.filter((item) => item[0] !== id))}><Icon name="trash" size={16} /></button>
               </label>
             ))}
-            <button className="button button--secondary" onClick={() => setOptions((current) => [...current, [String.fromCharCode(65 + current.length), '']])}><Icon name="plus" size={16} /> Add Option</button>
+            <button className="button button--secondary" type="button" onClick={() => setOptions((current) => [...current, [String.fromCharCode(65 + current.length), '']])}><Icon name="plus" size={16} /> Add Option</button>
           </div>
           <Notice tone="success">{type === 'single' ? 'Exactly one answer may be correct.' : 'More than one answer may be marked correct.'}</Notice>
         </Panel>
