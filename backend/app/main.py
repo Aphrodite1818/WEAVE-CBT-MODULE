@@ -11,6 +11,7 @@ from app.core.integration_errors import register_weave_integration_error_handler
 from app.core.redis import close_redis_client
 from app.core.settings import settings
 from app.domains.academics.router import router as academic_router
+from app.domains.attempts.router import exam_router as exam_attempts_router
 from app.domains.attempts.router import operator_router as attempts_router
 from app.domains.attempts.router import student_router as student_attempts_router
 from app.domains.auth.router import router as auth_router
@@ -78,6 +79,7 @@ for router in (
     candidates_router,
     makeup_router,
     student_attempts_router,
+    exam_attempts_router,
     attempts_router,
     results_router,
 ):
