@@ -10,6 +10,7 @@ from app.core.database import check_database_connection, dispose_database_engine
 from app.core.integration_errors import register_weave_integration_error_handlers
 from app.core.redis import close_redis_client
 from app.core.settings import settings
+from app.domains.academics.router import router as academic_router
 from app.domains.attempts.router import operator_router as attempts_router
 from app.domains.attempts.router import student_router as student_attempts_router
 from app.domains.auth.router import router as auth_router
@@ -69,6 +70,7 @@ for router in (
     student_auth_router,
     sync_router,
     media_router,
+    academic_router,
     questions_router,
     exam_read_router,
     exams_router,

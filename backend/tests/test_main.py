@@ -64,6 +64,16 @@ class MainTests(unittest.TestCase):
             paths,
         )
 
+        self.assertIn(
+            "/api/v1/academics/sessions/current",
+            paths,
+        )
+
+        self.assertIn(
+            "/api/v1/academics/terms/current",
+            paths,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

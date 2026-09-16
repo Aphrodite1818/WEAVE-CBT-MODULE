@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AcademicAuthorizationError, AcademicScopeError
 from app.domains.academics.authorization import AcademicAuthorizationService
+from app.domains.academics.eligibility import AcademicEligibilityService
 from app.domains.academics.repository import AcademicRepository
-from app.domains.academics.service import AcademicEligibilityService
 from app.domains.auth.models import LocalActor
 from app.domains.exams.authoring_service import _normalize_optional_text
 from app.domains.exams.exceptions import ExamNotFound, ExamStateError

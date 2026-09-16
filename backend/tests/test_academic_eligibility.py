@@ -13,8 +13,8 @@ os.environ.setdefault(
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
 from app.core.exceptions import AcademicScopeError  # noqa: E402
+from app.domains.academics.eligibility import AcademicEligibilityService  # noqa: E402
 from app.domains.academics.repository import AcademicRepository  # noqa: E402
-from app.domains.academics.service import AcademicEligibilityService  # noqa: E402
 
 
 class AcademicEligibilityTests(unittest.IsolatedAsyncioTestCase):

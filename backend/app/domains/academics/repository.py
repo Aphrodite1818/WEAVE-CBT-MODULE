@@ -310,6 +310,29 @@ class AcademicRepository:
     ) -> AcademicSubject | None:
         return await cls._get_by_id(db, AcademicSubject, subject_id)
 
+
+
+    @staticmethod 
+    async def list_subjects_by_ids(
+        db : AsyncSession,
+        subject_ids : Sequence[UUID]
+    ) ->list[AcademicSubject]:
+        unique_ids = set(subject_ids)
+
+        if not unique_ids:
+            return []
+
+        result = await db.execute(
+            select(AcademicSubject)
+            .where(
+                AcademicSubject.id.in_(unique_ids),
+                AcademicSubject.source_deleted_at.is_(None)
+            )
+            .order_by(AcademicSubject.name.asc())
+        )
+        return list(result.scalars().all())
+
+    
     @classmethod
     async def get_curriculum_by_id(
         cls, db: AsyncSession, curriculum_id: UUID

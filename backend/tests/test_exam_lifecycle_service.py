@@ -19,8 +19,8 @@ os.environ["DEBUG"] = "false"
 
 from app.core.exceptions import AcademicAuthorizationError, AcademicScopeError  # noqa: E402
 from app.domains.academics.authorization import AcademicAuthorizationService  # noqa: E402
+from app.domains.academics.eligibility import AcademicEligibilityService  # noqa: E402
 from app.domains.academics.repository import AcademicRepository  # noqa: E402
-from app.domains.academics.service import AcademicEligibilityService  # noqa: E402
 from app.domains.exams.exceptions import (  # noqa: E402
     ExamAuthorizationError,
     ExamStateError,

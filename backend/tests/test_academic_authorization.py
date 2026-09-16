@@ -17,8 +17,8 @@ from app.core.exceptions import (  # noqa: E402
     AcademicScopeError,
 )
 from app.domains.academics.authorization import AcademicAuthorizationService  # noqa: E402
+from app.domains.academics.eligibility import AcademicEligibilityService  # noqa: E402
 from app.domains.academics.repository import AcademicRepository  # noqa: E402
-from app.domains.academics.service import AcademicEligibilityService  # noqa: E402
 
 
 class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
