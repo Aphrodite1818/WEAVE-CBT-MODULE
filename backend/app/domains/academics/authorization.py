@@ -60,17 +60,17 @@ class AcademicAuthorizationService:
             teacher_membership_id=teacher_membership_id,
         )
 
-        has_assignment = (
-            await AcademicRepository.teacher_has_curriculum_subject_assignment(
+        assigned_classes = (
+            await AcademicRepository.list_teacher_classes_for_curriculum_subject(
                 db,
-                teacher_membership_id,
-                curriculum_subject_id,
+                teacher_membership_id=teacher_membership_id,
+                curriculum_subject_id=curriculum_subject_id,
             )
         )
 
-        if not has_assignment:
+        if not assigned_classes:
             raise AcademicAuthorizationError(
-                "Teacher does not have an active assignment for this curriculum subject"
+                "Teacher does not have an active assignment in a live class for this curriculum subject"
             )
 
     @classmethod
@@ -229,10 +229,22 @@ class AcademicAuthorizationService:
             teacher_membership_id=teacher_membership_id,
         )
 
-        return await AcademicRepository.list_authorable_curriculum_subjects_for_teacher(
+        candidates = await AcademicRepository.list_authorable_curriculum_subjects_for_teacher(
             db,
             teacher_membership_id=teacher_membership_id,
         )
+        authorable: list[CurriculumSubject] = []
+        for subject in candidates:
+            assigned_classes = (
+                await AcademicRepository.list_teacher_classes_for_curriculum_subject(
+                    db,
+                    teacher_membership_id=teacher_membership_id,
+                    curriculum_subject_id=subject.id,
+                )
+            )
+            if assigned_classes:
+                authorable.append(subject)
+        return authorable
 
     @staticmethod
     def _teacher_membership_id(actor: LocalActor) -> UUID:
