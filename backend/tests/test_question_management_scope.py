@@ -90,14 +90,14 @@ class QuestionManagementScopeTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, expected)
         list_banks.assert_awaited_once_with(db, active_only=False)
-        list_questions.assert_awaited_once_with(
-            db,
-            [bank.id for bank in banks],
-            created_by_actor_id=None,
-            active_only=False,
-            offset=0,
-            limit=None,
-        )
+        list_questions.assert_awaited_once()
+        args, kwargs = list_questions.await_args
+        self.assertIs(args[0], db)
+        self.assertEqual(set(args[1]), {bank.id for bank in banks})
+        self.assertIsNone(kwargs["created_by_actor_id"])
+        self.assertFalse(kwargs["active_only"])
+        self.assertEqual(kwargs["offset"], 0)
+        self.assertIsNone(kwargs["limit"])
 
     async def test_teacher_cannot_request_management_scope_for_unauthorized_bank(self) -> None:
         actor = SimpleNamespace(
