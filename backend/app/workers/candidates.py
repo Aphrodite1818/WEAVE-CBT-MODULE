@@ -1,150 +1,121 @@
-"""ARQ jobs for examination candidate roster preparation"""
-
+"""ARQ jobs for examination candidate-roster preparation."""
 
 from __future__ import annotations
 
 import logging
-
 from uuid import UUID
 
 from app.core.database import async_session_factory
 from app.domains.candidates.exceptions import CandidateRosterError
 from app.domains.candidates.service import CandidateService
-from app.domains.exams.models import(
+from app.domains.exams.models import (
+    ROSTER_ERROR_MAX_LENGTH,
     ExamRosterStatus,
     ExamStatus,
-    ROSTER_ERROR_MAX_LENGTH
 )
-
 from app.domains.exams.repository import ExamRepository
 
 logger = logging.getLogger(__name__)
 
 
-
 async def _mark_roster_failed(
     *,
-    exam_id : UUID,
-    error_message : str
+    exam_id: UUID,
+    error_message: str,
 ) -> None:
-    """Persist a recoverable roster failure in PostgreSQL"""
+    """Persist a recoverable roster failure in PostgreSQL."""
 
     async with async_session_factory() as db:
         exam = await ExamRepository.get_exam_by_id(
             db,
-            exam_id = exam_id,
-            lock = True
+            exam_id=exam_id,
+            lock=True,
         )
 
         if exam is None:
-            return 
+            return
 
-
-
-        #Do not overwrite a roster that another execution already completed 
+        # Do not overwrite a roster another execution already completed.
         if exam.roster_status == ExamRosterStatus.READY:
-            return 
+            return
 
-
-        #roster preparation only belongs to sealed examinations
+        # Roster preparation only belongs to sealed examinations.
         if exam.status != ExamStatus.SEALED:
-            return 
-
+            return
 
         exam.roster_status = ExamRosterStatus.FAILED
         exam.roster_error = error_message[:ROSTER_ERROR_MAX_LENGTH]
 
-        await ExamRepository.save_exam(db , exam)
+        await ExamRepository.save_exam(db, exam)
         await db.commit()
 
 
 async def prepare_exam_roster(
-    _ctx : dict,
-    exam_id : str
+    _ctx: dict,
+    exam_id: str,
 ) -> None:
-    """Prepare the candidate roster for one sealed examination"""
-
-    
+    """Prepare the candidate roster for one sealed examination."""
 
     try:
         parsed_exam_id = UUID(exam_id)
     except (TypeError, ValueError) as exc:
-        raise ValueError("prepare_exam_roster received an invalid exam ID") from exc
-
+        raise ValueError(
+            "prepare_exam_roster received an invalid exam ID"
+        ) from exc
 
     try:
         async with async_session_factory() as db:
-            #Lock the exam before deciding whether this job still needs
-            #to do anything. Duplicate ARQ deliveries therefore serialize
-            #against the same PostgreSQL row
-
+            # Lock before deciding whether duplicate delivery still needs work.
             exam = await ExamRepository.get_exam_by_id(
                 db,
-                exam_id = parsed_exam_id,
-                lock = True
+                exam_id=parsed_exam_id,
+                lock=True,
             )
-
-
 
             if exam is None:
                 logger.warning(
                     "Roster job ignored because exam %s no longer exists",
-                    parsed_exam_id
+                    parsed_exam_id,
                 )
-                return 
+                return
 
-
-            #Another execution may already have completed the roster
             if exam.roster_status == ExamRosterStatus.READY:
                 return
-            
 
-            #The queued job may outlive the exam state that created it
+            # A queued job may outlive the exam state that created it.
             if exam.status != ExamStatus.SEALED:
                 return
 
-
-            #Initial preparation is valid only for pending / failed rosters
-            if exam.roster_status not in  {
+            if exam.roster_status not in {
                 ExamRosterStatus.PENDING,
-                ExamRosterStatus.FAILED
+                ExamRosterStatus.FAILED,
             }:
                 return
 
             await CandidateService.prepare_roster(
                 db,
-                exam_id = parsed_exam_id
+                exam_id=parsed_exam_id,
             )
-
 
     except CandidateRosterError as exc:
         await _mark_roster_failed(
-            exam_id = parsed_exam_id,
-            error_message=str(exc)
+            exam_id=parsed_exam_id,
+            error_message=str(exc),
         )
-
-
         logger.warning(
             "Candidate roster preparation failed for exam %s: %s",
             parsed_exam_id,
-            exc
+            exc,
         )
-
-
         raise
-
-
 
     except Exception:
         await _mark_roster_failed(
-            exam_id = parsed_exam_id,
-            error_message = "Candidate roster preparation failed unexpectedly"
+            exam_id=parsed_exam_id,
+            error_message="Candidate roster preparation failed unexpectedly",
         )
-
-
         logger.exception(
             "Unexpected candidate roster preparation failure for exam %s",
-            parsed_exam_id
+            parsed_exam_id,
         )
-
-        raise 
+        raise
