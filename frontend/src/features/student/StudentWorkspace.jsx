@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Metric, Notice, StatusBadge, WeaveLogo } from '../../shared/ui'
+import { FormattedText } from '../../shared/ui/FormattedText'
 import './student.css'
 
 export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnToSignIn }) {
@@ -95,8 +96,8 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
               <h2>Question {exam.index + 1} of {questions.length}</h2>
               <label className="premium-mark-review"><input type="checkbox" checked={Boolean(current.is_flagged)} readOnly /> Mark for review</label>
             </div>
-            {current.instruction && <p className="premium-question-instruction">{current.instruction}</p>}
-            <div className="premium-question-prompt">{current.prompt}</div>
+            {current.instruction && <p className="premium-question-instruction"><FormattedText text={current.instruction} /></p>}
+            <div className="premium-question-prompt"><FormattedText text={current.prompt} /></div>
             {current.image_asset_id && (
               <div className="premium-question-media">
                 <AttemptMedia gateway={gateway} questionId={current.id} alt="Question illustration" />

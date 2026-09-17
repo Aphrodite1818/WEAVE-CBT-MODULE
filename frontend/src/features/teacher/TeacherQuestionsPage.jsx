@@ -116,6 +116,18 @@ export function TeacherQuestionsPage({ state, dispatch, teacherData, gateway }) 
     })
   }
 
+  const previewQuestion = (question) => {
+    dispatch({
+      type: 'staff',
+      patch: {
+        section: 'preview-question',
+        selectedBankId: question.bankId,
+        selectedQuestionId: question.id,
+        editingQuestion: null,
+      },
+    })
+  }
+
   const createQuestion = () => {
     const selectedBankId = bankId === 'all' ? teacherData.banks[0]?.id : bankId
     dispatch({ type: 'staff', patch: { section: 'create-question', selectedBankId, selectedQuestionId: null, editingQuestion: null } })
@@ -193,6 +205,7 @@ export function TeacherQuestionsPage({ state, dispatch, teacherData, gateway }) 
 
         {visibleQuestions.map((question, index) => (
           <article className="teacher-question-row" key={question.id}>
+            <button className="teacher-question-row__preview" type="button" aria-label={`Preview question: ${question.prompt}`} onClick={() => previewQuestion(question)} />
             <div className="teacher-question-row__question">
               <span className="teacher-question-row__number">{(page - 1) * PAGE_SIZE + index + 1}</span>
               <div>
