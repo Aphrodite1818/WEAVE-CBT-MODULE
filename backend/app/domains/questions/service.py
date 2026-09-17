@@ -16,6 +16,7 @@ from app.domains.auth.models import LocalActor
 from app.domains.exams.repository import ExamRepository
 from app.domains.media.repository import MediaRepository
 from app.domains.media.service import MediaService
+from app.domains.questions.exceptions import QuestionConflictError
 from app.domains.questions.models import (
     Question,
     QuestionBank,
@@ -604,6 +605,8 @@ class QuestionService:
         bank_id: UUID,
         active_only: bool = True,
     ) -> list[Question]:
+        """Return the shared bank contents an actor is academically allowed to browse."""
+
         bank = await QuestionRepository.get_bank_by_id(db, bank_id)
         if bank is None:
             raise ValueError("Question bank does not exist")
@@ -618,6 +621,59 @@ class QuestionService:
             db,
             bank.id,
             active_only=active_only,
+        )
+
+    @staticmethod
+    async def list_actor_manageable_questions(
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        bank_id: UUID | None = None,
+        active_only: bool = False,
+        offset: int = 0,
+        limit: int | None = None,
+    ) -> list[Question]:
+        """Return only questions the actor is permitted to manage.
+
+        Admins manage every question on the local node. Teachers manage only their
+        own contributions and only while the containing bank remains in their
+        current Weave-backed authoring scope.
+        """
+
+        if not actor.is_active:
+            raise AcademicAuthorizationError("Active local actor is required")
+
+        created_by_actor_id: UUID | None = None
+        if actor.role == "admin":
+            banks = await QuestionRepository.list_banks(db, active_only=False)
+        elif actor.role == "teacher":
+            banks = await QuestionService.list_actor_authorable_question_banks(
+                db,
+                actor=actor,
+            )
+            created_by_actor_id = actor.id
+        else:
+            raise AcademicAuthorizationError(
+                "Only administrators and teachers can manage questions"
+            )
+
+        allowed_bank_ids = {bank.id for bank in banks}
+        if bank_id is not None:
+            if bank_id not in allowed_bank_ids:
+                raise AcademicAuthorizationError(
+                    "You are not allowed to manage questions in this bank"
+                )
+            bank_ids = [bank_id]
+        else:
+            bank_ids = list(allowed_bank_ids)
+
+        return await QuestionRepository.list_questions_for_banks(
+            db,
+            bank_ids,
+            created_by_actor_id=created_by_actor_id,
+            active_only=active_only,
+            offset=offset,
+            limit=limit,
         )
 
     @staticmethod
@@ -691,7 +747,15 @@ class QuestionService:
         )
         _require_can_manage_question(actor=actor, question=question)
 
-        fields = payload.model_fields_set
+        if (
+            payload.expected_version is not None
+            and payload.expected_version != question.version
+        ):
+            raise QuestionConflictError(
+                "This question changed after you opened it. Refresh and review the latest version before saving again."
+            )
+
+        fields = payload.model_fields_set - {"expected_version"}
         changed = False
         old_image_asset_id = question.image_asset_id
         old_option_image_ids: set[UUID] = set()
