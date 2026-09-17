@@ -14,13 +14,97 @@ from app.domains.auth.models import LocalActor
 from app.domains.auth.student_service import StudentSessionContext
 from app.domains.candidates.repository import CandidateRepository
 from app.domains.exams.exceptions import ExamNotFound
+from app.domains.exams.execution_repository import ExamExecutionRepository
 from app.domains.exams.models import ExamStatus
 from app.domains.exams.repository import ExamRepository
 from app.workers.producer import arq_producer
 
 
+_FINALIZING_STATES = {ExamStatus.CLOSING, ExamStatus.CANCELLING}
+
+
 class AttemptService(_AttemptService):
     """Apply whole-exam lifecycle guards around the core attempt service."""
+
+    @classmethod
+    async def _build_finalizing_response(
+        cls,
+        db: AsyncSession,
+        *,
+        context: StudentSessionContext,
+    ):
+        attempt, candidate, exam = await cls._get_current_attempt(
+            db,
+            context=context,
+            lock=True,
+        )
+        control = await ExamExecutionRepository.get_control(db, exam.id)
+        if control is None or control.operation_requested_at is None:
+            raise AttemptStateError(
+                "Examination finalization metadata is unavailable"
+            )
+
+        response = await cls._build_attempt_response(
+            db,
+            attempt=attempt,
+            candidate=candidate,
+            exam=exam,
+            is_makeup=context.is_makeup,
+        )
+        response.exam_suspended = True
+        response.remaining_seconds = await cls.remaining_seconds(
+            db,
+            attempt=attempt,
+            exam_id=exam.id,
+            at=control.operation_requested_at,
+        )
+        return response
+
+    @classmethod
+    async def get_current(
+        cls,
+        db: AsyncSession,
+        *,
+        context: StudentSessionContext,
+    ):
+        if not context.is_makeup:
+            _candidate, exam = await cls._get_candidate_and_exam(
+                db,
+                context=context,
+                lock=False,
+            )
+            if exam.status in _FINALIZING_STATES:
+                await db.rollback()
+                return await cls._build_finalizing_response(db, context=context)
+            await db.rollback()
+        return await super().get_current(db, context=context)
+
+    @classmethod
+    async def start_current(
+        cls,
+        db: AsyncSession,
+        *,
+        context: StudentSessionContext,
+    ):
+        if not context.is_makeup:
+            candidate, exam = await cls._get_candidate_and_exam(
+                db,
+                context=context,
+                lock=False,
+            )
+            if exam.status in _FINALIZING_STATES:
+                existing = await AttemptRepository.get_attempt_by_candidate_id(
+                    db,
+                    candidate.id,
+                )
+                await db.rollback()
+                if existing is None:
+                    raise AttemptStateError(
+                        "Examination finalization has started; no new attempts may begin"
+                    )
+                return await cls._build_finalizing_response(db, context=context)
+            await db.rollback()
+        return await super().start_current(db, context=context)
 
     @classmethod
     async def submit_current(
