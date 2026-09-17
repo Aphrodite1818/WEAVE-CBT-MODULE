@@ -129,6 +129,25 @@
 }
 
 /*
+ * Bank-detail question rows use an absolutely positioned number badge.
+ * questions-page.css raises normal row content above the full-row preview
+ * target; explicitly preserve the badge's absolute positioning so it never
+ * enters the four-column grid and shifts Question/Type/Status/Version.
+ */
+.teacher-shell .teacher-bank-question-row > .teacher-bank-question-row__number {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.teacher-shell .teacher-bank-question-row__prompt,
+.teacher-shell .teacher-bank-question-row__type,
+.teacher-shell .teacher-bank-question-row__version,
+.teacher-shell .teacher-bank-question-row > .status-badge {
+  min-width: 0;
+}
+
+/*
  * Several confirmation/editor dialogs are rendered through portals and are
  * therefore outside .teacher-shell. Keep their action surfaces aligned with
  * the dashboard standard as well.
