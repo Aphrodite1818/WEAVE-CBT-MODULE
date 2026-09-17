@@ -123,10 +123,6 @@ class Settings(BaseSettings):
     )
 
     REDIS_MAX_CONNECTIONS: int = Field(default=20, ge=1)
-    # Taskiq may use a separate Redis database/instance when desired.
-    #
-    # If omitted, the normal REDIS_URL is reused.
-    TASKIQ_REDIS_URL: str | None = None
 
     # ========================== #
     # PERSISTENT CBT IDENTITY
@@ -232,21 +228,6 @@ class Settings(BaseSettings):
     SENTRY_BACKEND_DSN_URL: str | None = None
 
     # ========================== #
-    # DERIVED CONFIGURATION
-    # ========================== #
-
-    @property
-    def taskiq_redis_url(self) -> str:
-        """
-        Return the Redis URL Taskiq should use.
-
-        A dedicated Taskiq URL may be configured when desired.
-        Otherwise the application's normal Redis connection is reused.
-        """
-
-        return self.TASKIQ_REDIS_URL or self.REDIS_URL
-
-    # ========================== #
     # VALIDATION
     # ========================== #
 
@@ -282,7 +263,7 @@ class Settings(BaseSettings):
 
         return value
 
-    @field_validator("REDIS_URL", "TASKIQ_REDIS_URL")
+    @field_validator("REDIS_URL")
     @classmethod
     def validate_redis_url(
         cls,
