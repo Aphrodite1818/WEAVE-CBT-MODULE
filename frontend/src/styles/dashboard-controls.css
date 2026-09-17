@@ -1,0 +1,166 @@
+/*
+ * Shared staff-dashboard control standard.
+ *
+ * This file is intentionally narrow: semantic action buttons and multiline
+ * form fields only. Search inputs, navigation buttons, tabs, menus, and other
+ * specialized controls keep their feature-owned styling.
+ */
+
+/* Primary actions use the tenant/school brand colour consistently. */
+.teacher-shell .teacher-primary-action {
+  min-height: 42px;
+  border: 1px solid rgb(var(--color-primary));
+  border-radius: 9px;
+  background: rgb(var(--color-primary));
+  color: rgb(var(--color-on-primary));
+  padding-inline: 17px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 760;
+  box-shadow: 0 9px 20px rgb(var(--color-primary) / .18);
+  transition: filter 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.teacher-shell .teacher-primary-action:hover:not(:disabled) {
+  filter: brightness(.94);
+}
+
+.teacher-shell .teacher-primary-action:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.teacher-shell .teacher-primary-action:focus-visible {
+  outline: 0;
+  box-shadow:
+    0 0 0 3px rgb(var(--color-primary) / .16),
+    0 9px 20px rgb(var(--color-primary) / .18);
+}
+
+/*
+ * Secondary actions use a fully opaque tint of the tenant colour. This gives
+ * Cancel/Back-style actions a visible surface without competing with primary
+ * actions or falling back to plain browser-white buttons.
+ */
+.teacher-shell .teacher-secondary-action {
+  min-height: 42px;
+  border: 1px solid color-mix(in srgb, rgb(var(--color-primary)) 34%, #ffffff);
+  border-radius: 9px;
+  background: color-mix(in srgb, rgb(var(--color-primary)) 10%, #ffffff);
+  color: rgb(var(--color-primary));
+  padding-inline: 17px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 760;
+  box-shadow: 0 4px 12px rgb(var(--color-primary) / .06);
+  transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.teacher-shell .teacher-secondary-action:hover:not(:disabled) {
+  border-color: color-mix(in srgb, rgb(var(--color-primary)) 48%, #ffffff);
+  background: color-mix(in srgb, rgb(var(--color-primary)) 16%, #ffffff);
+}
+
+.teacher-shell .teacher-secondary-action:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.teacher-shell .teacher-secondary-action:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px rgb(var(--color-primary) / .14);
+}
+
+.teacher-shell .teacher-primary-action:disabled,
+.teacher-shell .teacher-secondary-action:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+  transform: none;
+  filter: none;
+}
+
+/*
+ * Dashboard multiline fields are real product controls, not raw browser
+ * textareas. This deliberately does not target input/search controls.
+ */
+.teacher-shell textarea {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  min-height: 112px;
+  box-sizing: border-box;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: rgb(var(--color-text));
+  padding: 12px 13px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+  caret-color: rgb(var(--color-primary));
+  resize: vertical;
+  box-shadow: 0 1px 2px rgb(15 23 42 / .04);
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+
+.teacher-shell textarea:hover:not(:disabled) {
+  border-color: color-mix(in srgb, rgb(var(--color-primary)) 48%, #cbd5e1);
+}
+
+.teacher-shell textarea:focus,
+.teacher-shell textarea:focus-visible {
+  outline: 0;
+  border-color: rgb(var(--color-primary));
+  background: #ffffff;
+  box-shadow:
+    0 0 0 3px rgb(var(--color-primary) / .12),
+    0 5px 16px rgb(var(--color-primary) / .07);
+}
+
+.teacher-shell textarea::placeholder {
+  color: rgb(var(--color-text-muted));
+  opacity: .78;
+}
+
+.teacher-shell textarea:disabled {
+  border-color: #d8dee8;
+  background: #f8fafc;
+  color: rgb(var(--color-text-muted));
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/*
+ * Several confirmation/editor dialogs are rendered through portals and are
+ * therefore outside .teacher-shell. Keep their action surfaces aligned with
+ * the dashboard standard as well.
+ */
+.admin-modal-actions .teacher-primary-action,
+.teacher-lifecycle-confirm-modal__confirm,
+.teacher-exam-confirm-modal__confirm {
+  border-color: rgb(var(--color-primary)) !important;
+  background: rgb(var(--color-primary)) !important;
+  color: rgb(var(--color-on-primary)) !important;
+}
+
+.admin-modal-actions .teacher-secondary-action,
+.teacher-lifecycle-confirm-modal__cancel,
+.teacher-exam-confirm-modal__cancel {
+  border-color: color-mix(in srgb, rgb(var(--color-primary)) 34%, #ffffff) !important;
+  background: color-mix(in srgb, rgb(var(--color-primary)) 10%, #ffffff) !important;
+  color: rgb(var(--color-primary)) !important;
+}
+
+.admin-modal-actions .teacher-secondary-action:hover:not(:disabled),
+.teacher-lifecycle-confirm-modal__cancel:hover:not(:disabled),
+.teacher-exam-confirm-modal__cancel:hover:not(:disabled) {
+  border-color: color-mix(in srgb, rgb(var(--color-primary)) 48%, #ffffff) !important;
+  background: color-mix(in srgb, rgb(var(--color-primary)) 16%, #ffffff) !important;
+}
+
+/* Preserve semantic danger actions instead of recolouring them with branding. */
+.admin-danger-action,
+.teacher-lifecycle-confirm-modal__confirm--danger,
+.teacher-exam-confirm-modal__confirm.is-danger {
+  border-color: #b91c1c !important;
+  background: #b91c1c !important;
+  color: #ffffff !important;
+}
