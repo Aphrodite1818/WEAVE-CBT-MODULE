@@ -9,37 +9,36 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domains.academics.repository import AcademicRepository
 from app.domains.auth.models import LocalActor
 from app.domains.questions.models import Question
 from app.domains.questions.repository import QuestionRepository
 from app.domains.questions.schemas import QuestionOptionResponse, QuestionResponse
 
 
-def _author_name(actor: LocalActor | None) -> str:
-    """Return the current display label for a question author.
-
-    Administrators are intentionally anonymized to the role label while teacher
-    questions follow the actor's current display name. The question keeps only
-    the immutable actor ID; names are presentation data and are resolved at read
-    time so profile corrections or name changes are reflected automatically.
-    """
-
-    if actor is None:
-        return "Unknown author"
-    if actor.role == "admin":
-        return "Admin"
-
-    display_name = (actor.display_name or "").strip()
-    return display_name or "Teacher"
+def _membership_uuid(actor: LocalActor) -> UUID | None:
+    if actor.role != "teacher" or not actor.weave_membership_id:
+        return None
+    try:
+        return UUID(actor.weave_membership_id)
+    except (TypeError, ValueError):
+        return None
 
 
-async def _load_author_map(
+async def _load_author_names(
     db: AsyncSession,
     actor_ids: Sequence[UUID],
     *,
     request_actor: LocalActor | None = None,
-) -> dict[UUID, LocalActor]:
-    """Resolve unique authors in one query, reusing the authenticated actor."""
+) -> dict[UUID, str]:
+    """Resolve current author labels without creating an N+1 query pattern.
+
+    Question authorship itself is historical through ``created_by_actor_id``.
+    The human-readable name is intentionally current presentation data. Active
+    synchronized teacher projections provide the current first/last name; the
+    durable local actor display name is the fallback for teachers no longer in
+    the live projection. Administrators are always displayed simply as ``Admin``.
+    """
 
     unique_ids = set(actor_ids)
     if not unique_ids:
@@ -50,12 +49,48 @@ async def _load_author_map(
     if request_actor_id in unique_ids:
         actors[request_actor_id] = request_actor
 
-    remaining_ids = unique_ids - actors.keys()
+    remaining_ids = unique_ids - set(actors)
     if remaining_ids:
         result = await db.execute(select(LocalActor).where(LocalActor.id.in_(remaining_ids)))
         actors.update({actor.id: actor for actor in result.scalars().all()})
 
-    return actors
+    membership_to_actor_id: dict[UUID, UUID] = {}
+    for actor_id, actor in actors.items():
+        membership_id = _membership_uuid(actor)
+        if membership_id is not None:
+            membership_to_actor_id[membership_id] = actor_id
+
+    current_teacher_names: dict[UUID, str] = {}
+    if membership_to_actor_id:
+        teachers = await AcademicRepository.list_teachers_by_ids(
+            db,
+            list(membership_to_actor_id),
+            active_only=False,
+        )
+        for teacher in teachers:
+            parts = [
+                value.strip()
+                for value in (teacher.first_name, teacher.last_name)
+                if value and value.strip()
+            ]
+            if parts:
+                current_teacher_names[membership_to_actor_id[teacher.id]] = " ".join(parts)
+
+    author_names: dict[UUID, str] = {}
+    for actor_id, actor in actors.items():
+        if actor.role == "admin":
+            author_names[actor_id] = "Admin"
+            continue
+
+        current_name = current_teacher_names.get(actor_id)
+        if current_name:
+            author_names[actor_id] = current_name
+            continue
+
+        display_name = (actor.display_name or "").strip()
+        author_names[actor_id] = display_name or "Teacher"
+
+    return author_names
 
 
 async def build_question_response(
@@ -65,7 +100,7 @@ async def build_question_response(
     request_actor: LocalActor | None = None,
 ) -> QuestionResponse:
     options = await QuestionRepository.list_options_for_question(db, question.id)
-    authors = await _load_author_map(
+    author_names = await _load_author_names(
         db,
         [question.created_by_actor_id],
         request_actor=request_actor,
@@ -79,7 +114,7 @@ async def build_question_response(
         image_asset_id=question.image_asset_id,
         version=question.version,
         created_by_actor_id=question.created_by_actor_id,
-        author_name=_author_name(authors.get(question.created_by_actor_id)),
+        author_name=author_names.get(question.created_by_actor_id, "Unknown author"),
         last_edited_by_actor_id=question.last_edited_by_actor_id,
         is_active=question.is_active,
         options=[QuestionOptionResponse.model_validate(option) for option in options],
@@ -99,7 +134,7 @@ async def build_question_responses(
         db,
         [question.id for question in questions],
     )
-    authors = await _load_author_map(
+    author_names = await _load_author_names(
         db,
         [question.created_by_actor_id for question in questions],
         request_actor=request_actor,
@@ -121,7 +156,7 @@ async def build_question_responses(
             image_asset_id=question.image_asset_id,
             version=question.version,
             created_by_actor_id=question.created_by_actor_id,
-            author_name=_author_name(authors.get(question.created_by_actor_id)),
+            author_name=author_names.get(question.created_by_actor_id, "Unknown author"),
             last_edited_by_actor_id=question.last_edited_by_actor_id,
             is_active=question.is_active,
             options=grouped[question.id],
