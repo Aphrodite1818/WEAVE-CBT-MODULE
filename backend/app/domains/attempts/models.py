@@ -40,6 +40,7 @@ class AttemptEndReason(str, PyEnum):
     CANDIDATE_SUBMITTED = "candidate_submitted"
     TIME_EXPIRED = "time_expired"
     EXAM_CLOSED = "exam_closed"
+    EXAM_CANCELLED = "exam_cancelled"
     ADMIN_TERMINATED = "admin_terminated"
 
 
@@ -149,7 +150,7 @@ class ExamAttempt(Base):
         CheckConstraint(
             "("
             "status = 'terminated' "
-            "AND end_reason = 'admin_terminated' "
+            "AND end_reason IN ('admin_terminated', 'exam_cancelled') "
             "AND termination_reason IS NOT NULL"
             ") OR ("
             "status <> 'terminated' "
@@ -158,7 +159,8 @@ class ExamAttempt(Base):
             name="ck_exam_attempts_termination_reason_consistent",
         ),
         CheckConstraint(
-            "status <> 'submitted' OR end_reason <> 'admin_terminated'",
+            "status <> 'submitted' OR "
+            "end_reason NOT IN ('admin_terminated', 'exam_cancelled')",
             name="ck_exam_attempts_submitted_not_admin_terminated",
         ),
         Index("ix_exam_attempts_status_heartbeat", "status", "last_heartbeat_at"),
