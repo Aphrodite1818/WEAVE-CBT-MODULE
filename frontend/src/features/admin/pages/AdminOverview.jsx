@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   RiAddLine,
-  RiArchiveStackLine,
   RiCalendarTodoLine,
   RiFileAddLine,
   RiFileList3Line,
@@ -14,14 +13,13 @@ import { Notice } from '../../../shared/ui'
 
 const statConfig = [
   { key: 'banks', tone: 'green', icon: BankIcon, label: 'Question Banks', caption: 'Across the school', section: 'question-banks' },
-  { key: 'questions', tone: 'blue', icon: RiArchiveStackLine, label: 'Questions', caption: 'Active and archived', section: 'questions' },
+  { key: 'questions', tone: 'blue', icon: QuestionIcon, label: 'Questions', caption: 'Active and archived', section: 'questions' },
   { key: 'drafts', tone: 'amber', icon: RiFileList3Line, label: 'Draft Exams', caption: 'Still being authored', section: 'exams' },
   { key: 'submitted', tone: 'rose', icon: RiCalendarTodoLine, label: 'Submitted Exams', caption: 'Awaiting admin action', section: 'exams' },
 ]
 
-function BankIcon({ size = 20 }) {
-  return <Icon name="bank" size={size} />
-}
+function BankIcon({ size = 20 }) { return <Icon name="bank" size={size} /> }
+function QuestionIcon({ size = 20 }) { return <Icon name="fileText" size={size} /> }
 
 export function AdminOverview({ state, adminData, onNavigate }) {
   const adminName = state.session?.actor?.display_name || state.session?.name || 'Administrator'
@@ -75,9 +73,7 @@ export function AdminOverview({ state, adminData, onNavigate }) {
       {!adminData.error && adminData.warning && <Notice tone="warning">Some administrator data could not be refreshed. Available local data is still shown.</Notice>}
 
       <section className="teacher-overview-stats" aria-label="Administrator workspace summary" aria-busy={adminData.loading}>
-        {statConfig.map(({ key, ...stat }) => (
-          <OverviewStat key={key} {...stat} value={stats[key]} onClick={() => onNavigate(stat.section)} />
-        ))}
+        {statConfig.map(({ key, ...stat }) => <OverviewStat key={key} {...stat} value={stats[key]} onClick={() => onNavigate(stat.section)} />)}
       </section>
 
       <section className="teacher-overview-columns">
@@ -144,20 +140,16 @@ function AdminQuickActions({ banks, onNavigate }) {
     }
   }, [open])
 
-  const go = (section, patch) => {
-    setOpen(false)
-    onNavigate(section, patch)
-  }
+  const go = (section, patch) => { setOpen(false); onNavigate(section, patch) }
+  const firstActiveBank = banks.find((bank) => bank.status === 'Ready')
 
   return (
     <div className="teacher-quick-menu" ref={menuRef}>
-      <button type="button" className="teacher-quick-menu__trigger" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-        <RiAddLine size={18} /> Quick Actions
-      </button>
+      <button type="button" className="teacher-quick-menu__trigger" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)}><RiAddLine size={18} /> Quick Actions</button>
       {open && (
         <div className="teacher-quick-menu__dropdown" role="menu" aria-label="Administrator quick actions">
           <button type="button" role="menuitem" onClick={() => go('create-bank')}><Icon name="bank" size={19} /><span><strong>Create Question Bank</strong><small>Add a bank for a curriculum subject</small></span></button>
-          <button type="button" role="menuitem" disabled={!banks.length} onClick={() => go('create-question', { selectedBankId: banks[0]?.id })}><RiAddLine size={19} /><span><strong>Create Question</strong><small>Add a question to any active bank</small></span></button>
+          <button type="button" role="menuitem" disabled={!firstActiveBank} onClick={() => go('create-question', { selectedBankId: firstActiveBank?.id })}><RiAddLine size={19} /><span><strong>Create Question</strong><small>Add a question to any active bank</small></span></button>
           <button type="button" role="menuitem" onClick={() => go('create-exam')}><RiFileAddLine size={19} /><span><strong>Create Exam</strong><small>Start a new draft examination</small></span></button>
         </div>
       )}
@@ -166,12 +158,7 @@ function AdminQuickActions({ banks, onNavigate }) {
 }
 
 function OverviewStat({ tone, icon: StatIcon, label, caption, value, onClick }) {
-  return (
-    <button type="button" className={`teacher-overview-stat teacher-overview-stat--${tone}`} onClick={onClick}>
-      <span className="teacher-overview-stat__icon"><StatIcon size={23} aria-hidden="true" /></span>
-      <strong>{value}</strong><span>{label}</span><small>{caption}</small>
-    </button>
-  )
+  return <button type="button" className={`teacher-overview-stat teacher-overview-stat--${tone}`} onClick={onClick}><span className="teacher-overview-stat__icon"><StatIcon size={23} aria-hidden="true" /></span><strong>{value}</strong><span>{label}</span><small>{caption}</small></button>
 }
 
 function greetingForHour(hour) {
