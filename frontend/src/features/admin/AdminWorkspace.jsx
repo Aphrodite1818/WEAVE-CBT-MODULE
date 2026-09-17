@@ -1,94 +1,150 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { getLocalBrandLogoSrc } from '../../api/branding'
 import { Icon } from '../../shared/icons/Icon'
 import { DashboardAccountMenu, DashboardSchoolIdentity } from '../../shared/ui'
-import { getLocalBrandLogoSrc } from '../../api/branding'
-import { AdminDashboard } from './pages/AdminDashboard'
-import { ExamOperations } from './pages/ExamOperations'
-import { InvigilatorPanel } from './pages/InvigilatorPanel'
-import { QuestionBank } from './pages/QuestionBank'
-import { ReportsPage } from './pages/ReportsPage'
-import { ResultsPage } from './pages/ResultsPage'
-import { SettingsPage } from './pages/SettingsPage'
-import { StudentsView } from './pages/StudentsView'
+import { QuestionBuilder } from '../teacher/QuestionBuilder'
+import { TeacherCreateExamPage } from '../teacher/TeacherExamsPage'
+import { TeacherQuestionPreviewPage } from '../teacher/TeacherQuestionPreviewPage'
+import { TeacherQuestionsPage } from '../teacher/TeacherQuestionsPage'
+import { AdminExamsPage } from './pages/AdminExamsPage'
+import { AdminOverview } from './pages/AdminOverview'
+import { AdminBankDetailPage, AdminQuestionBanksPage } from './pages/AdminQuestionBanks'
+import { useAdminData } from './useAdminData'
+import '../teacher/teacher-dashboard.css'
+import '../teacher/teacher-selects.css'
+import '../teacher/teacher-exams.css'
 import './admin.css'
 
+const bankViews = new Set(['question-banks', 'create-bank', 'bank-detail', 'questions', 'create-question', 'edit-question', 'preview-question'])
+const examViews = new Set(['exams', 'create-exam'])
+const placeholderViews = new Set(['students', 'invigilators', 'results', 'reports'])
+
 const adminNav = [
-  ['dashboard', 'Dashboard', 'dashboard'],
-  ['exams', 'Exams', 'exams'],
-  ['question-banks', 'Question Bank', 'book'],
-  ['students', 'Students', 'users'],
-  ['invigilators', 'Invigilators', 'shield'],
-  ['results', 'Results', 'results'],
-  ['reports', 'Reports', 'reports'],
-  ['settings', 'Settings', 'settings'],
+  ['dashboard', 'home', 'Dashboard'],
+  ['question-banks', 'bank', 'Question Banks'],
+  ['questions', 'fileText', 'Questions'],
+  ['exams', 'calendar', 'Exams'],
+  ['students', 'users', 'Students'],
+  ['invigilators', 'shield', 'Invigilators'],
+  ['results', 'results', 'Results'],
+  ['reports', 'reports', 'Reports'],
 ]
 
-export function AdminWorkspace({ state, dispatch, signOut }) {
+export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const section = state.staff.section === 'overview' ? 'dashboard' : state.staff.section
+  const [workspaceView, setWorkspaceView] = useState(() => topLevelView(state.staff.section))
+  const adminData = useAdminData(gateway)
   const actor = state.session?.actor
   const adminName = actor?.display_name || state.session?.name || 'Administrator'
   const schoolName = state.branding?.school_name || state.installation?.status?.tenant_name || 'Weave CBT'
   const serverName = state.installation?.status?.server_name || 'Local CBT server'
   const schoolLogoSrc = getLocalBrandLogoSrc(state.branding)
 
-  const handleNavClick = (item) => {
-    dispatch({ type: 'staff', patch: { section: item } })
+  useEffect(() => {
+    const className = 'teacher-dashboard-active'
+    document.documentElement.classList.add(className)
+    document.body.classList.add(className)
+    return () => {
+      document.documentElement.classList.remove(className)
+      document.body.classList.remove(className)
+    }
+  }, [])
+
+  useEffect(() => {
+    const next = topLevelView(state.staff.section)
+    if (state.staff.section === 'dashboard' || placeholderViews.has(state.staff.section)) setWorkspaceView(next)
+    if (state.staff.section === 'question-banks' && !bankViews.has(workspaceView)) setWorkspaceView('question-banks')
+    if (state.staff.section === 'exams' && !examViews.has(workspaceView)) setWorkspaceView('exams')
+  }, [state.staff.section, workspaceView])
+
+  const navigate = useCallback((view, patch = {}) => {
+    const parentSection = bankViews.has(view)
+      ? 'question-banks'
+      : examViews.has(view)
+        ? 'exams'
+        : view
+    setWorkspaceView(view)
+    dispatch({ type: 'staff', patch: { section: parentSection, ...patch } })
+  }, [dispatch])
+
+  const workspaceDispatch = useCallback((action) => {
+    if (action?.type === 'staff' && action.patch?.section) {
+      const { section, ...patch } = action.patch
+      navigate(section, patch)
+      return
+    }
+    dispatch(action)
+  }, [dispatch, navigate])
+
+  const navActive = (section) => {
+    if (section === 'question-banks') return workspaceView === 'question-banks' || workspaceView === 'create-bank' || workspaceView === 'bank-detail'
+    if (section === 'questions') return workspaceView === 'questions' || workspaceView === 'create-question' || workspaceView === 'edit-question' || workspaceView === 'preview-question'
+    if (section === 'exams') return examViews.has(workspaceView)
+    return workspaceView === section
   }
 
   return (
-    <div className={`premium-admin-shell${sidebarOpen ? '' : ' premium-admin-shell--collapsed'}`}>
-      <aside className="premium-sidebar">
-        <div className="premium-sidebar__header">
-          <div className="premium-school-badge">
-            <div className="school-icon">{schoolLogoSrc ? <img src={schoolLogoSrc} alt="School logo" /> : <Icon name="school" size={22} />}</div>
-            <div className="school-info">
-              <strong>{schoolName}</strong>
-              <small>{serverName}</small>
-            </div>
+    <main className={`teacher-shell admin-shell${sidebarOpen ? '' : ' teacher-shell--collapsed admin-shell--collapsed'}`}>
+      <aside className="teacher-sidebar admin-sidebar">
+        <div className="teacher-sidebar__header">
+          <div className="school-card">
+            <span>{schoolLogoSrc ? <img className="school-brand-logo" src={schoolLogoSrc} alt="School logo" /> : <Icon name="school" size={20} />}</span>
+            <div><strong>{schoolName}</strong><small>{serverName}</small></div>
           </div>
           <button className="dashboard-sidebar-toggle" type="button" aria-label={sidebarOpen ? 'Collapse sidebar' : 'Open sidebar'} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>
             <Icon name={sidebarOpen ? 'back' : 'menu'} size={18} />
           </button>
         </div>
-
-        <nav className="premium-nav" aria-label="Admin navigation">
-          {adminNav.map(([item, label, icon]) => (
-            <button key={item} className={section === item ? 'active' : ''} onClick={() => handleNavClick(item)}>
-              <Icon name={icon} size={20} />
-              <span>{label}</span>
+        <nav aria-label="Administrator navigation">
+          {adminNav.map(([section, icon, label]) => (
+            <button key={section} type="button" className={navActive(section) ? 'active' : ''} onClick={() => navigate(section)} title={sidebarOpen ? undefined : label}>
+              <Icon name={icon} size={17} /><span>{label}</span>
             </button>
           ))}
         </nav>
-
-        <div className="premium-sidebar-tagline">
-          <Icon name="school" size={44} />
-          <span>Exams<br />made<br />simple</span>
-        </div>
       </aside>
 
-      <main className="premium-main">
-        <header className="premium-topbar">
-          <div className="premium-topbar__leading">
-            <DashboardSchoolIdentity schoolName={schoolName} logoSrc={schoolLogoSrc} />
-            <label className="premium-searchbox">
-              <Icon name="search" size={18} />
-              <input type="search" placeholder="Search anything..." />
-            </label>
-          </div>
-          <div className="premium-account">
-            <DashboardAccountMenu actor={actor} fallbackName={adminName} roleLabel="Administrator" onSignOut={signOut} />
-          </div>
+      <section className="teacher-main admin-main">
+        <header className="teacher-topbar">
+          <DashboardSchoolIdentity schoolName={schoolName} logoSrc={schoolLogoSrc} />
+          <div className="teacher-topbar__actions"><DashboardAccountMenu actor={actor} fallbackName={adminName} roleLabel="Administrator" onSignOut={signOut} /></div>
         </header>
-        {section === 'dashboard' && <AdminDashboard adminName={adminName} onNavigate={handleNavClick} />}
-        {section === 'exams' && <ExamOperations />}
-        {section === 'question-banks' && <QuestionBank />}
-        {section === 'students' && <StudentsView />}
-        {section === 'invigilators' && <InvigilatorPanel />}
-        {section === 'results' && <ResultsPage />}
-        {section === 'reports' && <ReportsPage />}
-        {section === 'settings' && <SettingsPage />}
-      </main>
+        <div className="teacher-content admin-content">
+          {workspaceView === 'dashboard' && <AdminOverview state={state} adminData={adminData} onNavigate={navigate} />}
+          {(workspaceView === 'question-banks' || workspaceView === 'create-bank') && (
+            <AdminQuestionBanksPage adminData={adminData} gateway={gateway} onNavigate={navigate} createRequested={workspaceView === 'create-bank'} onCreateHandled={() => setWorkspaceView('question-banks')} />
+          )}
+          {workspaceView === 'bank-detail' && <AdminBankDetailPage state={state} adminData={adminData} onNavigate={navigate} />}
+          {workspaceView === 'questions' && <TeacherQuestionsPage state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
+          {workspaceView === 'preview-question' && <TeacherQuestionPreviewPage state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
+          {workspaceView === 'create-question' && <QuestionBuilder mode="create" state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
+          {workspaceView === 'edit-question' && <QuestionBuilder key={state.staff.selectedQuestionId || 'admin-question-editor'} mode="edit" state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
+          {workspaceView === 'exams' && <AdminExamsPage state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
+          {workspaceView === 'create-exam' && <TeacherCreateExamPage state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
+          {placeholderViews.has(workspaceView) && <AdminPlaceholderPage section={workspaceView} />}
+        </div>
+      </section>
+    </main>
+  )
+}
+
+function AdminPlaceholderPage({ section }) {
+  const labels = {
+    students: ['Students', 'Student administration will be connected in a later workspace pass.'],
+    invigilators: ['Invigilators', 'Invigilation assignment and monitoring will be connected in a later workspace pass.'],
+    results: ['Results', 'Result review and synchronization controls will be connected in a later workspace pass.'],
+    reports: ['Reports', 'Administrative reporting will be connected in a later workspace pass.'],
+  }
+  const [title, copy] = labels[section] || ['Administrator', 'This workspace is not connected yet.']
+  return (
+    <div className="teacher-reference-page admin-placeholder-page">
+      <div className="teacher-page-heading"><div><div className="teacher-page-title-line"><h1>{title}</h1></div><p>{copy}</p></div></div>
+      <div className="teacher-reference-empty teacher-reference-empty--large"><div><strong>{title} placeholder</strong><p>No fake data or controls are shown until the required backend workflow is implemented.</p></div></div>
     </div>
   )
+}
+
+function topLevelView(section) {
+  if (section === 'overview') return 'dashboard'
+  return section || 'dashboard'
 }
