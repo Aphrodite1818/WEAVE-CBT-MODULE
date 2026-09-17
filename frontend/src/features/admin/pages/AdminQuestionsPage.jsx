@@ -1,5 +1,6 @@
 import { Icon } from '../../../shared/icons/Icon'
 import { TeacherQuestionsPage } from '../../teacher/TeacherQuestionsPage'
+import '../admin-workspace-overrides.css'
 
 export function AdminQuestionsPage({ state, dispatch, adminData, gateway, onNavigate }) {
   return (
