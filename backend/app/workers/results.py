@@ -7,7 +7,7 @@ from uuid import UUID
 
 from app.core.database import async_session_factory
 from app.domains.exams.execution_service import ExamExecutionService
-from app.domains.results.sync_service import result_sync_service
+from app.domains.results.approved_sync_service import approved_result_sync_service
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,9 @@ async def sync_exam_results(_ctx: dict, exam_id: str) -> None:
 
     try:
         async with async_session_factory() as db:
+            # Worker-level guard gives a cheap early exit. The service facade
+            # repeats the guard so accidental direct job/service invocation
+            # still cannot bypass academic approval.
             approved = await ExamExecutionService.results_are_approved(
                 db,
                 exam_id=parsed_exam_id,
@@ -38,7 +41,7 @@ async def sync_exam_results(_ctx: dict, exam_id: str) -> None:
                 return
 
             while True:
-                response = await result_sync_service.sync_next_batch(
+                response = await approved_result_sync_service.sync_next_batch(
                     db,
                     exam_id=parsed_exam_id,
                 )
