@@ -1,7 +1,7 @@
-"""ARQ worker configuation for Weave CBT background jobs"""
-
+"""ARQ worker configuration for Weave CBT background jobs."""
 
 from __future__ import annotations
+
 import logging
 
 from arq import cron
@@ -14,27 +14,17 @@ from app.workers.maintenance import recover_background_work
 from app.workers.results import sync_exam_results
 
 
-
 logger = logging.getLogger(__name__)
 
 
-async def on_startup(_ctx : dict) -> None:
-    """
-    Initiate worker-process resources.
-
-    ARQ itself provides the Redis connection in ctx["redis"], so there is no
-    need to create another ARQ  pool here
-    """
-
+async def on_startup(_ctx: dict) -> None:
+    """Initialize worker-process resources."""
 
     logger.info("Weave CBT background worker started")
 
 
-
-async def on_shutdown(_ctx : dict) -> None:
-    """
-    Cleanly release process-local resources owned by the worker
-    """
+async def on_shutdown(_ctx: dict) -> None:
+    """Cleanly release process-local resources owned by the worker."""
 
     await weave_client.close()
     await engine.dispose()
@@ -42,70 +32,39 @@ async def on_shutdown(_ctx : dict) -> None:
     logger.info("Weave CBT background worker stopped")
 
 
-
 class WorkerSettings:
-    """
-    ARQ configuration for the Weave CBT background worker
-
-    Business logic belongs to the domain services. This class only registers
-    executable jobs and operational worker settings
-    """
-
+    """ARQ configuration for the Weave CBT background worker."""
 
     redis_settings = arq_redis_settings
 
-
-    #registered jobs
-
     functions = [
         prepare_exam_roster,
-        sync_exam_results
+        sync_exam_results,
     ]
 
-
-
-
-    #Manitenance / recovery
-
-    #Run every two minutes
-
-    #run_at_startup= True means a newly started worker immediately checks
-    #PostgreSQL for work which may have been missed while the worker or 
-    #Redis was unavailavle
-
+    # Run maintenance every two minutes. Starting with an immediate sweep lets
+    # a restarted worker reconstruct jobs missed while Redis/ARQ was offline.
     cron_jobs = [
         cron(
             coroutine=recover_background_work,
-            minute = set(range(0, 60 , 2)),
-            second = 0,
+            minute=set(range(0, 60, 2)),
+            second=0,
             run_at_startup=True,
-            unique = True
+            unique=True,
         )
     ]
 
+    # Maximum number of async jobs this worker process may run concurrently.
+    max_jobs = 10
 
-
-    #Worker execution policy
-
-    #Allow several async jobs to make progress concurrently without spawning 
-    #one process per job/domain
-
-    max_job = 10
-
-    #Roster generation and large result synchronization may legitimately
-    #take longer than ordinary HTTP-request work 
-
+    # Roster generation and large result synchronization may legitimately take
+    # longer than ordinary request work. ARQ measures this value in seconds.
     job_timeout = 30 * 60
 
-
-
-
-    #ARQ can retry raised job failures. Domain state and PostgreSQL
-    #idempotency makes duplicate execution safe
-
+    # Domain state and PostgreSQL idempotency make duplicate execution safe.
     max_tries = 5
 
-
+    # Keep completed ARQ result metadata briefly for operational inspection.
     keep_result = 60
 
     on_startup = on_startup
