@@ -121,14 +121,18 @@ class CandidateAcademicIntegrityTests(unittest.IsolatedAsyncioTestCase):
             academic_session_id=current_exam.session_id,
         )
         added = add_rows.await_args.args[1]
-        self.assertEqual({row.student_id for row in added}, {first.student_id, second.student_id})
+        self.assertEqual(
+            {row.student_id for row in added}, {first.student_id, second.student_id}
+        )
         self.assertEqual({row.class_id for row in added}, {class_a, class_b})
         self.assertEqual(result.roster_status, ExamRosterStatus.READY)
         self.assertEqual(result.roster_candidate_count, 2)
         self.assertEqual(result.roster_version, 1)
         db.commit.assert_awaited_once()
 
-    async def test_reconcile_withdraws_student_no_longer_in_frozen_classes(self) -> None:
+    async def test_reconcile_withdraws_student_no_longer_in_frozen_classes(
+        self,
+    ) -> None:
         db = AsyncMock()
         current_exam = sealed_exam(
             roster_status=ExamRosterStatus.STALE,

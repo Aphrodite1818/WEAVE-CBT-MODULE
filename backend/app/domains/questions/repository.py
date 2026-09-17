@@ -262,7 +262,9 @@ class QuestionRepository:
         option_id: UUID,
     ) -> QuestionOption | None:
         return (
-            await db.execute(select(QuestionOption).where(QuestionOption.id == option_id))
+            await db.execute(
+                select(QuestionOption).where(QuestionOption.id == option_id)
+            )
         ).scalar_one_or_none()
 
     @staticmethod

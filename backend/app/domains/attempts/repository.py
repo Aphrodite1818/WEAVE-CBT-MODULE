@@ -291,21 +291,31 @@ class AttemptRepository:
         exam_media: dict[UUID, UUID | None] = {}
         if exam_option_ids:
             exam_rows = (
-                await db.execute(
-                    select(ExamQuestionOption).where(
-                        ExamQuestionOption.id.in_(exam_option_ids)
+                (
+                    await db.execute(
+                        select(ExamQuestionOption).where(
+                            ExamQuestionOption.id.in_(exam_option_ids)
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             exam_media = {row.id: row.image_asset_id for row in exam_rows}
 
         source_media: dict[UUID, UUID | None] = {}
         if source_option_ids:
             source_rows = (
-                await db.execute(
-                    select(QuestionOption).where(QuestionOption.id.in_(source_option_ids))
+                (
+                    await db.execute(
+                        select(QuestionOption).where(
+                            QuestionOption.id.in_(source_option_ids)
+                        )
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             source_media = {row.id: row.image_asset_id for row in source_rows}
 
         for row in rows:

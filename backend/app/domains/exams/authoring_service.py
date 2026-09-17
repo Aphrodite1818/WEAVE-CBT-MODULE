@@ -141,11 +141,13 @@ class ExamService:
         # Any teacher who teaches this level-subject in at least one class that
         # is eligible for this term may start the one shared paper. The creator
         # becomes the coordinating lead for this revision.
-        await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
-            db,
-            actor=actor,
-            curriculum_subject_id=payload.curriculum_subject_id,
-            academic_term_id=term.id,
+        await (
+            AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+                db,
+                actor=actor,
+                curriculum_subject_id=payload.curriculum_subject_id,
+                academic_term_id=term.id,
+            )
         )
 
         assessment_scheme = await AcademicRepository.get_assessment_scheme_by_id(
@@ -289,7 +291,9 @@ class ExamService:
             if field_name in fields and getattr(payload, field_name) is None:
                 raise ValueError(f"{field_name} cannot be null")
 
-        next_session_id = payload.session_id if "session_id" in fields else exam.session_id
+        next_session_id = (
+            payload.session_id if "session_id" in fields else exam.session_id
+        )
         next_term_id = payload.term_id if "term_id" in fields else exam.term_id
         next_assessment_scheme_id = (
             payload.assessment_scheme_id
@@ -348,11 +352,13 @@ class ExamService:
 
         # The lead must still be a legitimate author in the final term. Admins
         # remain the recovery path if teacher assignments change.
-        await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
-            db,
-            actor=actor,
-            curriculum_subject_id=exam.curriculum_subject_id,
-            academic_term_id=term.id,
+        await (
+            AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+                db,
+                actor=actor,
+                curriculum_subject_id=exam.curriculum_subject_id,
+                academic_term_id=term.id,
+            )
         )
 
         assessment_scheme = await AcademicRepository.get_assessment_scheme_by_id(
@@ -491,11 +497,13 @@ class ExamService:
             payload.expected_authoring_version,
         )
         cls._require_lead_or_admin(actor, exam)
-        await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
-            db,
-            actor=actor,
-            curriculum_subject_id=exam.curriculum_subject_id,
-            academic_term_id=exam.term_id,
+        await (
+            AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+                db,
+                actor=actor,
+                curriculum_subject_id=exam.curriculum_subject_id,
+                academic_term_id=exam.term_id,
+            )
         )
 
         question_bank = await QuestionRepository.get_bank_by_id(
@@ -602,11 +610,13 @@ class ExamService:
             )
 
         cls._require_expected_authoring_version(exam, expected_authoring_version)
-        await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
-            db,
-            actor=actor,
-            curriculum_subject_id=exam.curriculum_subject_id,
-            academic_term_id=exam.term_id,
+        await (
+            AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+                db,
+                actor=actor,
+                curriculum_subject_id=exam.curriculum_subject_id,
+                academic_term_id=exam.term_id,
+            )
         )
         return exam
 
@@ -621,11 +631,13 @@ class ExamService:
         exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id)
         if exam is None:
             raise ExamNotFound("Examination does not exist")
-        await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
-            db,
-            actor=actor,
-            curriculum_subject_id=exam.curriculum_subject_id,
-            academic_term_id=exam.term_id,
+        await (
+            AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+                db,
+                actor=actor,
+                curriculum_subject_id=exam.curriculum_subject_id,
+                academic_term_id=exam.term_id,
+            )
         )
         return await ExamRepository.list_question_selections(db, exam.id)
 
@@ -807,7 +819,9 @@ class ExamService:
 
         current_selections = await ExamRepository.list_question_selections(db, exam.id)
         current_ids = [row.question_id for row in current_selections]
-        if len(question_ids) != len(current_ids) or set(question_ids) != set(current_ids):
+        if len(question_ids) != len(current_ids) or set(question_ids) != set(
+            current_ids
+        ):
             raise ValueError(
                 "Question order must contain exactly the questions "
                 "currently selected for this examination"

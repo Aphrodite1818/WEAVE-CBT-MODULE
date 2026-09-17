@@ -134,10 +134,14 @@ class BrandingLogoStorage:
         except httpx.TimeoutException as exc:
             raise BrandingLogoStorageError("School logo download timed out.") from exc
         except httpx.RequestError as exc:
-            raise BrandingLogoStorageError("School logo could not be downloaded.") from exc
+            raise BrandingLogoStorageError(
+                "School logo could not be downloaded."
+            ) from exc
 
         if not buffer:
-            raise BrandingLogoStorageError("School logo download returned an empty file.")
+            raise BrandingLogoStorageError(
+                "School logo download returned an empty file."
+            )
         return bytes(buffer)
 
     def _validate_and_store_sync(

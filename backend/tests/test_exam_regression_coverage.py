@@ -105,13 +105,45 @@ class ExamRegressionCoverageTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with (
-            patch.object(ExamRepository, "get_exam_by_id", new=AsyncMock(return_value=current_exam)),
-            patch.object(AcademicAuthorizationService, "require_can_author_curriculum_subject_for_term", new=AsyncMock()),
-            patch.object(QuestionRepository, "get_bank_by_id", new=AsyncMock(return_value=SimpleNamespace(id=new_bank_id, is_active=True, curriculum_subject_id=current_exam.curriculum_subject_id))),
-            patch.object(ExamRepository, "list_question_selections", new=AsyncMock(return_value=existing)),
-            patch.object(QuestionRepository, "count_questions_for_bank", new=AsyncMock(return_value=2)),
-            patch.object(ExamRepository, "clear_question_selections", new=AsyncMock()) as clear,
-            patch.object(ExamRepository, "save_exam", new=AsyncMock(side_effect=lambda _db, row: row)),
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=current_exam),
+            ),
+            patch.object(
+                AcademicAuthorizationService,
+                "require_can_author_curriculum_subject_for_term",
+                new=AsyncMock(),
+            ),
+            patch.object(
+                QuestionRepository,
+                "get_bank_by_id",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(
+                        id=new_bank_id,
+                        is_active=True,
+                        curriculum_subject_id=current_exam.curriculum_subject_id,
+                    )
+                ),
+            ),
+            patch.object(
+                ExamRepository,
+                "list_question_selections",
+                new=AsyncMock(return_value=existing),
+            ),
+            patch.object(
+                QuestionRepository,
+                "count_questions_for_bank",
+                new=AsyncMock(return_value=2),
+            ),
+            patch.object(
+                ExamRepository, "clear_question_selections", new=AsyncMock()
+            ) as clear,
+            patch.object(
+                ExamRepository,
+                "save_exam",
+                new=AsyncMock(side_effect=lambda _db, row: row),
+            ),
         ):
             result = await ExamService.configure_questions(
                 db,
@@ -122,7 +154,9 @@ class ExamRegressionCoverageTests(unittest.IsolatedAsyncioTestCase):
 
         clear.assert_awaited_once_with(db, current_exam.id)
         self.assertEqual(result.question_bank_id, new_bank_id)
-        self.assertEqual(result.question_selection_mode, ExamQuestionSelectionMode.RANDOM)
+        self.assertEqual(
+            result.question_selection_mode, ExamQuestionSelectionMode.RANDOM
+        )
         self.assertEqual(result.authoring_version, 2)
         db.commit.assert_awaited_once()
 
@@ -135,12 +169,42 @@ class ExamRegressionCoverageTests(unittest.IsolatedAsyncioTestCase):
         )
         question_id = uuid4()
         with (
-            patch.object(ExamRepository, "get_exam_by_id", new=AsyncMock(return_value=current_exam)),
-            patch.object(AcademicAuthorizationService, "require_can_author_curriculum_subject_for_term", new=AsyncMock()),
-            patch.object(QuestionRepository, "get_bank_by_id", new=AsyncMock(return_value=SimpleNamespace(id=current_exam.question_bank_id, is_active=True, curriculum_subject_id=current_exam.curriculum_subject_id))),
-            patch.object(ExamRepository, "list_question_selections", new=AsyncMock(return_value=[])),
-            patch.object(QuestionRepository, "list_questions_by_ids", new=AsyncMock(return_value=[SimpleNamespace(id=question_id, bank_id=uuid4())])),
-            patch.object(ExamRepository, "add_question_selections", new=AsyncMock()) as add,
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=current_exam),
+            ),
+            patch.object(
+                AcademicAuthorizationService,
+                "require_can_author_curriculum_subject_for_term",
+                new=AsyncMock(),
+            ),
+            patch.object(
+                QuestionRepository,
+                "get_bank_by_id",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(
+                        id=current_exam.question_bank_id,
+                        is_active=True,
+                        curriculum_subject_id=current_exam.curriculum_subject_id,
+                    )
+                ),
+            ),
+            patch.object(
+                ExamRepository,
+                "list_question_selections",
+                new=AsyncMock(return_value=[]),
+            ),
+            patch.object(
+                QuestionRepository,
+                "list_questions_by_ids",
+                new=AsyncMock(
+                    return_value=[SimpleNamespace(id=question_id, bank_id=uuid4())]
+                ),
+            ),
+            patch.object(
+                ExamRepository, "add_question_selections", new=AsyncMock()
+            ) as add,
         ):
             with self.assertRaisesRegex(ValueError, "examination question bank"):
                 await ExamService.add_manual_questions(
@@ -163,14 +227,26 @@ class ExamRegressionCoverageTests(unittest.IsolatedAsyncioTestCase):
             question_count=2,
         )
         selections = [
-            SimpleNamespace(question_id=first_id, position=1, added_by_actor_id=LEAD_ID),
-            SimpleNamespace(question_id=second_id, position=2, added_by_actor_id=uuid4()),
+            SimpleNamespace(
+                question_id=first_id, position=1, added_by_actor_id=LEAD_ID
+            ),
+            SimpleNamespace(
+                question_id=second_id, position=2, added_by_actor_id=uuid4()
+            ),
         ]
         first = SimpleNamespace(id=first_id)
         second = SimpleNamespace(id=second_id)
         with (
-            patch.object(ExamRepository, "list_question_selections", new=AsyncMock(return_value=selections)),
-            patch.object(QuestionRepository, "list_questions_by_ids", new=AsyncMock(return_value=[second, first])) as list_questions,
+            patch.object(
+                ExamRepository,
+                "list_question_selections",
+                new=AsyncMock(return_value=selections),
+            ),
+            patch.object(
+                QuestionRepository,
+                "list_questions_by_ids",
+                new=AsyncMock(return_value=[second, first]),
+            ) as list_questions,
         ):
             resolved = await ExamService._resolve_questions_for_sealing(
                 db,
@@ -196,10 +272,20 @@ class ExamRegressionCoverageTests(unittest.IsolatedAsyncioTestCase):
                 db = AsyncMock()
                 current_exam = exam(status=lifecycle_status)
                 with (
-                    patch.object(ExamRepository, "get_exam_by_id", new=AsyncMock(return_value=current_exam)),
-                    patch.object(ExamRepository, "get_latest_child_revision", new=AsyncMock(return_value=None)),
+                    patch.object(
+                        ExamRepository,
+                        "get_exam_by_id",
+                        new=AsyncMock(return_value=current_exam),
+                    ),
+                    patch.object(
+                        ExamRepository,
+                        "get_latest_child_revision",
+                        new=AsyncMock(return_value=None),
+                    ),
                 ):
-                    with self.assertRaisesRegex(ExamStateError, "latest SEALED or CANCELLED"):
+                    with self.assertRaisesRegex(
+                        ExamStateError, "latest SEALED or CANCELLED"
+                    ):
                         await ExamService.create_revision(
                             db,
                             actor=admin,  # type: ignore[arg-type]
@@ -216,10 +302,26 @@ class ExamRegressionCoverageTests(unittest.IsolatedAsyncioTestCase):
             revision_of_exam_id=uuid4(),
         )
         with (
-            patch.object(ExamRepository, "get_exam_by_id", new=AsyncMock(return_value=current_exam)),
-            patch.object(ExamRepository, "get_latest_child_revision", new=AsyncMock(return_value=None)),
-            patch.object(AcademicAuthorizationService, "require_can_author_curriculum_subject", new=AsyncMock()),
-            patch.object(ExamRepository, "add_exam", new=AsyncMock(side_effect=lambda _db, row: row)),
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=current_exam),
+            ),
+            patch.object(
+                ExamRepository,
+                "get_latest_child_revision",
+                new=AsyncMock(return_value=None),
+            ),
+            patch.object(
+                AcademicAuthorizationService,
+                "require_can_author_curriculum_subject",
+                new=AsyncMock(),
+            ),
+            patch.object(
+                ExamRepository,
+                "add_exam",
+                new=AsyncMock(side_effect=lambda _db, row: row),
+            ),
         ):
             revision = await ExamService.create_revision(
                 db,
@@ -241,11 +343,25 @@ class ExamRegressionCoverageTests(unittest.IsolatedAsyncioTestCase):
             sealed_at=datetime.now(UTC),
             component_maximum_score=10,
         )
-        child = exam(status=ExamStatus.DRAFT, revision_number=2, revision_of_exam_id=current_exam.id)
+        child = exam(
+            status=ExamStatus.DRAFT,
+            revision_number=2,
+            revision_of_exam_id=current_exam.id,
+        )
         with (
-            patch.object(ExamRepository, "get_exam_by_id", new=AsyncMock(return_value=current_exam)),
-            patch.object(ExamRepository, "get_latest_child_revision", new=AsyncMock(side_effect=[child, None])),
-            patch.object(ExamRepository, "count_exam_questions", new=AsyncMock()) as count_questions,
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=current_exam),
+            ),
+            patch.object(
+                ExamRepository,
+                "get_latest_child_revision",
+                new=AsyncMock(side_effect=[child, None]),
+            ),
+            patch.object(
+                ExamRepository, "count_exam_questions", new=AsyncMock()
+            ) as count_questions,
         ):
             with self.assertRaisesRegex(ExamStateError, "latest examination revision"):
                 await ExamService.activate_exam(
@@ -262,8 +378,16 @@ class ExamRegressionCoverageTests(unittest.IsolatedAsyncioTestCase):
             db = AsyncMock()
             current_exam = exam(status=ExamStatus.SUSPENDED)
             with (
-                patch.object(ExamRepository, "get_exam_by_id", new=AsyncMock(return_value=current_exam)),
-                patch.object(ExamRepository, "get_open_suspension_for_exam", new=AsyncMock(return_value=None)),
+                patch.object(
+                    ExamRepository,
+                    "get_exam_by_id",
+                    new=AsyncMock(return_value=current_exam),
+                ),
+                patch.object(
+                    ExamRepository,
+                    "get_open_suspension_for_exam",
+                    new=AsyncMock(return_value=None),
+                ),
             ):
                 with self.assertRaisesRegex(ExamStateError, "no open suspension"):
                     if operation == "close":
@@ -292,9 +416,19 @@ class ExamRegressionCoverageTests(unittest.IsolatedAsyncioTestCase):
         )
         error = IntegrityError("update", {}, Exception("boom"))
         with (
-            patch.object(ExamRepository, "get_exam_by_id", new=AsyncMock(return_value=current_exam)),
-            patch.object(ExamRepository, "get_open_suspension_for_exam", new=AsyncMock(return_value=suspension)),
-            patch.object(ExamRepository, "save_suspension", new=AsyncMock(side_effect=error)),
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=current_exam),
+            ),
+            patch.object(
+                ExamRepository,
+                "get_open_suspension_for_exam",
+                new=AsyncMock(return_value=suspension),
+            ),
+            patch.object(
+                ExamRepository, "save_suspension", new=AsyncMock(side_effect=error)
+            ),
             patch.object(ExamRepository, "save_exam", new=AsyncMock()) as save_exam,
         ):
             with self.assertRaisesRegex(ValueError, "could not be closed"):
@@ -318,12 +452,26 @@ class ExamRegressionCoverageTests(unittest.IsolatedAsyncioTestCase):
             resume_reason=None,
         )
         with (
-            patch.object(ExamRepository, "get_exam_by_id", new=AsyncMock(return_value=current_exam)),
-            patch.object(ExamRepository, "get_open_suspension_for_exam", new=AsyncMock(return_value=suspension)),
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=current_exam),
+            ),
+            patch.object(
+                ExamRepository,
+                "get_open_suspension_for_exam",
+                new=AsyncMock(return_value=suspension),
+            ),
             patch.object(ExamRepository, "save_suspension", new=AsyncMock()),
-            patch.object(ExamRepository, "save_exam", new=AsyncMock(side_effect=lambda _db, row: row)),
+            patch.object(
+                ExamRepository,
+                "save_exam",
+                new=AsyncMock(side_effect=lambda _db, row: row),
+            ),
             patch.object(RuntimeRepository, "add_outbox_event", new=AsyncMock()),
-            patch.object(ExamTimetableService, "require_level_free", new=AsyncMock()) as level_free,
+            patch.object(
+                ExamTimetableService, "require_level_free", new=AsyncMock()
+            ) as level_free,
         ):
             result = await ExamService.resume_exam(
                 db,

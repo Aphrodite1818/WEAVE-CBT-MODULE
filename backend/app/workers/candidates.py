@@ -59,9 +59,7 @@ async def prepare_exam_roster(
     try:
         parsed_exam_id = UUID(exam_id)
     except (TypeError, ValueError) as exc:
-        raise ValueError(
-            "prepare_exam_roster received an invalid exam ID"
-        ) from exc
+        raise ValueError("prepare_exam_roster received an invalid exam ID") from exc
 
     try:
         async with async_session_factory() as db:

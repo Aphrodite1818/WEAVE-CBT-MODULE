@@ -30,9 +30,7 @@ class BrandingRepository:
         values: dict[str, Any],
     ) -> BrandingState:
         update_values = {
-            key: value
-            for key, value in values.items()
-            if key != "tenant_id"
+            key: value for key, value in values.items() if key != "tenant_id"
         }
         update_values["updated_at"] = func.now()
 

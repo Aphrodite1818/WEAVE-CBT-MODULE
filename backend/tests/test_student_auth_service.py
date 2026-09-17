@@ -25,7 +25,9 @@ from app.domains.candidates.repository import CandidateRepository  # noqa: E402
 
 
 class StudentAuthTests(unittest.IsolatedAsyncioTestCase):
-    async def test_login_uses_uppercase_admission_and_lowercase_admission_password(self):
+    async def test_login_uses_uppercase_admission_and_lowercase_admission_password(
+        self,
+    ):
         student_id = uuid4()
         candidate_id = uuid4()
         exam_id = uuid4()
@@ -100,13 +102,17 @@ class StudentAuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.response.student_id, student_id)
         self.assertEqual(result.response.candidate_id, candidate_id)
         self.assertEqual(result.response.exam_id, exam_id)
-        self.assertEqual(result.response.availability, StudentExamAvailability.READY.value)
+        self.assertEqual(
+            result.response.availability, StudentExamAvailability.READY.value
+        )
         self.assertFalse(result.response.is_makeup)
         self.assertEqual(session.student_id, student_id)
         self.assertEqual(session.candidate_id, candidate_id)
         self.assertEqual(session.exam_id, exam_id)
         self.assertNotEqual(result.raw_token, session.token_hash)
-        self.assertEqual(session.token_hash, hash_student_session_token(result.raw_token))
+        self.assertEqual(
+            session.token_hash, hash_student_session_token(result.raw_token)
+        )
         self.assertEqual(len(session.token_hash), 64)
         self.assertIsNotNone(old_session.revoked_at)
         self.assertEqual(
@@ -171,7 +177,9 @@ class StudentAuthTests(unittest.IsolatedAsyncioTestCase):
                 password="stu/2026/001",
             )
 
-        self.assertEqual(result.response.availability, StudentExamAvailability.NO_EXAM.value)
+        self.assertEqual(
+            result.response.availability, StudentExamAvailability.NO_EXAM.value
+        )
         self.assertEqual(result.response.status_message, NO_EXAM_MESSAGE)
         self.assertEqual(result.response.display_name, "Ada Okafor")
         self.assertIsNone(result.response.candidate_id)
@@ -219,7 +227,9 @@ class StudentAuthTests(unittest.IsolatedAsyncioTestCase):
 
         db.commit.assert_not_awaited()
 
-    async def test_password_is_derived_from_stored_identity_not_other_submitted_value(self):
+    async def test_password_is_derived_from_stored_identity_not_other_submitted_value(
+        self,
+    ):
         with self.assertRaisesRegex(StudentAuthenticationError, INVALID_STUDENT_LOGIN):
             StudentAuthService._verify_admission_password(
                 submitted_admission_number="STU/2026/001",

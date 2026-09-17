@@ -30,11 +30,9 @@ class AcademicQueryService:
         *,
         actor: LocalActor,
     ) -> list[AuthorableCurriculumSubjectResponse]:
-        curriculum_subjects = (
-            await AcademicAuthorizationService.list_actor_authorable_curriculum_subjects(
-                db,
-                actor=actor,
-            )
+        curriculum_subjects = await AcademicAuthorizationService.list_actor_authorable_curriculum_subjects(
+            db,
+            actor=actor,
         )
 
         if not curriculum_subjects:
@@ -143,11 +141,9 @@ class AcademicQueryService:
             [assignment.class_id for assignment in assignments],
         )
 
-        curriculum_subjects = (
-            await AcademicRepository.list_curriculum_subjects_by_ids(
-                db,
-                [assignment.curriculum_subject_id for assignment in assignments],
-            )
+        curriculum_subjects = await AcademicRepository.list_curriculum_subjects_by_ids(
+            db,
+            [assignment.curriculum_subject_id for assignment in assignments],
         )
 
         subjects = await AcademicRepository.list_subjects_by_ids(
@@ -235,11 +231,13 @@ class AcademicQueryService:
         curriculum_subject_id: UUID,
         academic_term_id: UUID,
     ) -> list[EligibleAcademicClassResponse]:
-        await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
-            db,
-            actor=actor,
-            curriculum_subject_id=curriculum_subject_id,
-            academic_term_id=academic_term_id,
+        await (
+            AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+                db,
+                actor=actor,
+                curriculum_subject_id=curriculum_subject_id,
+                academic_term_id=academic_term_id,
+            )
         )
 
         classes = await AcademicEligibilityService.list_eligible_classes(

@@ -122,10 +122,12 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                 AcademicAuthorizationError,
                 "does not have an active assignment",
             ):
-                await AcademicAuthorizationService.require_can_author_curriculum_subject(
-                    object(),  # type: ignore[arg-type]
-                    actor=actor,  # type: ignore[arg-type]
-                    curriculum_subject_id=subject_id,
+                await (
+                    AcademicAuthorizationService.require_can_author_curriculum_subject(
+                        object(),  # type: ignore[arg-type]
+                        actor=actor,  # type: ignore[arg-type]
+                        curriculum_subject_id=subject_id,
+                    )
                 )
 
     async def test_exact_class_scope_requires_exact_teacher_assignment(self) -> None:
@@ -178,7 +180,9 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                     curriculum_subject_id=subject_id,
                 )
 
-    async def test_admin_term_authoring_requires_at_least_one_eligible_class(self) -> None:
+    async def test_admin_term_authoring_requires_at_least_one_eligible_class(
+        self,
+    ) -> None:
         subject_id = uuid4()
         term_id = uuid4()
         actor = SimpleNamespace(
@@ -206,13 +210,11 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                 AcademicScopeError,
                 "no academically eligible classes",
             ):
-                await (
-                    AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
-                        object(),  # type: ignore[arg-type]
-                        actor=actor,  # type: ignore[arg-type]
-                        curriculum_subject_id=subject_id,
-                        academic_term_id=term_id,
-                    )
+                await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+                    object(),  # type: ignore[arg-type]
+                    actor=actor,  # type: ignore[arg-type]
+                    curriculum_subject_id=subject_id,
+                    academic_term_id=term_id,
                 )
 
     async def test_admin_can_author_level_wide_subject_for_term(self) -> None:
@@ -253,7 +255,9 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
             academic_term_id=term_id,
         )
 
-    async def test_teacher_may_joint_author_when_assigned_to_one_eligible_class(self) -> None:
+    async def test_teacher_may_joint_author_when_assigned_to_one_eligible_class(
+        self,
+    ) -> None:
         membership_id = uuid4()
         subject_id = uuid4()
         term_id = uuid4()
@@ -304,7 +308,9 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                 academic_term_id=term_id,
             )
 
-    async def test_teacher_cannot_author_term_when_assignment_is_not_eligible(self) -> None:
+    async def test_teacher_cannot_author_term_when_assignment_is_not_eligible(
+        self,
+    ) -> None:
         membership_id = uuid4()
         subject_id = uuid4()
         term_id = uuid4()
@@ -352,13 +358,11 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                 AcademicAuthorizationError,
                 "any academically eligible class",
             ):
-                await (
-                    AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
-                        object(),  # type: ignore[arg-type]
-                        actor=actor,  # type: ignore[arg-type]
-                        curriculum_subject_id=subject_id,
-                        academic_term_id=term_id,
-                    )
+                await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+                    object(),  # type: ignore[arg-type]
+                    actor=actor,  # type: ignore[arg-type]
+                    curriculum_subject_id=subject_id,
+                    academic_term_id=term_id,
                 )
 
 

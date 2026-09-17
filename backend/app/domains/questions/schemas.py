@@ -28,12 +28,16 @@ class OutputBase(BaseModel):
 
 class QuestionBankCreate(InputBase):
     name: str = Field(min_length=1, max_length=255)
-    description: str | None = Field(default=None, max_length=MAX_BANK_DESCRIPTION_LENGTH)
+    description: str | None = Field(
+        default=None, max_length=MAX_BANK_DESCRIPTION_LENGTH
+    )
 
 
 class QuestionBankUpdate(InputBase):
     name: str | None = Field(default=None, max_length=255)
-    description: str | None = Field(default=None, max_length=MAX_BANK_DESCRIPTION_LENGTH)
+    description: str | None = Field(
+        default=None, max_length=MAX_BANK_DESCRIPTION_LENGTH
+    )
     curriculum_subject_id: UUID | None = None
 
 
@@ -60,7 +64,9 @@ class QuestionOptionCreate(InputBase):
 
 class SingleChoiceQuestionCreate(InputBase):
     prompt: str = Field(min_length=1, max_length=MAX_QUESTION_PROMPT_LENGTH)
-    instruction: str | None = Field(default=None, max_length=MAX_QUESTION_INSTRUCTION_LENGTH)
+    instruction: str | None = Field(
+        default=None, max_length=MAX_QUESTION_INSTRUCTION_LENGTH
+    )
     image_asset_id: UUID | None = None
     options: list[QuestionOptionCreate] = Field(
         min_length=2,
@@ -70,7 +76,9 @@ class SingleChoiceQuestionCreate(InputBase):
 
 class MultipleChoiceQuestionCreate(InputBase):
     prompt: str = Field(min_length=1, max_length=MAX_QUESTION_PROMPT_LENGTH)
-    instruction: str | None = Field(default=None, max_length=MAX_QUESTION_INSTRUCTION_LENGTH)
+    instruction: str | None = Field(
+        default=None, max_length=MAX_QUESTION_INSTRUCTION_LENGTH
+    )
     image_asset_id: UUID | None = None
     options: list[QuestionOptionCreate] = Field(
         min_length=2,
@@ -83,7 +91,9 @@ class QuestionUpdate(InputBase):
 
     expected_version: int | None = Field(default=None, ge=1)
     prompt: str | None = Field(default=None, max_length=MAX_QUESTION_PROMPT_LENGTH)
-    instruction: str | None = Field(default=None, max_length=MAX_QUESTION_INSTRUCTION_LENGTH)
+    instruction: str | None = Field(
+        default=None, max_length=MAX_QUESTION_INSTRUCTION_LENGTH
+    )
     image_asset_id: UUID | None = None
     options: list[QuestionOptionCreate] | None = Field(
         default=None,

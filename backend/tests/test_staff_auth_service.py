@@ -53,7 +53,9 @@ def _teacher_actor():
 
 
 class StaffTrustTests(unittest.IsolatedAsyncioTestCase):
-    async def test_missing_teacher_projection_deactivates_actor_and_revokes_session(self):
+    async def test_missing_teacher_projection_deactivates_actor_and_revokes_session(
+        self,
+    ):
         db = _db()
         actor = _teacher_actor()
         now = datetime.now(UTC)
@@ -281,9 +283,18 @@ class StaffRefreshTests(unittest.IsolatedAsyncioTestCase):
                 "save_session",
                 new=AsyncMock(return_value=session),
             ),
-            patch("app.domains.auth.service.hash_refresh_token", side_effect=lambda value: f"hash-{value}"),
-            patch("app.domains.auth.service.generate_refresh_token", return_value="new-token"),
-            patch("app.domains.auth.service.create_local_access_token", return_value="new-access"),
+            patch(
+                "app.domains.auth.service.hash_refresh_token",
+                side_effect=lambda value: f"hash-{value}",
+            ),
+            patch(
+                "app.domains.auth.service.generate_refresh_token",
+                return_value="new-token",
+            ),
+            patch(
+                "app.domains.auth.service.create_local_access_token",
+                return_value="new-access",
+            ),
             patch(
                 "app.domains.auth.service.node_identity_store.load",
                 return_value=SimpleNamespace(server_id=uuid4()),
@@ -365,7 +376,10 @@ class StaffRefreshTests(unittest.IsolatedAsyncioTestCase):
                 "save_refresh_tokens",
                 new=AsyncMock(return_value=[stored_token]),
             ),
-            patch("app.domains.auth.service.hash_refresh_token", return_value="hash-old-token"),
+            patch(
+                "app.domains.auth.service.hash_refresh_token",
+                return_value="hash-old-token",
+            ),
             patch(
                 "app.domains.auth.service.node_identity_store.load",
                 return_value=SimpleNamespace(server_id=uuid4()),

@@ -57,7 +57,9 @@ class AcademicEligibilityTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 AcademicRepository,
                 "get_term_by_id",
-                new=AsyncMock(return_value=SimpleNamespace(id=term_id, name="first_term")),
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=term_id, name="first_term")
+                ),
             ),
             patch.object(
                 AcademicRepository,
@@ -129,7 +131,9 @@ class AcademicEligibilityTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 AcademicRepository,
                 "get_term_by_id",
-                new=AsyncMock(return_value=SimpleNamespace(id=term_id, name="first_term")),
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=term_id, name="first_term")
+                ),
             ),
             patch.object(
                 AcademicRepository,
@@ -185,7 +189,9 @@ class AcademicEligibilityTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 AcademicRepository,
                 "get_term_by_id",
-                new=AsyncMock(return_value=SimpleNamespace(id=term_id, name="second_term")),
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=term_id, name="second_term")
+                ),
             ),
             patch.object(
                 AcademicRepository,
@@ -264,7 +270,9 @@ class AcademicEligibilityTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 AcademicRepository,
                 "get_term_by_id",
-                new=AsyncMock(return_value=SimpleNamespace(id=term_id, name="second_term")),
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=term_id, name="second_term")
+                ),
             ),
             patch.object(
                 AcademicRepository,
@@ -332,7 +340,9 @@ class AcademicEligibilityTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertFalse(applies)
 
-    async def test_missing_class_department_is_invalid_after_specialization(self) -> None:
+    async def test_missing_class_department_is_invalid_after_specialization(
+        self,
+    ) -> None:
         level_id = uuid4()
         class_id = uuid4()
         subject_id = uuid4()
@@ -343,7 +353,9 @@ class AcademicEligibilityTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 AcademicRepository,
                 "get_term_by_id",
-                new=AsyncMock(return_value=SimpleNamespace(id=term_id, name="third_term")),
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=term_id, name="third_term")
+                ),
             ),
             patch.object(
                 AcademicRepository,
@@ -413,7 +425,9 @@ class AcademicEligibilityTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 AcademicRepository,
                 "get_term_by_id",
-                new=AsyncMock(return_value=SimpleNamespace(id=term_id, name="first_term")),
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=term_id, name="first_term")
+                ),
             ),
             patch.object(
                 AcademicRepository,

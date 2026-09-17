@@ -30,7 +30,10 @@ class AttemptQueryService:
     ) -> int:
         consumed = attempt.elapsed_seconds
 
-        if attempt.status == AttemptStatus.IN_PROGRESS and attempt.active_since is not None:
+        if (
+            attempt.status == AttemptStatus.IN_PROGRESS
+            and attempt.active_since is not None
+        ):
             total = max(0, int((at - attempt.active_since).total_seconds()))
             suspended = 0
             for suspension in suspensions:

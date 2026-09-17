@@ -82,7 +82,9 @@ def draft_exam(**overrides) -> SimpleNamespace:
 class ExamSchemaValidationTests(unittest.TestCase):
     def test_update_rejects_invalid_window_when_both_fields_are_supplied(self) -> None:
         start_at = datetime(2026, 9, 1, 9, 0, tzinfo=timezone.utc)
-        with self.assertRaisesRegex(ValueError, "latest_normal_start_at cannot be earlier"):
+        with self.assertRaisesRegex(
+            ValueError, "latest_normal_start_at cannot be earlier"
+        ):
             ExamUpdate(
                 scheduled_start_at=start_at,
                 latest_normal_start_at=start_at - timedelta(minutes=1),
@@ -189,7 +191,9 @@ class ExamServiceTests(unittest.IsolatedAsyncioTestCase):
                 "count_questions_for_bank",
                 new=AsyncMock(return_value=19),
             ) as count_questions,
-            patch.object(ExamRepository, "get_exam_revision", new=AsyncMock()) as revision,
+            patch.object(
+                ExamRepository, "get_exam_revision", new=AsyncMock()
+            ) as revision,
             patch.object(ExamRepository, "add_exam", new=AsyncMock()) as add_exam,
         ):
             with self.assertRaisesRegex(ValueError, "enough active questions"):
@@ -210,7 +214,9 @@ class ExamServiceTests(unittest.IsolatedAsyncioTestCase):
         add_exam.assert_not_awaited()
         db.commit.assert_not_awaited()
 
-    async def test_update_merges_existing_schedule_before_validating_window(self) -> None:
+    async def test_update_merges_existing_schedule_before_validating_window(
+        self,
+    ) -> None:
         db = AsyncMock()
         current_actor = actor()
         start_at = datetime(2026, 9, 1, 9, 0, tzinfo=timezone.utc)
@@ -252,7 +258,9 @@ class ExamServiceTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 AcademicRepository,
                 "get_assessment_scheme_by_id",
-                new=AsyncMock(return_value=SimpleNamespace(id=current_exam.assessment_scheme_id)),
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=current_exam.assessment_scheme_id)
+                ),
             ),
             patch.object(
                 AcademicRepository,
@@ -288,7 +296,9 @@ class ExamServiceTests(unittest.IsolatedAsyncioTestCase):
         save_exam.assert_not_awaited()
         db.commit.assert_not_awaited()
 
-    async def test_non_lead_contributor_cannot_change_global_exam_settings(self) -> None:
+    async def test_non_lead_contributor_cannot_change_global_exam_settings(
+        self,
+    ) -> None:
         db = AsyncMock()
         contributor = actor(actor_id=uuid4())
         current_exam = draft_exam()
@@ -346,7 +356,9 @@ class ExamServiceTests(unittest.IsolatedAsyncioTestCase):
                     payload=payload,
                 )
 
-    async def test_lead_configuration_preserves_destructive_confirmation_guard(self) -> None:
+    async def test_lead_configuration_preserves_destructive_confirmation_guard(
+        self,
+    ) -> None:
         db = AsyncMock()
         current_exam = draft_exam(
             question_selection_mode=ExamQuestionSelectionMode.MANUAL,
@@ -392,7 +404,9 @@ class ExamServiceTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value=selections),
             ),
         ):
-            with self.assertRaisesRegex(ValueError, "clear_existing_manual_selections=true"):
+            with self.assertRaisesRegex(
+                ValueError, "clear_existing_manual_selections=true"
+            ):
                 await ExamService.configure_questions(
                     db,
                     actor=actor(),  # type: ignore[arg-type]
@@ -444,7 +458,11 @@ class ExamServiceTests(unittest.IsolatedAsyncioTestCase):
                 QuestionRepository,
                 "list_questions_by_ids",
                 new=AsyncMock(
-                    return_value=[SimpleNamespace(id=question_id, bank_id=current_exam.question_bank_id)]
+                    return_value=[
+                        SimpleNamespace(
+                            id=question_id, bank_id=current_exam.question_bank_id
+                        )
+                    ]
                 ),
             ),
             patch.object(

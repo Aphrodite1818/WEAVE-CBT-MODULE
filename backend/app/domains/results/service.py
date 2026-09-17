@@ -96,7 +96,7 @@ class ResultService:
             component_maximum_score=component_max,
             calculated_at=datetime.now(UTC),
             sync_status=ResultSyncStatus.PENDING,
-            sync_batch_id = None,
+            sync_batch_id=None,
             sync_attempts=0,
         )
         try:

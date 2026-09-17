@@ -229,9 +229,11 @@ class AcademicAuthorizationService:
             teacher_membership_id=teacher_membership_id,
         )
 
-        candidates = await AcademicRepository.list_authorable_curriculum_subjects_for_teacher(
-            db,
-            teacher_membership_id=teacher_membership_id,
+        candidates = (
+            await AcademicRepository.list_authorable_curriculum_subjects_for_teacher(
+                db,
+                teacher_membership_id=teacher_membership_id,
+            )
         )
         authorable: list[CurriculumSubject] = []
         for subject in candidates:
@@ -290,9 +292,7 @@ class AcademicAuthorizationService:
             raise AcademicAuthorizationError("Active local actor is required")
 
         if actor.role == "admin":
-            return await AcademicRepository.list_effective_teacher_assignments(
-                db
-            )
+            return await AcademicRepository.list_effective_teacher_assignments(db)
 
         if actor.role != "teacher":
             raise AcademicAuthorizationError(

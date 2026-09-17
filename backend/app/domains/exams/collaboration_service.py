@@ -38,11 +38,13 @@ class ExamCollaborationLifecycleMixin:
 
         cls._require_expected_authoring_version(exam, expected_authoring_version)
         cls._require_lead_or_admin(actor, exam)
-        await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
-            db,
-            actor=actor,
-            curriculum_subject_id=exam.curriculum_subject_id,
-            academic_term_id=exam.term_id,
+        await (
+            AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+                db,
+                actor=actor,
+                curriculum_subject_id=exam.curriculum_subject_id,
+                academic_term_id=exam.term_id,
+            )
         )
 
         # Stage the version bump in the same transaction used by the existing
@@ -80,11 +82,13 @@ class ExamCollaborationLifecycleMixin:
 
         cls._require_expected_authoring_version(exam, expected_authoring_version)
         cls._require_lead_or_admin(actor, exam)
-        await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
-            db,
-            actor=actor,
-            curriculum_subject_id=exam.curriculum_subject_id,
-            academic_term_id=exam.term_id,
+        await (
+            AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+                db,
+                actor=actor,
+                curriculum_subject_id=exam.curriculum_subject_id,
+                academic_term_id=exam.term_id,
+            )
         )
 
         await super().delete_draft_exam(

@@ -7,7 +7,10 @@ from uuid import UUID
 from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domains.attempts.models import AttemptOptionAllocation, AttemptQuestionAllocation
+from app.domains.attempts.models import (
+    AttemptOptionAllocation,
+    AttemptQuestionAllocation,
+)
 from app.domains.exams.models import ExamQuestion, ExamQuestionOption
 from app.domains.media.models import MediaAsset
 from app.domains.questions.models import Question, QuestionOption

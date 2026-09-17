@@ -113,7 +113,10 @@ class ExamUpdate(InputBase):
             "shuffle_options",
         }
         for field_name in non_nullable_fields:
-            if field_name in self.model_fields_set and getattr(self, field_name) is None:
+            if (
+                field_name in self.model_fields_set
+                and getattr(self, field_name) is None
+            ):
                 raise ValueError(f"{field_name} cannot be null")
 
         if (

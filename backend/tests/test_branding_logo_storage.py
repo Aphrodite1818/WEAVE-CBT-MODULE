@@ -53,7 +53,9 @@ class BrandingLogoStorageTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(await storage.exists(cached.storage_key))
             self.assertEqual(await storage.read(cached.storage_key), data)
 
-    async def test_invalid_image_bytes_are_rejected_without_creating_cache(self) -> None:
+    async def test_invalid_image_bytes_are_rejected_without_creating_cache(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             storage = BrandingLogoStorage(Path(temp_dir))
 

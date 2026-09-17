@@ -380,7 +380,9 @@ class ExamRepository:
         db: AsyncSession,
         question_id: UUID,
     ) -> bool:
-        frozen_reference = exists().where(ExamQuestion.source_question_id == question_id)
+        frozen_reference = exists().where(
+            ExamQuestion.source_question_id == question_id
+        )
         draft_reference = exists().where(
             ExamQuestionSelection.question_id == question_id
         )

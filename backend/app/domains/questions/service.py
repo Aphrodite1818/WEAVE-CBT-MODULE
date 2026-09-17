@@ -131,7 +131,9 @@ async def _resolve_new_media_asset(
     if asset is None:
         raise ValueError(f"{label} does not exist")
     if asset.created_by_actor_id != actor.id:
-        raise ValueError(f"New {label.lower()} must have been uploaded by the current actor")
+        raise ValueError(
+            f"New {label.lower()} must have been uploaded by the current actor"
+        )
     return asset.id
 
 
@@ -244,7 +246,9 @@ async def _cleanup_unreferenced_media(
         except ValueError:
             pass
         except Exception:
-            logger.exception("Failed to clean up %s media asset %s", log_context, asset_id)
+            logger.exception(
+                "Failed to clean up %s media asset %s", log_context, asset_id
+            )
 
 
 class QuestionService:
@@ -845,7 +849,11 @@ class QuestionService:
                         image_asset_id=option_image_asset_id,
                         is_correct=is_correct,
                     )
-                    for position, (text, option_image_asset_id, is_correct) in enumerate(
+                    for position, (
+                        text,
+                        option_image_asset_id,
+                        is_correct,
+                    ) in enumerate(
                         normalized_options,
                         start=1,
                     )
@@ -855,7 +863,10 @@ class QuestionService:
         await db.commit()
 
         cleanup_ids: set[UUID] = set()
-        if old_image_asset_id is not None and old_image_asset_id != question.image_asset_id:
+        if (
+            old_image_asset_id is not None
+            and old_image_asset_id != question.image_asset_id
+        ):
             cleanup_ids.add(old_image_asset_id)
         cleanup_ids.update(old_option_image_ids - next_option_image_ids)
         await _cleanup_unreferenced_media(

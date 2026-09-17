@@ -186,9 +186,7 @@ async def recover_background_work(ctx: dict[str, Any]) -> dict[str, int]:
 
     stale_result_exam_ids = await _recover_stale_result_batches(now=now)
     roster_exam_ids = await _list_roster_exam_ids_needing_recovery(now=now)
-    result_exam_ids = set(
-        await _list_result_exam_ids_needing_recovery(now=now)
-    )
+    result_exam_ids = set(await _list_result_exam_ids_needing_recovery(now=now))
     result_exam_ids.update(stale_result_exam_ids)
 
     roster_enqueued = 0

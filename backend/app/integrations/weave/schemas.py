@@ -356,7 +356,5 @@ class WeaveResultBulkResponse(BaseModel):
                 "Applied, unchanged and rejected counts must equal received count."
             )
         if len(self.errors) != self.rejected:
-            raise ValueError(
-                "Each rejected result must have a corresponding error."
-            )
+            raise ValueError("Each rejected result must have a corresponding error.")
         return self

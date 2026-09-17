@@ -26,17 +26,48 @@ def upgrade() -> None:
         sa.Column("school_name", sa.String(length=255), nullable=False),
         sa.Column("logo_url", sa.Text(), nullable=True),
         sa.Column("logo_revision", sa.Uuid(), nullable=True),
-        sa.Column("is_enabled", sa.Boolean(), server_default=sa.text("false"), nullable=False),
-        sa.Column("is_default_theme", sa.Boolean(), server_default=sa.text("true"), nullable=False),
-        sa.Column("theme_version", sa.Integer(), server_default=sa.text("0"), nullable=False),
-        sa.Column("token_schema_version", sa.Integer(), server_default=sa.text("1"), nullable=False),
-        sa.Column("light_tokens", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column(
+            "is_enabled", sa.Boolean(), server_default=sa.text("false"), nullable=False
+        ),
+        sa.Column(
+            "is_default_theme",
+            sa.Boolean(),
+            server_default=sa.text("true"),
+            nullable=False,
+        ),
+        sa.Column(
+            "theme_version", sa.Integer(), server_default=sa.text("0"), nullable=False
+        ),
+        sa.Column(
+            "token_schema_version",
+            sa.Integer(),
+            server_default=sa.text("1"),
+            nullable=False,
+        ),
+        sa.Column(
+            "light_tokens", postgresql.JSONB(astext_type=sa.Text()), nullable=False
+        ),
         sa.Column("last_synced_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.Column("id", sa.Uuid(), nullable=False),
-        sa.CheckConstraint("theme_version >= 0", name="ck_branding_states_theme_version_nonnegative"),
-        sa.CheckConstraint("token_schema_version >= 1", name="ck_branding_states_token_schema_version_positive"),
+        sa.CheckConstraint(
+            "theme_version >= 0", name="ck_branding_states_theme_version_nonnegative"
+        ),
+        sa.CheckConstraint(
+            "token_schema_version >= 1",
+            name="ck_branding_states_token_schema_version_positive",
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_branding_states")),
         sa.UniqueConstraint("tenant_id", name=op.f("uq_branding_states_tenant_id")),
     )

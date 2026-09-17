@@ -5,7 +5,17 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, Integer, JSON, String, Text, text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Integer,
+    JSON,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -42,10 +52,14 @@ class BrandingState(Base):
         Integer, nullable=False, default=1, server_default=text("1")
     )
     light_tokens: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False)
-    last_synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_synced_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
     __table_args__ = (
-        CheckConstraint("theme_version >= 0", name="ck_branding_states_theme_version_nonnegative"),
+        CheckConstraint(
+            "theme_version >= 0", name="ck_branding_states_theme_version_nonnegative"
+        ),
         CheckConstraint(
             "token_schema_version >= 1",
             name="ck_branding_states_token_schema_version_positive",

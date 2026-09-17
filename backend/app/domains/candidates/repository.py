@@ -255,11 +255,6 @@ class CandidateRepository:
             query = query.with_for_update(of=CandidateLateStartAuthorization)
         return (await db.execute(query)).scalar_one_or_none()
 
-
-
-
-
-
     @staticmethod
     async def list_candidates_by_ids(
         db: AsyncSession,
@@ -269,26 +264,18 @@ class CandidateRepository:
         Load candidate snapshots in one query for result synchronization.
         """
 
-        ids = list(
-            dict.fromkeys(candidate_ids)
-        )
+        ids = list(dict.fromkeys(candidate_ids))
 
         if not ids:
             return []
 
         result = await db.execute(
             select(ExamCandidate)
-            .where(
-                ExamCandidate.id.in_(ids)
-            )
-            .order_by(
-                ExamCandidate.id.asc()
-            )
+            .where(ExamCandidate.id.in_(ids))
+            .order_by(ExamCandidate.id.asc())
         )
 
-        return list(
-            result.scalars().all()
-        )
+        return list(result.scalars().all())
 
     @staticmethod
     async def list_late_start_authorizations(

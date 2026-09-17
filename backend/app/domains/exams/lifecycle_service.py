@@ -426,7 +426,9 @@ class ExamLifecycleServiceMixin:
 
             comparable_content: list[tuple[str | None, UUID | None]] = []
             for option in question_options:
-                normalized_text = option.text.strip().casefold() if option.text else None
+                normalized_text = (
+                    option.text.strip().casefold() if option.text else None
+                )
                 if normalized_text is None and option.image_asset_id is None:
                     raise ValueError(
                         "Every examination answer option must contain text, an image, or both"
@@ -571,26 +573,19 @@ class ExamLifecycleServiceMixin:
             questions=questions,
         )
 
+        # Preserve manual-paper contribution before the temporary
+        # ExamQuestionSelection rows are deleted during sealing
 
+        # Random papers have no explicit contributor because the system chooses
+        # their questions automatically
 
-        #Preserve manual-paper contribution before the temporary
-        #ExamQuestionSelection rows are deleted during sealing
-
-        #Random papers have no explicit contributor because the system chooses
-        #their questions automatically
-
-        contributor_by_question_id : dict[UUID, UUID ] = {}
+        contributor_by_question_id: dict[UUID, UUID] = {}
 
         if exam.question_selection_mode == ExamQuestionSelectionMode.MANUAL:
-            selections = await ExamRepository.list_question_selections(
-                db,
-                exam.id
-            )
-
-
+            selections = await ExamRepository.list_question_selections(db, exam.id)
 
             contributor_by_question_id = {
-                selection.question_id : selection.added_by_actor_id
+                selection.question_id: selection.added_by_actor_id
                 for selection in selections
             }
 
@@ -599,7 +594,6 @@ class ExamLifecycleServiceMixin:
                 for question in questions
                 if question.id not in contributor_by_question_id
             ]
-
 
             if missing_contributor_ids:
                 raise ExamStateError(
@@ -634,7 +628,7 @@ class ExamLifecycleServiceMixin:
                 exam_id=exam.id,
                 source_question_id=question.id,
                 source_question_version=question.version,
-                added_by_actor_id = contributor_by_question_id.get(question.id),
+                added_by_actor_id=contributor_by_question_id.get(question.id),
                 question_type=question.question_type,
                 position=position,
                 prompt=question.prompt,
@@ -983,7 +977,6 @@ class ExamLifecycleServiceMixin:
                     latest.id,
                 )
 
-
                 missing_contributor_ids = [
                     question.source_question_id
                     for question in frozen_questions
@@ -996,13 +989,12 @@ class ExamLifecycleServiceMixin:
                         "question contributor provenance is incomplete"
                     )
 
-                
                 await ExamRepository.add_question_selections(
                     db,
                     [
                         ExamQuestionSelection(
                             exam_id=revision.id,
-                            added_by_actor_id = question.added_by_actor_id,
+                            added_by_actor_id=question.added_by_actor_id,
                             question_id=question.source_question_id,
                             position=question.position,
                         )

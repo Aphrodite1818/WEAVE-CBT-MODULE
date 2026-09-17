@@ -223,7 +223,10 @@ class AcademicEligibilityService:
                     "specialization for the selected academic term"
                 )
 
-            if subject_is_general or class_department.department_id in allowed_department_ids:
+            if (
+                subject_is_general
+                or class_department.department_id in allowed_department_ids
+            ):
                 eligible_classes.append(classroom)
 
         return eligible_classes

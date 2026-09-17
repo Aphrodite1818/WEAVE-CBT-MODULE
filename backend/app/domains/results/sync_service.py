@@ -209,11 +209,9 @@ class ResultSyncService:
         # 1. Resume uncertain previous delivery first
         # --------------------------------------------------------------
 
-        retry_batch_id = (
-            await ResultRepository.get_retryable_sync_batch_id_for_exam(
-                db,
-                exam_id=exam.id,
-            )
+        retry_batch_id = await ResultRepository.get_retryable_sync_batch_id_for_exam(
+            db,
+            exam_id=exam.id,
         )
 
         if retry_batch_id is not None:
@@ -321,9 +319,7 @@ class ResultSyncService:
         )
 
         if not rows:
-            raise ResultSyncError(
-                "Result synchronization batch does not exist."
-            )
+            raise ResultSyncError("Result synchronization batch does not exist.")
 
         exam_id = rows[0].exam_id
 
@@ -332,10 +328,7 @@ class ResultSyncService:
                 "A result synchronization batch contains multiple examinations."
             )
 
-        if any(
-            row.sync_status != ResultSyncStatus.SYNCING
-            for row in rows
-        ):
+        if any(row.sync_status != ResultSyncStatus.SYNCING for row in rows):
             raise ResultSyncError(
                 "Every result in an active synchronization batch must be SYNCING."
             )
@@ -350,9 +343,7 @@ class ResultSyncService:
         )
 
         if exam is None:
-            raise ExamNotFound(
-                "Examination does not exist"
-            )
+            raise ExamNotFound("Examination does not exist")
 
         # --------------------------------------------------------------
         # Academic level
@@ -367,11 +358,9 @@ class ResultSyncService:
         #     -> academic level
         # --------------------------------------------------------------
 
-        curriculum_subject = (
-            await AcademicRepository.get_curriculum_subject_by_id(
-                db,
-                exam.curriculum_subject_id,
-            )
+        curriculum_subject = await AcademicRepository.get_curriculum_subject_by_id(
+            db,
+            exam.curriculum_subject_id,
         )
 
         if curriculum_subject is None:
@@ -385,28 +374,20 @@ class ResultSyncService:
         )
 
         if curriculum is None:
-            raise ResultSyncError(
-                "The examination curriculum is unavailable locally."
-            )
+            raise ResultSyncError("The examination curriculum is unavailable locally.")
 
         # --------------------------------------------------------------
         # Candidate -> canonical Weave student
         # --------------------------------------------------------------
 
-        candidate_ids = [
-            row.candidate_id
-            for row in rows
-        ]
+        candidate_ids = [row.candidate_id for row in rows]
 
         candidates = await CandidateRepository.list_candidates_by_ids(
             db,
             candidate_ids,
         )
 
-        candidate_by_id = {
-            candidate.id: candidate
-            for candidate in candidates
-        }
+        candidate_by_id = {candidate.id: candidate for candidate in candidates}
 
         if len(candidate_by_id) != len(set(candidate_ids)):
             raise ResultSyncError(
@@ -465,11 +446,7 @@ class ResultSyncService:
         legacy/imported examination state.
         """
 
-        timestamp = (
-            exam.activated_at
-            or exam.scheduled_start_at
-            or exam.closed_at
-        )
+        timestamp = exam.activated_at or exam.scheduled_start_at or exam.closed_at
 
         if timestamp is None:
             raise ResultSyncError(
@@ -491,40 +468,26 @@ class ResultSyncService:
         payload = prepared.payload
 
         if response.batch_id != payload.batch_id:
-            raise WeaveContractError(
-                "Weave acknowledged a different CBT result batch."
-            )
+            raise WeaveContractError("Weave acknowledged a different CBT result batch.")
 
         if response.source_exam_id != payload.source_exam_id:
-            raise WeaveContractError(
-                "Weave acknowledged a different CBT examination."
-            )
+            raise WeaveContractError("Weave acknowledged a different CBT examination.")
 
         if response.received != len(payload.scores):
             raise WeaveContractError(
                 "Weave acknowledged an unexpected number of CBT results."
             )
 
-        submitted_student_ids = {
-            item.student_id
-            for item in payload.scores
-        }
+        submitted_student_ids = {item.student_id for item in payload.scores}
 
-        rejected_student_ids = [
-            error.student_id
-            for error in response.errors
-        ]
+        rejected_student_ids = [error.student_id for error in response.errors]
 
-        if len(rejected_student_ids) != len(
-            set(rejected_student_ids)
-        ):
+        if len(rejected_student_ids) != len(set(rejected_student_ids)):
             raise WeaveContractError(
                 "Weave returned duplicate rejected student results."
             )
 
-        if not set(rejected_student_ids).issubset(
-            submitted_student_ids
-        ):
+        if not set(rejected_student_ids).issubset(submitted_student_ids):
             raise WeaveContractError(
                 "Weave rejected a student that was not present in the CBT batch."
             )
@@ -548,14 +511,9 @@ class ResultSyncService:
             lock=True,
         )
 
-        expected_result_ids = set(
-            prepared.student_id_by_result_id
-        )
+        expected_result_ids = set(prepared.student_id_by_result_id)
 
-        actual_result_ids = {
-            row.id
-            for row in rows
-        }
+        actual_result_ids = {row.id for row in rows}
 
         if actual_result_ids != expected_result_ids:
             await db.rollback()
@@ -564,17 +522,12 @@ class ResultSyncService:
                 "Result batch membership changed during synchronization."
             )
 
-        error_by_student_id = {
-            error.student_id: error
-            for error in response.errors
-        }
+        error_by_student_id = {error.student_id: error for error in response.errors}
 
         for row in rows:
             student_id = prepared.student_id_by_result_id[row.id]
 
-            error = error_by_student_id.get(
-                student_id
-            )
+            error = error_by_student_id.get(student_id)
 
             # ----------------------------------------------------------
             # Accepted by Weave
@@ -607,9 +560,7 @@ class ResultSyncService:
             row.sync_status = ResultSyncStatus.FAILED
             row.sync_batch_id = None
             row.synced_at = None
-            row.sync_error = self._bounded_error(
-                f"{error.code}: {error.detail}"
-            )
+            row.sync_error = self._bounded_error(f"{error.code}: {error.detail}")
 
         await ResultRepository.save_results(
             db,
@@ -640,9 +591,7 @@ class ResultSyncService:
             await db.rollback()
             return
 
-        bounded_error = self._bounded_error(
-            error_message
-        )
+        bounded_error = self._bounded_error(error_message)
 
         for row in rows:
             # Never regress confirmed success.
@@ -667,25 +616,18 @@ class ResultSyncService:
     def _integration_error_message(
         exc: WeaveIntegrationError,
     ) -> str:
-        return (
-            str(exc)
-            or "Weave result synchronization failed."
-        )
+        return str(exc) or "Weave result synchronization failed."
 
     @staticmethod
     def _bounded_error(
         message: str,
     ) -> str:
-        normalized = " ".join(
-            message.split()
-        )
+        normalized = " ".join(message.split())
 
         if not normalized:
             normalized = "Result synchronization failed."
 
-        return normalized[
-            :RESULT_SYNC_ERROR_MAX_LENGTH
-        ]
+        return normalized[:RESULT_SYNC_ERROR_MAX_LENGTH]
 
 
 result_sync_service = ResultSyncService()

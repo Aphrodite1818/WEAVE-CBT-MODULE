@@ -52,9 +52,7 @@ def upgrade() -> None:
         "student_exam_sessions",
         ["candidate_id"],
         unique=True,
-        postgresql_where=sa.text(
-            "revoked_at IS NULL AND candidate_id IS NOT NULL"
-        ),
+        postgresql_where=sa.text("revoked_at IS NULL AND candidate_id IS NOT NULL"),
     )
 
 

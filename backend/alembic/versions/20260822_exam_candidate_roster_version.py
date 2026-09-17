@@ -47,7 +47,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_exam_candidates_exam_roster_version", table_name="exam_candidates")
+    op.drop_index(
+        "ix_exam_candidates_exam_roster_version", table_name="exam_candidates"
+    )
     op.drop_index("ix_exam_candidates_roster_version", table_name="exam_candidates")
     op.drop_constraint(
         "ck_exam_candidates_roster_version_positive",

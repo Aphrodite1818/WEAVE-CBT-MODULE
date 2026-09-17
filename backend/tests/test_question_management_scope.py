@@ -99,7 +99,9 @@ class QuestionManagementScopeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(kwargs["offset"], 0)
         self.assertIsNone(kwargs["limit"])
 
-    async def test_teacher_cannot_request_management_scope_for_unauthorized_bank(self) -> None:
+    async def test_teacher_cannot_request_management_scope_for_unauthorized_bank(
+        self,
+    ) -> None:
         actor = SimpleNamespace(
             id=uuid4(),
             role="teacher",

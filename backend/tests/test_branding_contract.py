@@ -25,7 +25,9 @@ class BrandingProjectionContractTests(unittest.TestCase):
     def test_gateway_uses_weave_cbt_branding_route(self) -> None:
         self.assertEqual(BRANDING_PATH, "/api/v1/cbt/branding")
 
-    def test_projection_accepts_light_and_dark_tokens_but_cbt_can_use_light_only(self) -> None:
+    def test_projection_accepts_light_and_dark_tokens_but_cbt_can_use_light_only(
+        self,
+    ) -> None:
         projection = WeaveBrandingProjection.model_validate(
             {
                 "tenant_id": str(uuid4()),

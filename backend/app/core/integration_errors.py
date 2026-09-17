@@ -16,12 +16,8 @@ logger = logging.getLogger(__name__)
 WEAVE_UNAVAILABLE_MESSAGE = (
     "Weave Cloud is currently unavailable. Check the internet connection and try again."
 )
-WEAVE_UPSTREAM_FAILURE_MESSAGE = (
-    "Weave Cloud could not complete the request. Try again, then contact support if it continues."
-)
-WEAVE_CONTRACT_FAILURE_MESSAGE = (
-    "Weave Cloud returned an unexpected response. Try again, then contact support if it continues."
-)
+WEAVE_UPSTREAM_FAILURE_MESSAGE = "Weave Cloud could not complete the request. Try again, then contact support if it continues."
+WEAVE_CONTRACT_FAILURE_MESSAGE = "Weave Cloud returned an unexpected response. Try again, then contact support if it continues."
 
 
 async def weave_request_rejected_handler(
@@ -32,8 +28,12 @@ async def weave_request_rejected_handler(
 
     upstream_status = exc.status_code
     is_expected_client_failure = 400 <= upstream_status < 500
-    response_status = upstream_status if is_expected_client_failure else status.HTTP_502_BAD_GATEWAY
-    detail = exc.detail if is_expected_client_failure else WEAVE_UPSTREAM_FAILURE_MESSAGE
+    response_status = (
+        upstream_status if is_expected_client_failure else status.HTTP_502_BAD_GATEWAY
+    )
+    detail = (
+        exc.detail if is_expected_client_failure else WEAVE_UPSTREAM_FAILURE_MESSAGE
+    )
 
     log = logger.info if is_expected_client_failure else logger.warning
     log(

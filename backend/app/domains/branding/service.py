@@ -108,7 +108,9 @@ class BrandingService:
         try:
             channels = tuple(int(part) for part in parts)
         except ValueError as exc:
-            raise BrandingContractError(f"Invalid RGB branding token for {key}.") from exc
+            raise BrandingContractError(
+                f"Invalid RGB branding token for {key}."
+            ) from exc
         if any(channel < 0 or channel > 255 for channel in channels):
             raise BrandingContractError(f"Invalid RGB branding token for {key}.")
         return " ".join(str(channel) for channel in channels)

@@ -129,7 +129,9 @@ async def get_current_question_image(
             detail="Question does not have an image.",
         )
 
-    content = await MediaService.load_asset_content(db, asset_id=question.image_asset_id)
+    content = await MediaService.load_asset_content(
+        db, asset_id=question.image_asset_id
+    )
     return Response(
         content=content.data,
         media_type=content.mime_type,

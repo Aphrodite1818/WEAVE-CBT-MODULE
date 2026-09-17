@@ -60,7 +60,9 @@ def cached_snapshot(revision):
 
 
 class BrandingLogoServiceTests(unittest.IsolatedAsyncioTestCase):
-    async def test_same_revision_reuses_existing_local_logo_without_download(self) -> None:
+    async def test_same_revision_reuses_existing_local_logo_without_download(
+        self,
+    ) -> None:
         revision = uuid4()
         storage = _FakeLogoStorage(exists=True)
         service = BrandingService(logo_storage=storage)  # type: ignore[arg-type]

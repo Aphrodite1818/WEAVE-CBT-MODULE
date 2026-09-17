@@ -40,9 +40,7 @@ class BrandingTokenContractTests(unittest.TestCase):
 
     def test_invalid_rgb_channels_are_rejected(self) -> None:
         with self.assertRaises(BrandingContractError):
-            BrandingService.normalize_light_tokens(
-                {"--color-primary": "999 0 0"}
-            )
+            BrandingService.normalize_light_tokens({"--color-primary": "999 0 0"})
 
 
 if __name__ == "__main__":

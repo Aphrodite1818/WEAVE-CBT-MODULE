@@ -340,7 +340,10 @@ class StudentAuthService:
         password: str,
     ) -> StudentLoginResult:
         submitted_admission = admission_number.strip()
-        if not submitted_admission or submitted_admission != submitted_admission.upper():
+        if (
+            not submitted_admission
+            or submitted_admission != submitted_admission.upper()
+        ):
             raise StudentAuthenticationError(INVALID_STUDENT_LOGIN)
 
         enrollment = await cls._get_current_enrollment(db, submitted_admission)

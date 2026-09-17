@@ -237,16 +237,13 @@ class ExamResult(Base):
     )
 
     # Stable Weave ingestion batch containing this result
-    #Weave performs CBT result ingestion in batches rather than assigning
-    #an independent idempotency key to every local result
-    #The batch UUID is persisted before the newtork request is made so an
-    #uncertain retry after timeout, crash or power loss can reconstruct
-    #and resend the exact same logical batch
+    # Weave performs CBT result ingestion in batches rather than assigning
+    # an independent idempotency key to every local result
+    # The batch UUID is persisted before the newtork request is made so an
+    # uncertain retry after timeout, crash or power loss can reconstruct
+    # and resend the exact same logical batch
 
-    sync_batch_id : Mapped[UUID | None] = mapped_column(
-        nullable = True,
-        index = True
-    )
+    sync_batch_id: Mapped[UUID | None] = mapped_column(nullable=True, index=True)
 
     sync_attempts: Mapped[int] = mapped_column(
         Integer,
@@ -335,11 +332,11 @@ class ExamResult(Base):
         ),
         CheckConstraint(
             "sync_status != 'syncing' OR sync_batch_id IS NOT NULL",
-            name = "ck_exam_results_syncing_requires_batch"
+            name="ck_exam_results_syncing_requires_batch",
         ),
         CheckConstraint(
             "sync_status != 'synced' OR sync_batch_id IS NOT NULL",
-            name = "ck_exam_results_synced_requires_batch"
+            name="ck_exam_results_synced_requires_batch",
         ),
         # ========================== #
         # INDEXES
@@ -359,9 +356,5 @@ class ExamResult(Base):
             "sync_status",
             "last_sync_attempt_at",
         ),
-        Index(
-            "ix_exam_results_sync_batch_status",
-            "sync_batch_id",
-            "sync_status"
-        )
+        Index("ix_exam_results_sync_batch_status", "sync_batch_id", "sync_status"),
     )

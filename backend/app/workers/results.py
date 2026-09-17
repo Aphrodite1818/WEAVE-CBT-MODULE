@@ -25,9 +25,7 @@ async def sync_exam_results(
     try:
         parsed_exam_id = UUID(exam_id)
     except (TypeError, ValueError) as exc:
-        raise ValueError(
-            "sync_exam_results received an invalid exam ID"
-        ) from exc
+        raise ValueError("sync_exam_results received an invalid exam ID") from exc
 
     logger.info(
         "Starting result synchronization for exam %s",

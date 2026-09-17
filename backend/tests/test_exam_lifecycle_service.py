@@ -154,7 +154,9 @@ class ExamLifecycleSchemaTests(unittest.TestCase):
 
 
 class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
-    async def test_lead_submit_records_metadata_and_bumps_authoring_version(self) -> None:
+    async def test_lead_submit_records_metadata_and_bumps_authoring_version(
+        self,
+    ) -> None:
         db = AsyncMock()
         current_actor = actor()
         current_exam = exam(status=ExamStatus.DRAFT)
@@ -320,7 +322,9 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
                     expected_authoring_version=1,
                 )
 
-    async def test_lead_can_delete_draft_when_still_academically_authorized(self) -> None:
+    async def test_lead_can_delete_draft_when_still_academically_authorized(
+        self,
+    ) -> None:
         db = AsyncMock()
         current_actor = actor()
         current_exam = exam()
@@ -462,7 +466,9 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
                 ),
             ),
             patch.object(ExamRepository, "add_exam_question_options", new=AsyncMock()),
-            patch.object(ExamRepository, "add_target_classes", new=AsyncMock()) as targets,
+            patch.object(
+                ExamRepository, "add_target_classes", new=AsyncMock()
+            ) as targets,
             patch.object(
                 ExamRepository,
                 "save_exam",
@@ -486,7 +492,9 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
             {row.class_id for row in frozen_targets},
             {first_class.id, second_class.id},
         )
-        self.assertTrue(all(row.teacher_assignment_id is None for row in frozen_targets))
+        self.assertTrue(
+            all(row.teacher_assignment_id is None for row in frozen_targets)
+        )
         self.assertLess(order.index("sync_lock"), order.index("authorize"))
         self.assertEqual(result.status, ExamStatus.SEALED)
         self.assertEqual(result.roster_status, ExamRosterStatus.PENDING)
@@ -514,24 +522,84 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
         integrity_error = IntegrityError("insert", {}, Exception("boom"))
 
         with (
-            patch.object(ExamRepository, "get_exam_by_id", new=AsyncMock(return_value=current_exam)),
-            patch.object(ExamTimetableService, "require_planned_slot_available", new=AsyncMock()),
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=current_exam),
+            ),
+            patch.object(
+                ExamTimetableService, "require_planned_slot_available", new=AsyncMock()
+            ),
             patch.object(SyncRepository, "acquire_apply_lock", new=AsyncMock()),
-            patch.object(AcademicAuthorizationService, "require_can_author_curriculum_subject", new=AsyncMock()),
-            patch.object(AcademicRepository, "get_session_by_id", new=AsyncMock(return_value=scope["session"])),
-            patch.object(AcademicRepository, "get_term_by_id", new=AsyncMock(return_value=scope["term"])),
-            patch.object(AcademicRepository, "get_assessment_scheme_by_id", new=AsyncMock(return_value=scope["scheme"])),
-            patch.object(AcademicRepository, "get_component_by_id", new=AsyncMock(return_value=scope["component"])),
-            patch.object(QuestionRepository, "get_bank_by_id", new=AsyncMock(return_value=scope["bank"])),
-            patch.object(ExamRepository, "count_exam_questions", new=AsyncMock(return_value=0)),
-            patch.object(ExamService, "_resolve_questions_for_sealing", new=AsyncMock(return_value=[source_question])),
-            patch.object(ExamService, "_validate_questions_for_sealing", new=AsyncMock(return_value={source_question.id: [option]})),
-            patch.object(AcademicEligibilityService, "list_eligible_classes", new=AsyncMock(return_value=[SimpleNamespace(id=uuid4())])),
-            patch.object(ExamRepository, "add_exam_questions", new=AsyncMock(return_value=[SimpleNamespace(id=uuid4(), source_question_id=source_question.id)])),
+            patch.object(
+                AcademicAuthorizationService,
+                "require_can_author_curriculum_subject",
+                new=AsyncMock(),
+            ),
+            patch.object(
+                AcademicRepository,
+                "get_session_by_id",
+                new=AsyncMock(return_value=scope["session"]),
+            ),
+            patch.object(
+                AcademicRepository,
+                "get_term_by_id",
+                new=AsyncMock(return_value=scope["term"]),
+            ),
+            patch.object(
+                AcademicRepository,
+                "get_assessment_scheme_by_id",
+                new=AsyncMock(return_value=scope["scheme"]),
+            ),
+            patch.object(
+                AcademicRepository,
+                "get_component_by_id",
+                new=AsyncMock(return_value=scope["component"]),
+            ),
+            patch.object(
+                QuestionRepository,
+                "get_bank_by_id",
+                new=AsyncMock(return_value=scope["bank"]),
+            ),
+            patch.object(
+                ExamRepository, "count_exam_questions", new=AsyncMock(return_value=0)
+            ),
+            patch.object(
+                ExamService,
+                "_resolve_questions_for_sealing",
+                new=AsyncMock(return_value=[source_question]),
+            ),
+            patch.object(
+                ExamService,
+                "_validate_questions_for_sealing",
+                new=AsyncMock(return_value={source_question.id: [option]}),
+            ),
+            patch.object(
+                AcademicEligibilityService,
+                "list_eligible_classes",
+                new=AsyncMock(return_value=[SimpleNamespace(id=uuid4())]),
+            ),
+            patch.object(
+                ExamRepository,
+                "add_exam_questions",
+                new=AsyncMock(
+                    return_value=[
+                        SimpleNamespace(
+                            id=uuid4(), source_question_id=source_question.id
+                        )
+                    ]
+                ),
+            ),
             patch.object(ExamRepository, "add_exam_question_options", new=AsyncMock()),
-            patch.object(ExamRepository, "add_target_classes", new=AsyncMock(side_effect=integrity_error)),
+            patch.object(
+                ExamRepository,
+                "add_target_classes",
+                new=AsyncMock(side_effect=integrity_error),
+            ),
             patch.object(ExamRepository, "save_exam", new=AsyncMock()) as save_exam,
-            patch.object(RuntimeRepository, "add_outbox_event", new=AsyncMock()) as add_event,
+            patch.object(
+                RuntimeRepository, "add_outbox_event", new=AsyncMock()
+            ) as add_event,
         ):
             with self.assertRaisesRegex(ValueError, "could not be sealed"):
                 await ExamService.seal_exam(
@@ -545,16 +613,34 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
         save_exam.assert_not_awaited()
         add_event.assert_not_awaited()
 
-    async def test_assign_invigilator_needs_school_membership_not_subject_assignment(self) -> None:
+    async def test_assign_invigilator_needs_school_membership_not_subject_assignment(
+        self,
+    ) -> None:
         db = AsyncMock()
         admin = actor(role="admin")
         teacher_id = uuid4()
         current_exam = exam(status=ExamStatus.SEALED)
         with (
-            patch.object(ExamRepository, "get_exam_by_id", new=AsyncMock(return_value=current_exam)),
-            patch.object(AcademicRepository, "list_teachers_by_ids", new=AsyncMock(return_value=[SimpleNamespace(id=teacher_id)])) as teachers,
-            patch.object(ExamRepository, "list_invigilators_for_exam_and_teachers", new=AsyncMock(return_value=[])),
-            patch.object(ExamRepository, "add_invigilators", new=AsyncMock(side_effect=lambda _db, rows: rows)),
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=current_exam),
+            ),
+            patch.object(
+                AcademicRepository,
+                "list_teachers_by_ids",
+                new=AsyncMock(return_value=[SimpleNamespace(id=teacher_id)]),
+            ) as teachers,
+            patch.object(
+                ExamRepository,
+                "list_invigilators_for_exam_and_teachers",
+                new=AsyncMock(return_value=[]),
+            ),
+            patch.object(
+                ExamRepository,
+                "add_invigilators",
+                new=AsyncMock(side_effect=lambda _db, rows: rows),
+            ),
         ):
             rows = await ExamService.assign_invigilators(
                 db,
@@ -577,9 +663,19 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
             component_maximum_score=Decimal("10.00"),
         )
         with (
-            patch.object(ExamRepository, "get_exam_by_id", new=AsyncMock(return_value=current_exam)),
-            patch.object(ExamRepository, "get_latest_child_revision", new=AsyncMock(return_value=None)),
-            patch.object(ExamRepository, "count_exam_questions", new=AsyncMock()) as count_questions,
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=current_exam),
+            ),
+            patch.object(
+                ExamRepository,
+                "get_latest_child_revision",
+                new=AsyncMock(return_value=None),
+            ),
+            patch.object(
+                ExamRepository, "count_exam_questions", new=AsyncMock()
+            ) as count_questions,
         ):
             with self.assertRaisesRegex(ExamStateError, "READY"):
                 await ExamService.activate_exam(
@@ -601,12 +697,32 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
             component_maximum_score=Decimal("10.00"),
         )
         with (
-            patch.object(ExamRepository, "get_exam_by_id", new=AsyncMock(return_value=current_exam)),
-            patch.object(ExamRepository, "get_latest_child_revision", new=AsyncMock(return_value=None)),
-            patch.object(ExamRepository, "count_exam_questions", new=AsyncMock(return_value=current_exam.question_count)),
-            patch.object(ExamRepository, "save_exam", new=AsyncMock(side_effect=lambda _db, row: row)),
-            patch.object(RuntimeRepository, "add_outbox_event", new=AsyncMock()) as add_event,
-            patch.object(ExamTimetableService, "require_level_free", new=AsyncMock()) as require_level_free,
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=current_exam),
+            ),
+            patch.object(
+                ExamRepository,
+                "get_latest_child_revision",
+                new=AsyncMock(return_value=None),
+            ),
+            patch.object(
+                ExamRepository,
+                "count_exam_questions",
+                new=AsyncMock(return_value=current_exam.question_count),
+            ),
+            patch.object(
+                ExamRepository,
+                "save_exam",
+                new=AsyncMock(side_effect=lambda _db, row: row),
+            ),
+            patch.object(
+                RuntimeRepository, "add_outbox_event", new=AsyncMock()
+            ) as add_event,
+            patch.object(
+                ExamTimetableService, "require_level_free", new=AsyncMock()
+            ) as require_level_free,
         ):
             result = await ExamService.activate_exam(
                 db,
@@ -641,9 +757,19 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
         teacher_id = uuid4()
         current_exam = exam(status=ExamStatus.ACTIVE)
         with (
-            patch.object(ExamRepository, "get_exam_by_id", new=AsyncMock(return_value=current_exam)),
-            patch.object(AcademicRepository, "list_teachers_by_ids", new=AsyncMock(return_value=[])),
-            patch.object(ExamRepository, "add_invigilators", new=AsyncMock()) as add_invigilators,
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=current_exam),
+            ),
+            patch.object(
+                AcademicRepository,
+                "list_teachers_by_ids",
+                new=AsyncMock(return_value=[]),
+            ),
+            patch.object(
+                ExamRepository, "add_invigilators", new=AsyncMock()
+            ) as add_invigilators,
         ):
             with self.assertRaises(AcademicScopeError):
                 await ExamService.assign_invigilators(

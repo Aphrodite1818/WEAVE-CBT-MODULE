@@ -191,8 +191,7 @@ def downgrade() -> None:
     op.execute(sa.text(f"DROP FUNCTION IF EXISTS {_FROZEN_FUNCTION}()"))
     op.execute(
         sa.text(
-            f"DROP TRIGGER IF EXISTS {_SELECTION_TRIGGER} "
-            "ON exam_question_selections"
+            f"DROP TRIGGER IF EXISTS {_SELECTION_TRIGGER} ON exam_question_selections"
         )
     )
     op.execute(sa.text(f"DROP FUNCTION IF EXISTS {_SELECTION_FUNCTION}()"))

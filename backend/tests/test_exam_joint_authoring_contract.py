@@ -48,7 +48,9 @@ class JointAuthoringContractTests(unittest.TestCase):
         self.assertIn("authoring_version", ExamResponse.model_fields)
         self.assertEqual(ExamAuthoringAction().expected_authoring_version, 1)
 
-    def test_manual_selection_requires_contributor_and_frozen_question_preserves_it(self) -> None:
+    def test_manual_selection_requires_contributor_and_frozen_question_preserves_it(
+        self,
+    ) -> None:
         selection_column = ExamQuestionSelection.__table__.c.added_by_actor_id
         frozen_column = ExamQuestion.__table__.c.added_by_actor_id
         self.assertFalse(selection_column.nullable)

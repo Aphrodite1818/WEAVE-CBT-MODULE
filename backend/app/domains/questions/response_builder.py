@@ -51,7 +51,9 @@ async def _load_author_names(
 
     remaining_ids = unique_ids - set(actors)
     if remaining_ids:
-        result = await db.execute(select(LocalActor).where(LocalActor.id.in_(remaining_ids)))
+        result = await db.execute(
+            select(LocalActor).where(LocalActor.id.in_(remaining_ids))
+        )
         actors.update({actor.id: actor for actor in result.scalars().all()})
 
     membership_to_actor_id: dict[UUID, UUID] = {}
@@ -74,7 +76,9 @@ async def _load_author_names(
                 if value and value.strip()
             ]
             if parts:
-                current_teacher_names[membership_to_actor_id[teacher.id]] = " ".join(parts)
+                current_teacher_names[membership_to_actor_id[teacher.id]] = " ".join(
+                    parts
+                )
 
     author_names: dict[UUID, str] = {}
     for actor_id, actor in actors.items():
@@ -156,7 +160,9 @@ async def build_question_responses(
             image_asset_id=question.image_asset_id,
             version=question.version,
             created_by_actor_id=question.created_by_actor_id,
-            author_name=author_names.get(question.created_by_actor_id, "Unknown author"),
+            author_name=author_names.get(
+                question.created_by_actor_id, "Unknown author"
+            ),
             last_edited_by_actor_id=question.last_edited_by_actor_id,
             is_active=question.is_active,
             options=grouped[question.id],
