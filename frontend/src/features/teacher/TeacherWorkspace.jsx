@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { weaveGateway } from "../../app/gateway";
 import { TeacherLayout } from "./TeacherLayout";
 import { OverviewPage } from "./OverviewPage";
@@ -14,6 +14,7 @@ import "./teacher-exams.css";
 const emptyTeacherData = {
   banks: [],
   questions: [],
+  bankQuestions: [],
   exams: [],
   subjects: [],
   assignments: [],
@@ -30,30 +31,46 @@ export function TeacherWorkspace({
   gateway = weaveGateway,
 }) {
   const teacherData = useTeacherData(gateway);
+  const bankBrowseData = useMemo(
+    () => ({ ...teacherData, questions: teacherData.bankQuestions }),
+    [teacherData],
+  );
+
+  const workspaceDispatch = useCallback((action) => {
+    if (action?.type === "staff" && action.patch?.section === "preview-question") {
+      const origin = state.staff.section === "bank-detail" ? "bank-detail" : "questions";
+      dispatch({
+        ...action,
+        patch: { ...action.patch, questionPreviewOrigin: origin },
+      });
+      return;
+    }
+    dispatch(action);
+  }, [dispatch, state.staff.section]);
 
   return (
-    <TeacherLayout state={state} dispatch={dispatch} signOut={signOut}>
+    <TeacherLayout state={state} dispatch={workspaceDispatch} signOut={signOut}>
       {state.staff.section === "overview" && (
         <OverviewPage
           state={state}
-          dispatch={dispatch}
+          dispatch={workspaceDispatch}
           teacherData={teacherData}
         />
       )}
       {state.staff.section === "question-banks" && (
-        <QuestionBanksPage dispatch={dispatch} teacherData={teacherData} />
+        <QuestionBanksPage dispatch={workspaceDispatch} teacherData={teacherData} />
       )}
       {state.staff.section === "bank-detail" && (
         <BankDetailPage
           state={state}
-          dispatch={dispatch}
-          teacherData={teacherData}
+          dispatch={workspaceDispatch}
+          teacherData={bankBrowseData}
         />
       )}
       {state.staff.section === "questions" && (
         <TeacherQuestionsPage
           state={state}
-          dispatch={dispatch}
+          dispatch={workspaceDispatch}
           teacherData={teacherData}
           gateway={gateway}
         />
@@ -61,8 +78,8 @@ export function TeacherWorkspace({
       {state.staff.section === "preview-question" && (
         <TeacherQuestionPreviewPage
           state={state}
-          dispatch={dispatch}
-          teacherData={teacherData}
+          dispatch={workspaceDispatch}
+          teacherData={bankBrowseData}
           gateway={gateway}
         />
       )}
@@ -70,7 +87,7 @@ export function TeacherWorkspace({
         <QuestionBuilder
           mode="create"
           state={state}
-          dispatch={dispatch}
+          dispatch={workspaceDispatch}
           teacherData={teacherData}
           gateway={gateway}
         />
@@ -80,7 +97,7 @@ export function TeacherWorkspace({
           key={state.staff.selectedQuestionId || "teacher-question-editor"}
           mode="edit"
           state={state}
-          dispatch={dispatch}
+          dispatch={workspaceDispatch}
           teacherData={teacherData}
           gateway={gateway}
         />
@@ -88,7 +105,7 @@ export function TeacherWorkspace({
       {state.staff.section === "exams" && (
         <TeacherExamsPage
           state={state}
-          dispatch={dispatch}
+          dispatch={workspaceDispatch}
           teacherData={teacherData}
           gateway={gateway}
         />
@@ -96,7 +113,7 @@ export function TeacherWorkspace({
       {state.staff.section === "create-exam" && (
         <TeacherCreateExamPage
           state={state}
-          dispatch={dispatch}
+          dispatch={workspaceDispatch}
           teacherData={teacherData}
           gateway={gateway}
         />
@@ -183,6 +200,7 @@ async function loadTeacherData(gateway) {
     assignmentRows,
     examPayload,
     schemeRows,
+    manageableRows,
   ] = await Promise.all([
     optional(gateway.academics?.getCurrentAcademicSession, null),
     optional(gateway.academics?.getCurrentAcademicTerm, null),
@@ -191,6 +209,10 @@ async function loadTeacherData(gateway) {
     optional(() => gateway.exams?.listExams?.({ limit: 200 }), { exams: [] }),
     optional(
       () => gateway.academics?.listAssessmentSchemes?.({ active_only: true }),
+      [],
+    ),
+    optional(
+      () => gateway.questions?.listManageableQuestions?.({ include_archived: true }),
       [],
     ),
   ]);
@@ -212,7 +234,14 @@ async function loadTeacherData(gateway) {
         }),
     ),
   );
-  const questions = questionGroups.flat();
+  const bankQuestions = questionGroups.flat();
+  const bankById = new Map(bankRows.map((bank) => [bank.id, bank]));
+  const questions = manageableRows
+    .map((question) => {
+      const bank = bankById.get(question.bank_id);
+      return bank ? normalizeQuestion(question, bank) : null;
+    })
+    .filter(Boolean);
 
   const componentGroups = await Promise.all(
     schemeRows.map((scheme) =>
@@ -244,8 +273,9 @@ async function loadTeacherData(gateway) {
 
   return {
     data: {
-      banks: bankRows.map((bank) => normalizeBank(bank, questions)),
+      banks: bankRows.map((bank) => normalizeBank(bank, bankQuestions)),
       questions,
+      bankQuestions,
       exams: examRows.map((exam) =>
         normalizeExam(exam, subjectByCurriculum, componentById),
       ),
