@@ -78,6 +78,7 @@ async function loadAdminData(gateway) {
     assignmentRows,
     examPayload,
     schemeRows,
+    questionRows,
   ] = await Promise.all([
     gateway.questions.listAdminQuestionBanks({ include_archived: true }),
     optional(gateway.academics?.getCurrentAcademicSession, null),
@@ -86,18 +87,16 @@ async function loadAdminData(gateway) {
     optional(gateway.academics?.listEffectiveTeacherAssignments, []),
     optional(() => gateway.exams?.listExams?.({ limit: 200 }), { exams: [] }),
     optional(() => gateway.academics?.listAssessmentSchemes?.({ active_only: true }), []),
+    optional(() => gateway.questions?.listManageableQuestions?.({ include_archived: true }), []),
   ])
 
-  const questionGroups = await Promise.all(
-    bankRows.map((bank) => gateway.questions
-      .listQuestionsForBank(bank.id, { include_archived: true })
-      .then((items) => items.map((question) => normalizeQuestion(question, bank)))
-      .catch((requestError) => {
-        warnings.push(requestError.userMessage || requestError.message || `Questions for ${bank.name} could not be loaded.`)
-        return []
-      })),
-  )
-  const questions = questionGroups.flat()
+  const bankById = new Map(bankRows.map((bank) => [bank.id, bank]))
+  const questions = questionRows
+    .map((question) => {
+      const bank = bankById.get(question.bank_id)
+      return bank ? normalizeQuestion(question, bank) : null
+    })
+    .filter(Boolean)
 
   const componentGroups = await Promise.all(
     schemeRows.map((scheme) => optional(
