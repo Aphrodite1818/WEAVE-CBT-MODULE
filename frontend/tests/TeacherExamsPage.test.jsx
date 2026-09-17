@@ -31,9 +31,26 @@ const teacherData = {
     },
   ],
   subjects: [{ id: 'subject-1', name: 'Mathematics' }],
-  banks: [{ id: 'bank-1', curriculumSubjectId: 'subject-1', name: 'Mathematics Bank', count: 40, activeQuestionCount: 40 }],
-  assessmentSchemes: [{ id: 'scheme-1', name: 'Standard Scheme', status: 'active' }],
-  assessmentComponents: [{ id: 'component-1', schemeId: 'scheme-1', name: 'CA 1', maximumScore: 10 }],
+  banks: [
+    {
+      id: 'bank-1',
+      curriculumSubjectId: 'subject-1',
+      name: 'Mathematics Bank',
+      count: 40,
+      activeQuestionCount: 40,
+    },
+  ],
+  assessmentSchemes: [
+    { id: 'scheme-1', name: 'Standard Scheme', status: 'active' },
+  ],
+  assessmentComponents: [
+    {
+      id: 'component-1',
+      schemeId: 'scheme-1',
+      name: 'CA 1',
+      maximumScore: 10,
+    },
+  ],
   session: { id: 'session-1', name: '2026/2027' },
   term: { id: 'term-1', name: 'First Term' },
   loading: false,
@@ -72,7 +89,7 @@ describe('Teacher exams', () => {
     })
   })
 
-  it('creates a draft with the synchronized academic context and delivery settings', async () => {
+  it('creates a draft with synchronized academic and delivery settings', async () => {
     const dispatch = vi.fn()
     const createExam = vi.fn().mockResolvedValue({ id: 'exam-new' })
     const refresh = vi.fn().mockResolvedValue(undefined)
@@ -86,7 +103,9 @@ describe('Teacher exams', () => {
       />,
     )
 
-    await waitFor(() => expect(screen.getByText('Mathematics Bank')).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getAllByText('Mathematics Bank').length).toBeGreaterThan(0),
+    )
     fireEvent.change(screen.getByLabelText(/exam title/i), {
       target: { value: 'Mathematics Mid Term' },
     })
@@ -131,7 +150,11 @@ describe('Teacher exams', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /lifecycle actions for mathematics ca 1/i }))
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /lifecycle actions for mathematics ca 1/i,
+      }),
+    )
     fireEvent.click(screen.getByRole('button', { name: /submit for review/i }))
     fireEvent.click(screen.getByRole('button', { name: /^submit for review$/i }))
 
