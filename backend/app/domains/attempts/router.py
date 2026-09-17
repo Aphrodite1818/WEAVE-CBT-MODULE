@@ -16,6 +16,7 @@ from app.domains.attempts.repository import AttemptRepository
 from app.domains.attempts.schemas import (
     AttemptAnswerMutation,
     AttemptAnswerResponse,
+    AttemptHeartbeatResponse,
     AttemptOperatorResponse,
     AttemptReasonPayload,
     AttemptResponse,
@@ -79,6 +80,17 @@ async def start_current_attempt(db: DbSession, context: CurrentStudentExamSessio
 async def get_current_attempt(db: DbSession, context: CurrentStudentExamSession) -> AttemptResponse:
     try:
         return await _load_current_attempt(db, context)
+    except (AttemptStateError, ExamNotFound, ExamStateError, ValueError) as exc:
+        raise _http_error(exc) from exc
+
+
+@student_router.post("/current/heartbeat", response_model=AttemptHeartbeatResponse)
+async def heartbeat_current_attempt(
+    db: DbSession,
+    context: CurrentStudentExamSession,
+) -> AttemptHeartbeatResponse:
+    try:
+        return await AttemptService.heartbeat_current(db, context=context)
     except (AttemptStateError, ExamNotFound, ExamStateError, ValueError) as exc:
         raise _http_error(exc) from exc
 
