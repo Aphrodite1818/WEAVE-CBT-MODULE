@@ -162,6 +162,38 @@ class QuestionRepository:
         return list((await db.execute(query)).scalars().all())
 
     @staticmethod
+    async def list_questions_for_banks(
+        db: AsyncSession,
+        bank_ids: Sequence[UUID],
+        *,
+        question_type: QuestionType | None = None,
+        created_by_actor_id: UUID | None = None,
+        active_only: bool = False,
+        offset: int = 0,
+        limit: int | None = None,
+    ) -> list[Question]:
+        """Return questions across a bounded set of banks for management views."""
+
+        unique_bank_ids = list(dict.fromkeys(bank_ids))
+        if not unique_bank_ids:
+            return []
+
+        query = select(Question).where(Question.bank_id.in_(unique_bank_ids))
+        if question_type is not None:
+            query = query.where(Question.question_type == question_type)
+        if created_by_actor_id is not None:
+            query = query.where(Question.created_by_actor_id == created_by_actor_id)
+        if active_only:
+            query = query.where(Question.is_active.is_(True))
+
+        query = query.order_by(Question.created_at.asc(), Question.id.asc()).offset(
+            offset
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        return list((await db.execute(query)).scalars().all())
+
+    @staticmethod
     async def list_questions_by_ids(
         db: AsyncSession,
         question_ids: Sequence[UUID],
