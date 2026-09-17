@@ -32,15 +32,24 @@ from app.domains.results.router import router as results_router
 from app.domains.sync.router import router as sync_router
 from app.domains.sync.supervisor import sync_supervisor
 from app.integrations.weave.client import weave_client
+from app.workers.producer import arq_producer
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Start local infrastructure and the non-blocking Cloud sync supervisor."""
+    """Start local infrastructure and non-blocking background coordination."""
+
     await check_database_connection()
+
+    # ARQ/Redis is supporting infrastructure rather than durable state.
+    # Startup therefore continues in degraded mode when Redis is unavailable;
+    # PostgreSQL-backed maintenance recovery can reconstruct missed work later.
+    await arq_producer.start()
+
     sync_task = asyncio.create_task(
         sync_supervisor.run(), name="weave-cbt-sync-supervisor"
     )
+
     try:
         yield
     finally:
@@ -48,6 +57,8 @@ async def lifespan(_app: FastAPI):
         sync_task.cancel()
         with suppress(asyncio.CancelledError):
             await sync_task
+
+        await arq_producer.close()
         await weave_client.close()
         await close_redis_client()
         await dispose_database_engine()
