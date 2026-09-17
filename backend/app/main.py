@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager, suppress
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.core.database import check_database_connection, dispose_database_engine
 from app.core.integration_errors import register_weave_integration_error_handlers
@@ -24,6 +25,8 @@ from app.domains.exams.router import router as exams_router
 from app.domains.exams.timetable_router import router as timetable_router
 from app.domains.media.router import router as media_router
 from app.domains.node.router import router as node_router
+from app.domains.questions.exceptions import QuestionConflictError
+from app.domains.questions.management_router import router as question_management_router
 from app.domains.questions.router import router as questions_router
 from app.domains.results.router import router as results_router
 from app.domains.sync.router import router as sync_router
@@ -64,6 +67,18 @@ app.add_middleware(
 )
 register_weave_integration_error_handlers(app)
 
+
+@app.exception_handler(QuestionConflictError)
+async def question_conflict_handler(
+    _request: Request,
+    exc: QuestionConflictError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={"detail": str(exc)},
+    )
+
+
 for router in (
     node_router,
     branding_router,
@@ -72,6 +87,7 @@ for router in (
     sync_router,
     media_router,
     academic_router,
+    question_management_router,
     questions_router,
     exam_read_router,
     exams_router,
