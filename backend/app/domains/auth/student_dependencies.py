@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import Cookie, Depends, HTTPException, status
 
 from app.core.database import DbSession
-from app.domains.auth.student_service import (
+from app.domains.auth.student_lifecycle_service import (
     StudentAuthenticationError,
     StudentAuthService,
     StudentSessionContext,
