@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.attempts.models import AttemptStatus
 from app.domains.attempts.repository import AttemptRepository
+from app.domains.attempts.schemas import AttemptHeartbeatResponse
 from app.domains.attempts.service import AttemptService as _AttemptService
 from app.domains.attempts.service import AttemptStateError
 from app.domains.auth.models import LocalActor
@@ -21,6 +23,7 @@ from app.workers.producer import arq_producer
 
 
 _FINALIZING_STATES = {ExamStatus.CLOSING, ExamStatus.CANCELLING}
+ATTEMPT_HEARTBEAT_RECOMMENDED_INTERVAL_SECONDS = 20
 
 
 class AttemptService(_AttemptService):
@@ -59,6 +62,62 @@ class AttemptService(_AttemptService):
             at=control.operation_requested_at,
         )
         return response
+
+    @classmethod
+    async def heartbeat_current(
+        cls,
+        db: AsyncSession,
+        *,
+        context: StudentSessionContext,
+    ) -> AttemptHeartbeatResponse:
+        """Record candidate-device liveness without changing attempt state.
+
+        This path intentionally avoids locks on the shared Exam row so a large
+        examination can accept heartbeats concurrently. Missing heartbeats are
+        monitoring evidence only; they never auto-interrupt or auto-submit a
+        candidate because a transient client/network problem must not change
+        academic state without an explicit lifecycle decision.
+        """
+
+        attempt, _candidate, exam = await cls._get_current_attempt(
+            db,
+            context=context,
+            lock=False,
+        )
+        if attempt.status not in {
+            AttemptStatus.IN_PROGRESS,
+            AttemptStatus.INTERRUPTED,
+        }:
+            raise AttemptStateError("Ended attempts do not accept heartbeats")
+
+        if not context.is_makeup and exam.status not in {
+            ExamStatus.ACTIVE,
+            ExamStatus.SUSPENDED,
+        }:
+            raise AttemptStateError(
+                "Examination finalization has started and no longer accepts candidate heartbeats"
+            )
+
+        now = datetime.now(UTC)
+        attempt.last_heartbeat_at = now
+        await AttemptRepository.save_attempt(db, attempt)
+        await db.commit()
+
+        remaining = await cls.remaining_seconds(
+            db,
+            attempt=attempt,
+            exam_id=exam.id,
+            at=now,
+        )
+        return AttemptHeartbeatResponse(
+            attempt_id=attempt.id,
+            status=attempt.status,
+            server_time=now,
+            last_heartbeat_at=now,
+            remaining_seconds=remaining,
+            exam_suspended=(exam.status == ExamStatus.SUSPENDED and not context.is_makeup),
+            next_heartbeat_after_seconds=ATTEMPT_HEARTBEAT_RECOMMENDED_INTERVAL_SECONDS,
+        )
 
     @classmethod
     async def get_current(
