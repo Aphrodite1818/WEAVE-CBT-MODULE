@@ -22,8 +22,6 @@ function BankIcon({ size = 20 }) { return <Icon name="bank" size={size} /> }
 function QuestionIcon({ size = 20 }) { return <Icon name="fileText" size={size} /> }
 
 export function AdminOverview({ state, adminData, onNavigate }) {
-  const adminName = state.session?.actor?.display_name || state.session?.name || 'Administrator'
-  const firstName = adminName.split(' ').filter(Boolean)[0] || 'Administrator'
   const greeting = greetingForHour(new Date().getHours())
   const isEvening = greeting === 'evening'
   const GreetingIcon = isEvening ? RiMoonClearLine : RiSunLine
@@ -58,7 +56,7 @@ export function AdminOverview({ state, adminData, onNavigate }) {
           </div>
           <div className="teacher-overview-greeting">
             <span className="teacher-overview-time-icon" data-time-icon={isEvening ? 'moon' : 'sun'} aria-hidden="true"><GreetingIcon size={26} /></span>
-            <h2 id="admin-overview-title">Good {greeting}, {firstName}!</h2>
+            <h2 id="admin-overview-title">Good {greeting}, Admin!</h2>
           </div>
           {(adminData.session?.name || adminData.term?.name) ? (
             <div className="teacher-overview-context" aria-label="Current academic context">
