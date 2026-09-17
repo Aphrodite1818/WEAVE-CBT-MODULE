@@ -136,6 +136,8 @@ function normalizeBank(bank, questions, subjectByCurriculum) {
   return {
     id: bank.id,
     curriculumSubjectId: bank.curriculum_subject_id,
+    academicLevelId: subject?.academicLevelId || null,
+    academicLevelName: subject?.academicLevelName || '',
     subjectName: subject?.name || 'Subject',
     subjectCode: subject?.code || '',
     name: bank.name,
@@ -170,6 +172,10 @@ function normalizeSubject(subject) {
   return {
     id: subject.id,
     curriculumId: subject.curriculum_id,
+    academicLevelId: subject.academic_level_id,
+    academicLevelName: subject.academic_level_name,
+    academicLevelCategory: subject.academic_level_category,
+    academicLevelPosition: Number(subject.academic_level_position ?? 0),
     subjectId: subject.subject_id,
     name: subject.subject_name,
     code: subject.subject_code,
