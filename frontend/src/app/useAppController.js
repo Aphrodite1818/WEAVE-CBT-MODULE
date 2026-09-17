@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { appReducer, createInitialState } from './state/appState'
 
 const NAV_STATE_KEY = 'weave.cbt.navigation'
-const teacherSections = new Set(['overview', 'question-banks', 'bank-detail', 'questions', 'create-question', 'edit-question', 'exams', 'create-exam'])
+const teacherSections = new Set(['overview', 'question-banks', 'bank-detail', 'questions', 'create-question', 'edit-question', 'preview-question', 'exams', 'create-exam'])
 const adminSections = new Set(['dashboard', 'exams', 'question-banks', 'students', 'invigilators', 'results', 'reports', 'settings'])
 const setupViews = new Set(['welcome', 'pairing-code', 'server-name', 'pairing', 'paired-success'])
 const applications = new Set(['combined', 'staff', 'student'])
@@ -333,8 +333,12 @@ async function restoreStaffSession(dispatch, savedNavigation, navigate, gateway)
     if (session.role === 'teacher') {
       const section = staffSectionForRole(session.role, savedNavigation?.staffSection)
       dispatch({ type: 'authSuccess', session, view: 'staff' })
-      dispatch({ type: 'staff', patch: { section } })
-      navigate(`/teacher/${section}`, { replace: true })
+      const selectedQuestionId = (section === 'preview-question' || section === 'edit-question') ? savedNavigation?.selectedQuestionId : null
+      dispatch({ type: 'staff', patch: { section, selectedQuestionId } })
+      let targetPath = `/teacher/${section}`
+      if (section === 'preview-question' && selectedQuestionId) targetPath = `/teacher/questions/${encodeURIComponent(selectedQuestionId)}/preview`
+      if (section === 'edit-question' && selectedQuestionId) targetPath = `/teacher/questions/${encodeURIComponent(selectedQuestionId)}/edit`
+      navigate(targetPath, { replace: true })
       return true
     }
     if (session.role === 'admin') {
@@ -406,6 +410,28 @@ function routeFromPathUnchecked(pathname) {
   if (path === '/sync/initial') return { view: 'initial-sync' }
   if (path === '/student') return { view: 'student', sessionType: 'student', examStage: 'lobby', requiresAuth: true }
   if (path === '/student/exam') return { view: 'student', sessionType: 'student', examStage: 'active', requiresAuth: true }
+  const questionPreviewMatch = path.match(/^\/teacher\/questions\/([^/]+)\/preview$/)
+  if (questionPreviewMatch) {
+    return {
+      view: 'staff',
+      sessionType: 'staff',
+      role: 'teacher',
+      staffSection: 'preview-question',
+      selectedQuestionId: decodeURIComponent(questionPreviewMatch[1]),
+      requiresAuth: true,
+    }
+  }
+  const questionEditMatch = path.match(/^\/teacher\/questions\/([^/]+)\/edit$/)
+  if (questionEditMatch) {
+    return {
+      view: 'staff',
+      sessionType: 'staff',
+      role: 'teacher',
+      staffSection: 'edit-question',
+      selectedQuestionId: decodeURIComponent(questionEditMatch[1]),
+      requiresAuth: true,
+    }
+  }
   if (path.startsWith('/teacher')) {
     const section = path.split('/')[2] || 'overview'
     return {
@@ -435,6 +461,7 @@ function routeToNavigation(route) {
     sessionType: route.sessionType,
     role: route.role,
     staffSection: route.staffSection,
+    selectedQuestionId: route.selectedQuestionId,
     examStage: route.examStage,
   }
 }
@@ -448,7 +475,7 @@ function applyRouteToState(route, state, dispatch, navigate) {
         return
       }
       dispatch({ type: 'authSuccess', session: state.session, view: 'staff' })
-      dispatch({ type: 'staff', patch: { section: staffSectionForRole(state.session.role, route.staffSection) } })
+      dispatch({ type: 'staff', patch: { section: staffSectionForRole(state.session.role, route.staffSection), selectedQuestionId: route.selectedQuestionId || null } })
       return
     }
     if (route.sessionType === 'student' && state.session?.type === 'student') {
@@ -508,7 +535,12 @@ function pathForStaffState(state) {
     const section = state.staff.section === 'overview' ? 'dashboard' : staffSectionForRole('admin', state.staff.section)
     return `/admin/${section}`
   }
-  if (state.session?.role === 'teacher') return `/teacher/${staffSectionForRole('teacher', state.staff.section)}`
+  if (state.session?.role === 'teacher') {
+    const section = staffSectionForRole('teacher', state.staff.section)
+    if (section === 'preview-question' && state.staff.selectedQuestionId) return `/teacher/questions/${encodeURIComponent(state.staff.selectedQuestionId)}/preview`
+    if (section === 'edit-question' && state.staff.selectedQuestionId) return `/teacher/questions/${encodeURIComponent(state.staff.selectedQuestionId)}/edit`
+    return `/teacher/${section}`
+  }
   return null
 }
 
@@ -527,12 +559,13 @@ function readNavigationState() {
   }
 }
 
-function persistNavigationState({ view, sessionType, role, staffSection, examStage }) {
+function persistNavigationState({ view, sessionType, role, staffSection, selectedQuestionId, examStage }) {
   if (sessionType === 'staff' && view === 'staff') {
     window.localStorage.setItem(NAV_STATE_KEY, JSON.stringify({
       sessionType: 'staff',
       role,
       staffSection,
+      selectedQuestionId: (staffSection === 'preview-question' || staffSection === 'edit-question') ? selectedQuestionId : null,
     }))
     return
   }
