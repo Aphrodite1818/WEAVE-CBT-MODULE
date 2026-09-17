@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum as PyEnum
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
 from app.domains.attempts.models import AttemptEndReason, AttemptStatus
+
+
+class AttemptConnectivityStatus(str, PyEnum):
+    ONLINE = "online"
+    RECENTLY_DISCONNECTED = "recently_disconnected"
+    STALE = "stale"
+    TERMINAL = "terminal"
 
 
 class AttemptMonitorResponse(BaseModel):
@@ -26,6 +34,8 @@ class AttemptMonitorResponse(BaseModel):
     time_limit_seconds: int
     remaining_seconds: int
     last_heartbeat_at: datetime
+    heartbeat_age_seconds: int
+    connectivity: AttemptConnectivityStatus
     last_activity_at: datetime
 
 
