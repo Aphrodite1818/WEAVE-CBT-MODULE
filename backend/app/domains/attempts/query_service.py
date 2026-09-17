@@ -2,20 +2,27 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.attempts.models import AttemptStatus, ExamAttempt
 from app.domains.attempts.query_repository import AttemptQueryRepository
-from app.domains.attempts.query_schemas import AttemptMonitorResponse
+from app.domains.attempts.query_schemas import (
+    AttemptConnectivityStatus,
+    AttemptMonitorResponse,
+)
 from app.domains.attempts.runtime_repository import AttemptRuntimeRepository
 from app.domains.attempts.service import AttemptService, AttemptStateError
 from app.domains.auth.models import LocalActor
 from app.domains.candidates.repository import CandidateRepository
 from app.domains.exams.exceptions import ExamNotFound
 from app.domains.exams.repository import ExamRepository
+
+
+ATTEMPT_HEARTBEAT_ONLINE_WITHIN = timedelta(seconds=45)
+ATTEMPT_HEARTBEAT_STALE_AFTER = timedelta(seconds=120)
 
 
 class AttemptQueryService:
@@ -45,6 +52,21 @@ class AttemptQueryService:
             consumed += max(0, total - suspended)
 
         return max(0, attempt.time_limit_seconds - consumed)
+
+    @staticmethod
+    def _connectivity(
+        attempt: ExamAttempt,
+        *,
+        at: datetime,
+    ) -> tuple[AttemptConnectivityStatus, int]:
+        age_seconds = max(0, int((at - attempt.last_heartbeat_at).total_seconds()))
+        if attempt.status in {AttemptStatus.SUBMITTED, AttemptStatus.TERMINATED}:
+            return AttemptConnectivityStatus.TERMINAL, age_seconds
+        if at - attempt.last_heartbeat_at <= ATTEMPT_HEARTBEAT_ONLINE_WITHIN:
+            return AttemptConnectivityStatus.ONLINE, age_seconds
+        if at - attempt.last_heartbeat_at <= ATTEMPT_HEARTBEAT_STALE_AFTER:
+            return AttemptConnectivityStatus.RECENTLY_DISCONNECTED, age_seconds
+        return AttemptConnectivityStatus.STALE, age_seconds
 
     @staticmethod
     async def list_exam_attempts(
@@ -102,6 +124,10 @@ class AttemptQueryService:
                     "Attempt references an unavailable examination candidate"
                 )
 
+            connectivity, heartbeat_age_seconds = AttemptQueryService._connectivity(
+                attempt,
+                at=now,
+            )
             response.append(
                 AttemptMonitorResponse(
                     id=attempt.id,
@@ -121,6 +147,8 @@ class AttemptQueryService:
                         at=now,
                     ),
                     last_heartbeat_at=attempt.last_heartbeat_at,
+                    heartbeat_age_seconds=heartbeat_age_seconds,
+                    connectivity=connectivity,
                     last_activity_at=attempt.last_activity_at,
                 )
             )
