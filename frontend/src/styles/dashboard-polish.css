@@ -1,0 +1,88 @@
+/*
+ * Staff dashboard finishing layer.
+ *
+ * This file intentionally loads after the feature styles. It owns a few
+ * cross-role visual guarantees that should remain identical for both Teacher
+ * and Administrator workspaces: comfortable viewport gutters and fully opaque
+ * floating/dialog surfaces.
+ */
+
+/* Give dashboard content a little more breathing room at the viewport edge. */
+.teacher-content {
+  width: min(1600px, calc(100% - 48px)) !important;
+}
+
+/*
+ * Modal backdrops may be translucent. The dialog surface itself must never be.
+ * Literal surface colours are used here rather than an alpha-capable theme
+ * token so content behind a dialog cannot bleed through it.
+ */
+.teacher-lifecycle-confirm-modal,
+.teacher-exam-confirm-modal,
+.admin-bank-editor-modal,
+.admin-bank-lifecycle-modal {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  opacity: 1 !important;
+  isolation: isolate !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Keep modal form controls and secondary actions visually legible as well. */
+.admin-bank-editor-modal input,
+.admin-bank-editor-modal textarea,
+.admin-bank-editor-modal .weave-select__trigger,
+.admin-bank-editor-modal .weave-select__menu,
+.admin-bank-lifecycle-modal .teacher-secondary-action,
+.admin-bank-editor-modal .teacher-secondary-action,
+.teacher-lifecycle-confirm-modal__cancel,
+.teacher-exam-confirm-modal__cancel {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  opacity: 1 !important;
+}
+
+.admin-bank-lifecycle-modal__bank,
+.teacher-lifecycle-confirm-modal__question,
+.teacher-exam-confirm-modal__exam {
+  background: #f8fafc !important;
+  background-color: #f8fafc !important;
+  opacity: 1 !important;
+}
+
+/*
+ * Floating dashboard panels follow the same rule. These are not modal
+ * backdrops, so there is no reason for the panel surface itself to be
+ * translucent.
+ */
+.teacher-quick-menu__dropdown,
+.dashboard-account__menu,
+.weave-select__menu,
+.teacher-question-lifecycle__card,
+.teacher-exam-lifecycle__menu,
+.admin-bank-card__popover,
+.admin-exam-lifecycle__menu {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  opacity: 1 !important;
+  isolation: isolate !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Backdrops stay intentionally translucent and are the only blurred layer. */
+.admin-modal-backdrop,
+.teacher-lifecycle-confirm-backdrop,
+.teacher-exam-confirm-backdrop {
+  background: rgb(15 23 42 / 0.46) !important;
+  opacity: 1 !important;
+}
+
+@media (max-width: 900px) {
+  .teacher-content {
+    width: min(1600px, calc(100% - 28px)) !important;
+  }
+}
