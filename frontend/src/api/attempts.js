@@ -2,6 +2,7 @@ export {
   getCurrentAttempt,
   getCurrentOptionImage,
   getCurrentQuestionImage,
+  heartbeatCurrentAttempt,
   saveCurrentAnswer,
   startCurrentAttempt,
   submitCurrentAttempt,
