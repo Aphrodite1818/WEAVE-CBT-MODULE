@@ -45,6 +45,8 @@ class ExamStatus(str, PyEnum):
     SEALED = "sealed"
     ACTIVE = "active"
     SUSPENDED = "suspended"
+    CLOSING = "closing"
+    CANCELLING = "cancelling"
     CLOSED = "closed"
     CANCELLED = "cancelled"
 
@@ -334,8 +336,6 @@ class Exam(Base):
             "question_count > 0",
             name="ck_exams_question_count_positive",
         ),
-        # One shared paper exists for one term + level-subject + assessment
-        # component + revision. The title is presentation, not identity.
         Index(
             "uq_exams_scope_revision",
             "term_id",
@@ -432,64 +432,34 @@ class Exam(Base):
     )
 
 
-# ========================== #
-# DRAFT QUESTION SELECTION
-# ========================== #
-
-
 class ExamQuestionSelection(Base):
     """One source question selected for a MANUAL shared draft paper."""
 
     __tablename__ = "exam_question_selections"
 
     exam_id: Mapped[UUID] = mapped_column(
-        ForeignKey("exams.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
+        ForeignKey("exams.id", ondelete="CASCADE"), nullable=False, index=True
     )
-
     question_id: Mapped[UUID] = mapped_column(
-        ForeignKey("questions.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True,
+        ForeignKey("questions.id", ondelete="RESTRICT"), nullable=False, index=True
     )
-
-    # Preserve who contributed this question to the shared paper. This is
-    # different from who originally authored the source Question row.
     added_by_actor_id: Mapped[UUID] = mapped_column(
-        ForeignKey("local_actors.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True,
+        ForeignKey("local_actors.id", ondelete="RESTRICT"), nullable=False, index=True
     )
-
     position: Mapped[int] = mapped_column(Integer, nullable=False)
 
     __table_args__ = (
         UniqueConstraint(
-            "exam_id",
-            "question_id",
-            name="uq_exam_question_selections_exam_question",
+            "exam_id", "question_id", name="uq_exam_question_selections_exam_question"
         ),
         UniqueConstraint(
-            "exam_id",
-            "position",
-            name="uq_exam_question_selections_exam_position",
+            "exam_id", "position", name="uq_exam_question_selections_exam_position"
         ),
         CheckConstraint(
-            "position >= 1",
-            name="ck_exam_question_selections_position_positive",
+            "position >= 1", name="ck_exam_question_selections_position_positive"
         ),
-        Index(
-            "ix_exam_question_selections_exam_position",
-            "exam_id",
-            "position",
-        ),
+        Index("ix_exam_question_selections_exam_position", "exam_id", "position"),
     )
-
-
-# ========================== #
-# EXAM TARGET CLASS
-# ========================== #
 
 
 class ExamTargetClass(Base):
@@ -498,44 +468,20 @@ class ExamTargetClass(Base):
     __tablename__ = "exam_target_classes"
 
     exam_id: Mapped[UUID] = mapped_column(
-        ForeignKey("exams.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
+        ForeignKey("exams.id", ondelete="CASCADE"), nullable=False, index=True
     )
-
     class_id: Mapped[UUID] = mapped_column(
-        ForeignKey("academic_classes.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True,
+        ForeignKey("academic_classes.id", ondelete="RESTRICT"), nullable=False, index=True
     )
-
     teacher_assignment_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("teacher_assignments.id", ondelete="RESTRICT"),
-        nullable=True,
-        index=True,
+        ForeignKey("teacher_assignments.id", ondelete="RESTRICT"), nullable=True, index=True
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            "exam_id",
-            "class_id",
-            name="uq_exam_target_classes_exam_class",
-        ),
-        Index(
-            "ix_exam_target_classes_class_exam",
-            "class_id",
-            "exam_id",
-        ),
-        Index(
-            "ix_exam_target_classes_assignment",
-            "teacher_assignment_id",
-        ),
+        UniqueConstraint("exam_id", "class_id", name="uq_exam_target_classes_exam_class"),
+        Index("ix_exam_target_classes_class_exam", "class_id", "exam_id"),
+        Index("ix_exam_target_classes_assignment", "teacher_assignment_id"),
     )
-
-
-# ========================== #
-# EXAM INVIGILATOR
-# ========================== #
 
 
 class ExamInvigilator(Base):
@@ -544,34 +490,16 @@ class ExamInvigilator(Base):
     __tablename__ = "exam_invigilators"
 
     exam_id: Mapped[UUID] = mapped_column(
-        ForeignKey("exams.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
+        ForeignKey("exams.id", ondelete="CASCADE"), nullable=False, index=True
     )
-
     teacher_id: Mapped[UUID] = mapped_column(
-        ForeignKey("academic_teachers.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True,
+        ForeignKey("academic_teachers.id", ondelete="RESTRICT"), nullable=False, index=True
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            "exam_id",
-            "teacher_id",
-            name="uq_exam_invigilators_exam_teacher",
-        ),
-        Index(
-            "ix_exam_invigilators_teacher_exam",
-            "teacher_id",
-            "exam_id",
-        ),
+        UniqueConstraint("exam_id", "teacher_id", name="uq_exam_invigilators_exam_teacher"),
+        Index("ix_exam_invigilators_teacher_exam", "teacher_id", "exam_id"),
     )
-
-
-# ========================== #
-# EXAM SUSPENSION
-# ========================== #
 
 
 class ExamSuspension(Base):
@@ -580,11 +508,8 @@ class ExamSuspension(Base):
     __tablename__ = "exam_suspensions"
 
     exam_id: Mapped[UUID] = mapped_column(
-        ForeignKey("exams.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True,
+        ForeignKey("exams.id", ondelete="RESTRICT"), nullable=False, index=True
     )
-
     source: Mapped[ExamSuspensionSource] = mapped_column(
         SQLEnum(
             ExamSuspensionSource,
@@ -596,31 +521,15 @@ class ExamSuspension(Base):
         ),
         nullable=False,
     )
-
-    suspended_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-    )
-
+    suspended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     suspended_by_actor_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("local_actors.id", ondelete="RESTRICT"),
-        nullable=True,
-        index=True,
+        ForeignKey("local_actors.id", ondelete="RESTRICT"), nullable=True, index=True
     )
-
     reason: Mapped[str] = mapped_column(Text, nullable=False)
-
-    resumed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-    )
-
+    resumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     resumed_by_actor_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("local_actors.id", ondelete="RESTRICT"),
-        nullable=True,
-        index=True,
+        ForeignKey("local_actors.id", ondelete="RESTRICT"), nullable=True, index=True
     )
-
     resume_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
@@ -636,17 +545,8 @@ class ExamSuspension(Base):
             "(source != 'admin') OR (suspended_by_actor_id IS NOT NULL)",
             name="ck_exam_suspensions_admin_actor_required",
         ),
-        Index(
-            "ix_exam_suspensions_exam_suspended_at",
-            "exam_id",
-            "suspended_at",
-        ),
+        Index("ix_exam_suspensions_exam_suspended_at", "exam_id", "suspended_at"),
     )
-
-
-# ========================== #
-# FROZEN EXAM QUESTION
-# ========================== #
 
 
 class ExamQuestion(Base):
@@ -655,27 +555,15 @@ class ExamQuestion(Base):
     __tablename__ = "exam_questions"
 
     exam_id: Mapped[UUID] = mapped_column(
-        ForeignKey("exams.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
+        ForeignKey("exams.id", ondelete="CASCADE"), nullable=False, index=True
     )
-
     source_question_id: Mapped[UUID] = mapped_column(
-        ForeignKey("questions.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True,
+        ForeignKey("questions.id", ondelete="RESTRICT"), nullable=False, index=True
     )
-
     source_question_version: Mapped[int] = mapped_column(Integer, nullable=False)
-
-    # Null for RANDOM papers because no teacher explicitly selected the source
-    # question. For MANUAL papers this preserves the draft contributor.
     added_by_actor_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("local_actors.id", ondelete="RESTRICT"),
-        nullable=True,
-        index=True,
+        ForeignKey("local_actors.id", ondelete="RESTRICT"), nullable=True, index=True
     )
-
     question_type: Mapped[QuestionType] = mapped_column(
         SQLEnum(
             QuestionType,
@@ -687,49 +575,20 @@ class ExamQuestion(Base):
         ),
         nullable=False,
     )
-
     position: Mapped[int] = mapped_column(Integer, nullable=False)
-
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
-
     instruction: Mapped[str | None] = mapped_column(Text, nullable=True)
-
     image_asset_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("media_assets.id", ondelete="RESTRICT"),
-        nullable=True,
-        index=True,
+        ForeignKey("media_assets.id", ondelete="RESTRICT"), nullable=True, index=True
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            "exam_id",
-            "source_question_id",
-            name="uq_exam_questions_exam_source_question",
-        ),
-        UniqueConstraint(
-            "exam_id",
-            "position",
-            name="uq_exam_questions_exam_position",
-        ),
-        CheckConstraint(
-            "source_question_version >= 1",
-            name="ck_exam_questions_source_version_positive",
-        ),
-        CheckConstraint(
-            "position >= 1",
-            name="ck_exam_questions_position_positive",
-        ),
-        Index(
-            "ix_exam_questions_exam_position",
-            "exam_id",
-            "position",
-        ),
+        UniqueConstraint("exam_id", "source_question_id", name="uq_exam_questions_exam_source_question"),
+        UniqueConstraint("exam_id", "position", name="uq_exam_questions_exam_position"),
+        CheckConstraint("source_question_version >= 1", name="ck_exam_questions_source_version_positive"),
+        CheckConstraint("position >= 1", name="ck_exam_questions_position_positive"),
+        Index("ix_exam_questions_exam_position", "exam_id", "position"),
     )
-
-
-# ========================== #
-# FROZEN QUESTION OPTION
-# ========================== #
 
 
 class ExamQuestionOption(Base):
@@ -738,45 +597,23 @@ class ExamQuestionOption(Base):
     __tablename__ = "exam_question_options"
 
     exam_question_id: Mapped[UUID] = mapped_column(
-        ForeignKey("exam_questions.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
+        ForeignKey("exam_questions.id", ondelete="CASCADE"), nullable=False, index=True
     )
-
     position: Mapped[int] = mapped_column(Integer, nullable=False)
-
     text: Mapped[str | None] = mapped_column(Text, nullable=True)
-
     image_asset_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("media_assets.id", ondelete="RESTRICT"),
-        nullable=True,
-        index=True,
+        ForeignKey("media_assets.id", ondelete="RESTRICT"), nullable=True, index=True
     )
-
     is_correct: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default=sql_text("false"),
+        Boolean, nullable=False, default=False, server_default=sql_text("false")
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            "exam_question_id",
-            "position",
-            name="uq_exam_question_options_question_position",
-        ),
-        CheckConstraint(
-            "position >= 1",
-            name="ck_exam_question_options_position_positive",
-        ),
+        UniqueConstraint("exam_question_id", "position", name="uq_exam_question_options_question_position"),
+        CheckConstraint("position >= 1", name="ck_exam_question_options_position_positive"),
         CheckConstraint(
             "text IS NOT NULL OR image_asset_id IS NOT NULL",
             name="ck_exam_question_options_content_required",
         ),
-        Index(
-            "ix_exam_question_options_question_position",
-            "exam_question_id",
-            "position",
-        ),
+        Index("ix_exam_question_options_question_position", "exam_question_id", "position"),
     )
