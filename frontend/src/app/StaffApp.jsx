@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { AdminWorkspace } from '../features/admin/AdminWorkspace'
 import { StaffLoginPage } from '../features/auth/StaffLoginPage'
 import { LandingPage } from '../features/landing/LandingPage'
@@ -17,9 +18,36 @@ export default function StaffApp() {
   })
   const branding = state.installation.configured ? state.branding : createDefaultBranding()
   const currentRole = state.session?.role || state.session?.type
+  const themeStyle = buildBrandingThemeStyle(branding)
+
+  /*
+   * Staff confirmation/editor dialogs are rendered through React portals under
+   * document.body. CSS custom properties normally inherit from .weave-app, so
+   * those portal children would otherwise lose the tenant theme entirely.
+   * Mirror the active branding tokens onto the document root while StaffApp is
+   * mounted so every portal surface resolves the same school colours as the
+   * dashboard that opened it.
+   */
+  useEffect(() => {
+    const root = document.documentElement
+    const previous = new Map()
+
+    Object.entries(themeStyle).forEach(([property, value]) => {
+      if (!property.startsWith('--')) return
+      previous.set(property, root.style.getPropertyValue(property))
+      root.style.setProperty(property, String(value))
+    })
+
+    return () => {
+      previous.forEach((value, property) => {
+        if (value) root.style.setProperty(property, value)
+        else root.style.removeProperty(property)
+      })
+    }
+  }, [themeStyle])
 
   return (
-    <div className="weave-app" style={buildBrandingThemeStyle(branding)}>
+    <div className="weave-app" style={themeStyle}>
       {state.view === 'boot' && (
         <ProductLoadingScreen
           title="Starting Weave"
