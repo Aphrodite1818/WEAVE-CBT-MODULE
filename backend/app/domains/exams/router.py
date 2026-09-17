@@ -29,6 +29,7 @@ from app.domains.exams.schemas import (
     ManualQuestionReorder,
 )
 from app.domains.exams.service import ExamService
+from app.workers.producer import arq_producer
 
 
 router = APIRouter(prefix="/exams", tags=["Exams"])
@@ -190,6 +191,11 @@ async def seal_exam(
         exam = await ExamService.seal_exam(db, actor=actor, exam_id=exam_id)
     except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
+
+    await arq_producer.enqueue(
+        "prepare_exam_roster",
+        str(exam.id)
+    )
     return ExamResponse.model_validate(exam)
 
 
@@ -271,6 +277,11 @@ async def close_exam(
         exam = await ExamService.close_exam(db, actor=actor, exam_id=exam_id)
     except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
+
+    await arq_producer.enqueue(
+        "sync_exam_results",
+        str(exam.id)
+    )
     return ExamResponse.model_validate(exam)
 
 
