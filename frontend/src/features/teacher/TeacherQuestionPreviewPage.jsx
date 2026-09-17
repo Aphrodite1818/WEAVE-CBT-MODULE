@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { RiArrowLeftLine } from '@remixicon/react'
-import { Notice } from '../../shared/ui'
-import { QuestionPreview } from './QuestionBuilder'
+import { Notice, StatusBadge } from '../../shared/ui'
+import { FormattedText } from '../../shared/ui/FormattedText'
 import './question-builder.css'
 
 export function TeacherQuestionPreviewPage({ state, dispatch, teacherData, gateway }) {
@@ -38,8 +38,6 @@ export function TeacherQuestionPreviewPage({ state, dispatch, teacherData, gatew
     text: option.text || '',
     isCorrect: Boolean(option.is_correct),
     imageAssetId: option.image_asset_id || null,
-    imageFile: null,
-    removeExistingImage: false,
   })), [question])
 
   const selectedBank = teacherData.banks.find((bank) => bank.id === question?.bank_id)
@@ -66,21 +64,77 @@ export function TeacherQuestionPreviewPage({ state, dispatch, teacherData, gatew
       {error && <Notice tone="danger">{error}</Notice>}
       {loading && <div className="question-builder-loading">Loading question preview…</div>}
       {!loading && question && (
-        <QuestionPreview
+        <SavedQuestionPreview
           gateway={gateway}
-          questionId={question.id}
+          question={question}
           selectedBank={selectedBank}
-          questionType={question.question_type}
-          prompt={question.prompt || ''}
-          instruction={question.instruction || ''}
-          questionImageFile={null}
-          questionImageAssetId={question.image_asset_id || null}
-          removeQuestionImage={false}
           options={options}
-          previewLabel="Saved question"
-          previewTone="success"
         />
       )}
     </div>
   )
+}
+
+function SavedQuestionPreview({ gateway, question, selectedBank, options }) {
+  const questionType = question.question_type
+  const prompt = question.prompt || ''
+  const instruction = question.instruction || ''
+
+  return (
+    <aside className="question-preview-card question-preview-card--page" aria-label="Student question preview">
+      <div className="question-preview-card__heading"><div><span>Student view</span><StatusBadge tone="success">Saved question</StatusBadge></div><small>{selectedBank?.name || 'Question bank'}</small></div>
+      <div className="premium-exam-content question-builder-student-preview">
+        <div className="premium-question-header"><h2>Authored by: {question.author_name}</h2></div>
+        {instruction.trim() && <p className="question-preview-instruction"><FormattedText text={instruction} /></p>}
+        <div className="premium-question-prompt"><FormattedText text={prompt} /></div>
+        {question.image_asset_id && (
+          <div className="premium-question-media"><QuestionMedia gateway={gateway} questionId={question.id} alt="Question preview" /></div>
+        )}
+        <div className="premium-options-list">
+          {options.map((option, index) => (
+            <div className="premium-option" key={option.clientId}>
+              <div className="premium-option-letter">{optionLetter(index)}</div>
+              <div className="premium-option-content">
+                {option.text.trim() && <div className="premium-option-text">{option.text}</div>}
+                {option.imageAssetId && (
+                  <div className="premium-option-media"><QuestionMedia gateway={gateway} questionId={question.id} optionId={option.id} alt={`Option ${optionLetter(index)}`} /></div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <footer><span>{questionType === 'single_choice' ? 'Single choice' : 'Multiple choice'}</span><span>{options.length} options</span></footer>
+    </aside>
+  )
+}
+
+function QuestionMedia({ gateway, questionId, optionId, alt }) {
+  const [url, setUrl] = useState('')
+
+  useEffect(() => {
+    if (!questionId || optionId === null) return undefined
+    let cancelled = false
+    let objectUrl = ''
+    const request = optionId
+      ? gateway.questions.getQuestionOptionImage(questionId, optionId)
+      : gateway.questions.getQuestionImage(questionId)
+
+    request.then((blob) => {
+      if (cancelled) return
+      objectUrl = URL.createObjectURL(blob)
+      setUrl(objectUrl)
+    }).catch(() => null)
+
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [gateway, optionId, questionId])
+
+  return url ? <img src={url} alt={alt} /> : <span className="question-media-loading">Loading image…</span>
+}
+
+function optionLetter(index) {
+  return String.fromCharCode(65 + (index % 26))
 }
