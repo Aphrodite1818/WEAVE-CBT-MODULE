@@ -100,20 +100,13 @@ class ResultRepository:
             query = query.with_for_update(of=ExamResult)
         return (await db.execute(query)).scalar_one_or_none()
 
-
-
     @staticmethod
     async def get_retryable_sync_batch_id_for_exam(
         db: AsyncSession,
         *,
         exam_id: UUID,
     ) -> UUID | None:
-        """
-        Return the oldest FAILED batch whose identity must be preserved.
-
-        A non-null sync_batch_id means the previous delivery outcome was
-        uncertain and the exact batch must be replayed.
-        """
+        """Return the oldest FAILED batch whose identity must be preserved."""
 
         query = (
             select(ExamResult)
@@ -129,15 +122,8 @@ class ResultRepository:
             )
             .limit(1)
         )
-
-        row = (
-            await db.execute(query)
-        ).scalar_one_or_none()
-
-        if row is None:
-            return None
-
-        return row.sync_batch_id
+        row = (await db.execute(query)).scalar_one_or_none()
+        return row.sync_batch_id if row is not None else None
 
     @staticmethod
     async def list_pending_results_for_exam_sync(
@@ -147,9 +133,7 @@ class ResultRepository:
         limit: int,
         lock: bool = False,
     ) -> list[ExamResult]:
-        """
-        Return fresh PENDING results which have never been assigned to a batch.
-        """
+        """Return fresh PENDING results not yet assigned to a durable batch."""
 
         query = (
             select(ExamResult)
@@ -165,19 +149,9 @@ class ResultRepository:
             )
             .limit(limit)
         )
-
         if lock:
-            query = query.with_for_update(
-                of=ExamResult,
-            )
-
-        return list(
-            (
-                await db.execute(query)
-            )
-            .scalars()
-            .all()
-        )
+            query = query.with_for_update(of=ExamResult)
+        return list((await db.execute(query)).scalars().all())
 
     @staticmethod
     async def list_results_for_sync_batch(
@@ -186,56 +160,19 @@ class ResultRepository:
         *,
         lock: bool = False,
     ) -> list[ExamResult]:
-        """
-        Return the exact durable membership of one Weave result batch.
-        """
+        """Return the exact durable membership of one Weave result batch."""
 
         query = (
             select(ExamResult)
-            .where(
-                ExamResult.sync_batch_id == sync_batch_id
-            )
+            .where(ExamResult.sync_batch_id == sync_batch_id)
             .order_by(
                 ExamResult.calculated_at.asc(),
                 ExamResult.candidate_id.asc(),
                 ExamResult.id.asc(),
             )
         )
-
         if lock:
-            query = query.with_for_update(
-                of=ExamResult,
-            )
-
-        return list(
-            (
-                await db.execute(query)
-            )
-            .scalars()
-            .all()
-        )
-
-    @staticmethod
-    async def list_results_for_sync_batch(
-        db : AsyncSession,
-        sync_batch_id : UUID,
-        *,
-        lock : bool = False
-    ) -> list[ExamResult]:
-        """Return every local result belonging to one durable Weave sync batch"""
-
-        query = select(ExamResult).where(
-            ExamResult.sync_batch_id == sync_batch_id
-        ).order_by(
-            ExamResult.calculated_at.asc(),
-            ExamResult.candidate_id.asc(),
-            ExamResult.id.asc()
-        )
-
-
-        if lock:
-            query = query.with_for_update(of = ExamResult)
-
+            query = query.with_for_update(of=ExamResult)
         return list((await db.execute(query)).scalars().all())
 
     @staticmethod
@@ -328,9 +265,11 @@ class ResultRepository:
         skip_locked: bool = False,
     ) -> list[ExamResult]:
         """Return deterministic sync work, optionally claiming rows with locks."""
+
         statuses = list(sync_statuses)
         if not statuses:
             return []
+
         query = select(ExamResult).where(ExamResult.sync_status.in_(statuses))
         if retry_before is not None:
             query = query.where(
