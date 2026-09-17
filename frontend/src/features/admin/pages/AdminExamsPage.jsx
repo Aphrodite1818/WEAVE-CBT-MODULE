@@ -18,39 +18,69 @@ import { Icon } from '../../../shared/icons/Icon'
 import { Notice, SelectControl, StatusBadge } from '../../../shared/ui'
 
 const PAGE_SIZE = 10
+const POPOVER_WIDTH = 330
+const VIEWPORT_GAP = 12
 const tabs = ['all', 'draft', 'submitted', 'sealed', 'active', 'suspended', 'closed', 'cancelled']
 
-export function AdminExamsPage({ state, adminData, gateway, onNavigate }) {
+export function AdminExamsPage({ adminData, gateway, onNavigate }) {
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
   const [subjectId, setSubjectId] = useState('all')
   const [componentId, setComponentId] = useState('all')
   const [page, setPage] = useState(1)
   const [menuExamId, setMenuExamId] = useState(null)
+  const [menuPosition, setMenuPosition] = useState(null)
   const [pending, setPending] = useState(null)
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const menuRef = useRef(null)
 
+  const closeMenu = () => {
+    setMenuExamId(null)
+    setMenuPosition(null)
+  }
+
   useEffect(() => {
     if (!menuExamId) return undefined
-    const close = (event) => {
-      if (event.type === 'keydown' && event.key === 'Escape') setMenuExamId(null)
-      if (event.type === 'pointerdown' && menuRef.current && !menuRef.current.contains(event.target)) setMenuExamId(null)
+    const closeOutside = (event) => {
+      if (!menuRef.current?.contains(event.target)) closeMenu()
     }
-    document.addEventListener('pointerdown', close)
-    document.addEventListener('keydown', close)
+    const closeEscape = (event) => {
+      if (event.key === 'Escape') closeMenu()
+    }
+    const closeViewport = () => closeMenu()
+    document.addEventListener('pointerdown', closeOutside)
+    document.addEventListener('keydown', closeEscape)
+    window.addEventListener('resize', closeViewport)
+    window.addEventListener('scroll', closeViewport, true)
     return () => {
-      document.removeEventListener('pointerdown', close)
-      document.removeEventListener('keydown', close)
+      document.removeEventListener('pointerdown', closeOutside)
+      document.removeEventListener('keydown', closeEscape)
+      window.removeEventListener('resize', closeViewport)
+      window.removeEventListener('scroll', closeViewport, true)
     }
   }, [menuExamId])
+
+  useEffect(() => {
+    if (!pending) return undefined
+    const closeEscape = (event) => {
+      if (event.key === 'Escape' && !busy) {
+        setPending(null)
+        setReason('')
+        setError('')
+      }
+    }
+    document.addEventListener('keydown', closeEscape)
+    return () => document.removeEventListener('keydown', closeEscape)
+  }, [pending, busy])
 
   const counts = useMemo(() => {
     const result = Object.fromEntries(tabs.map((item) => [item, 0]))
     result.all = adminData.exams.length
-    adminData.exams.forEach((exam) => { if (result[exam.status] !== undefined) result[exam.status] += 1 })
+    adminData.exams.forEach((exam) => {
+      if (result[exam.status] !== undefined) result[exam.status] += 1
+    })
     return result
   }, [adminData.exams])
 
@@ -67,12 +97,35 @@ export function AdminExamsPage({ state, adminData, gateway, onNavigate }) {
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-  useEffect(() => { if (page > pageCount) setPage(pageCount) }, [page, pageCount])
 
-  const setFilter = (setter) => (value) => { setter(value); setPage(1) }
+  useEffect(() => {
+    if (page > pageCount) setPage(pageCount)
+  }, [page, pageCount])
+
+  const setFilter = (setter) => (value) => {
+    setter(value)
+    setPage(1)
+  }
+
+  const toggleMenu = (exam, trigger) => {
+    if (menuExamId === exam.id) {
+      closeMenu()
+      return
+    }
+    setMenuPosition(getPopoverPosition(trigger))
+    setMenuExamId(exam.id)
+  }
+
   const request = (exam, action) => {
-    setMenuExamId(null)
+    closeMenu()
     setPending({ exam, action })
+    setReason('')
+    setError('')
+  }
+
+  const cancelPending = () => {
+    if (busy) return
+    setPending(null)
     setReason('')
     setError('')
   }
@@ -83,6 +136,7 @@ export function AdminExamsPage({ state, adminData, gateway, onNavigate }) {
       setError('Enter a reason before continuing with this lifecycle action.')
       return
     }
+
     setBusy(true)
     setError('')
     const { exam, action } = pending
@@ -107,34 +161,63 @@ export function AdminExamsPage({ state, adminData, gateway, onNavigate }) {
     }
   }
 
-  const subjectOptions = [{ value: 'all', label: 'All subjects' }, ...adminData.subjects.map((subject) => ({ value: subject.id, label: subject.name, description: subject.code || undefined }))]
-  const componentOptions = [{ value: 'all', label: 'All components' }, ...adminData.assessmentComponents.map((component) => ({ value: component.id, label: component.name, description: `${component.maximumScore} marks` }))]
+  const subjectOptions = [
+    { value: 'all', label: 'All subjects' },
+    ...adminData.subjects.map((subject) => ({
+      value: subject.id,
+      label: subject.name,
+      description: subject.code || undefined,
+    })),
+  ]
+  const componentOptions = [
+    { value: 'all', label: 'All components' },
+    ...adminData.assessmentComponents.map((component) => ({
+      value: component.id,
+      label: component.name,
+      description: `${component.maximumScore} marks`,
+    })),
+  ]
 
   return (
     <div className="teacher-reference-page teacher-exams-page admin-exams-page">
       <div className="teacher-page-heading teacher-exams-heading">
         <div>
-          <div className="teacher-page-title-line"><span className="teacher-page-title-icon"><Icon name="calendar" size={27} /></span><h1>Examinations</h1></div>
+          <div className="teacher-page-title-line">
+            <span className="teacher-page-title-icon"><Icon name="calendar" size={27} /></span>
+            <h1>Examinations</h1>
+          </div>
           <p>Create papers and control the full administrator examination lifecycle from review through closure.</p>
         </div>
-        <button className="teacher-primary-action" type="button" onClick={() => onNavigate('create-exam', { selectedExamId: null })}><RiAddLine size={18} /> Create Exam</button>
+        <button className="teacher-primary-action" type="button" onClick={() => onNavigate('create-exam', { selectedExamId: null })}>
+          <RiAddLine size={18} /> Create Exam
+        </button>
       </div>
 
       {adminData.error && <Notice tone="danger">{adminData.error}</Notice>}
       {adminData.warning && <Notice tone="warning">{adminData.warning}</Notice>}
 
       <nav className="teacher-tab-row teacher-exam-tabs" aria-label="Exam status filters">
-        {tabs.map((tab) => <button key={tab} type="button" className={status === tab ? 'active' : ''} aria-current={status === tab ? 'page' : undefined} onClick={() => setFilter(setStatus)(tab)}>{titleCase(tab)} <span>{counts[tab] || 0}</span></button>)}
+        {tabs.map((tab) => (
+          <button key={tab} type="button" className={status === tab ? 'active' : ''} aria-current={status === tab ? 'page' : undefined} onClick={() => setFilter(setStatus)(tab)}>
+            {titleCase(tab)} <span>{counts[tab] || 0}</span>
+          </button>
+        ))}
       </nav>
 
       <div className="teacher-exam-filters teacher-exam-filters--refined">
-        <label className="teacher-search-control teacher-search-control--grow"><RiSearchLine size={18} /><input aria-label="Search examinations" type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1) }} placeholder="Search by title, subject, or assessment..." /></label>
+        <label className="teacher-search-control teacher-search-control--grow">
+          <RiSearchLine size={18} aria-hidden="true" />
+          <input aria-label="Search examinations" type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1) }} placeholder="Search by title, subject, or assessment..." />
+        </label>
         <SelectControl label="Exam subject filter" value={subjectId} options={subjectOptions} onChange={setFilter(setSubjectId)} />
         <SelectControl label="Assessment component filter" value={componentId} options={componentOptions} onChange={setFilter(setComponentId)} />
       </div>
 
       <section className="teacher-exam-collection" aria-label="School examinations" aria-busy={adminData.loading}>
-        <div className="teacher-exam-collection__header" aria-hidden="true"><span>Examination</span><span>Academic context</span><span>Paper</span><span>Schedule</span><span>Status</span><span>Updated</span><span>Actions</span></div>
+        <div className="teacher-exam-collection__header" aria-hidden="true">
+          <span>Examination</span><span>Academic context</span><span>Paper</span><span>Schedule</span><span>Status</span><span>Updated</span><span>Actions</span>
+        </div>
+
         {visible.map((exam) => (
           <article className="teacher-exam-entity" key={exam.id}>
             <div className="teacher-exam-entity__title">
@@ -148,35 +231,76 @@ export function AdminExamsPage({ state, adminData, gateway, onNavigate }) {
             <div className="teacher-exam-entity__updated" data-label="Updated">{formatDate(exam.updatedAt)}</div>
             <div className="teacher-exam-entity__actions" data-label="Actions">
               <div className="teacher-exam-lifecycle" ref={menuExamId === exam.id ? menuRef : undefined}>
-                <button className="teacher-exam-lifecycle__trigger" type="button" aria-label={`Lifecycle actions for ${exam.title}`} aria-expanded={menuExamId === exam.id} onClick={() => setMenuExamId((current) => current === exam.id ? null : exam.id)}><Icon name="moreVertical" size={19} /></button>
-                {menuExamId === exam.id && <AdminLifecycleMenu exam={exam} onEdit={() => { setMenuExamId(null); onNavigate('create-exam', { selectedExamId: exam.id }) }} onAction={(action) => request(exam, action)} />}
+                <button
+                  className="teacher-exam-lifecycle__trigger"
+                  type="button"
+                  aria-label={`Lifecycle actions for ${exam.title}`}
+                  aria-haspopup="dialog"
+                  aria-expanded={menuExamId === exam.id}
+                  onClick={(event) => toggleMenu(exam, event.currentTarget)}
+                >
+                  <Icon name="moreVertical" size={19} />
+                </button>
+                {menuExamId === exam.id && menuPosition && (
+                  <AdminLifecycleMenu
+                    exam={exam}
+                    style={menuPosition}
+                    onEdit={() => { closeMenu(); onNavigate('create-exam', { selectedExamId: exam.id }) }}
+                    onAction={(action) => request(exam, action)}
+                  />
+                )}
               </div>
             </div>
           </article>
         ))}
-        {!adminData.loading && visible.length === 0 && <div className="teacher-exam-collection__empty"><span><Icon name="calendar" size={24} /></span><strong>{adminData.exams.length ? 'No examinations match these filters' : 'No examinations yet'}</strong><p>{adminData.exams.length ? 'Adjust the search or lifecycle filters.' : 'Create the first draft examination for this school.'}</p></div>}
+
+        {!adminData.loading && visible.length === 0 && (
+          <div className="teacher-exam-collection__empty">
+            <span><Icon name="calendar" size={24} /></span>
+            <strong>{adminData.exams.length ? 'No examinations match these filters' : 'No examinations yet'}</strong>
+            <p>{adminData.exams.length ? 'Adjust the search or lifecycle filters.' : 'Create the first draft examination for this school.'}</p>
+          </div>
+        )}
         {adminData.loading && <div className="teacher-exam-collection__empty"><strong>Loading examinations…</strong></div>}
-        <div className="teacher-exam-pagination teacher-exam-pagination--refined"><span>{filtered.length === 0 ? '0 exams' : `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filtered.length)} of ${filtered.length} exams`}</span><div><button type="button" disabled={page === 1} onClick={() => setPage((value) => value - 1)}>‹</button><span>{page} / {pageCount}</span><button type="button" disabled={page === pageCount} onClick={() => setPage((value) => value + 1)}>›</button></div></div>
+
+        <div className="teacher-exam-pagination teacher-exam-pagination--refined">
+          <span>{filtered.length === 0 ? '0 exams' : `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filtered.length)} of ${filtered.length} exams`}</span>
+          <div>
+            <button type="button" aria-label="Previous page" disabled={page === 1} onClick={() => setPage((value) => value - 1)}>‹</button>
+            <span>{page} / {pageCount}</span>
+            <button type="button" aria-label="Next page" disabled={page === pageCount} onClick={() => setPage((value) => value + 1)}>›</button>
+          </div>
+        </div>
       </section>
 
-      {pending && <LifecycleModal pending={pending} reason={reason} setReason={setReason} error={error} busy={busy} onCancel={() => { if (!busy) { setPending(null); setReason(''); setError('') } }} onConfirm={confirm} />}
+      {pending && <LifecycleModal pending={pending} reason={reason} setReason={setReason} error={error} busy={busy} onCancel={cancelPending} onConfirm={confirm} />}
     </div>
   )
 }
 
-function AdminLifecycleMenu({ exam, onEdit, onAction }) {
+function AdminLifecycleMenu({ exam, style, onEdit, onAction }) {
   const actions = lifecycleActions(exam)
   return (
-    <div className="teacher-exam-lifecycle__menu admin-exam-lifecycle__menu" role="dialog" aria-label={`Lifecycle for ${exam.title}`}>
-      <div className="teacher-exam-lifecycle__heading"><div><strong>Exam lifecycle</strong><span>{exam.statusLabel}</span></div><small>v{exam.authoringVersion || 1}</small></div>
-      {exam.status === 'draft' && <button type="button" onClick={onEdit}><RiEdit2Line size={18} /><span><strong>Edit draft</strong><small>Update metadata, timing and delivery settings.</small></span></button>}
-      {actions.map((action) => (
-        <button key={action.key} type="button" disabled={action.disabled} className={action.danger ? 'teacher-exam-lifecycle__danger' : ''} onClick={() => onAction(action.key)}>
-          <action.Icon size={18} />
-          <span><strong>{action.label}</strong><small>{action.copy}</small></span>
-        </button>
-      ))}
-      {!actions.length && exam.status !== 'draft' && <div className="teacher-exam-lifecycle__info"><Icon name="info" size={18} /><p>This examination is preserved in its current terminal lifecycle state.</p></div>}
+    <div className="teacher-exam-lifecycle__menu admin-exam-lifecycle__menu" role="dialog" aria-label={`Lifecycle for ${exam.title}`} style={style}>
+      <div className="teacher-exam-lifecycle__heading">
+        <div><strong>Exam lifecycle</strong><span>{exam.statusLabel}</span></div>
+        <small>v{exam.authoringVersion || 1}</small>
+      </div>
+      {exam.status === 'draft' && (
+        <button type="button" onClick={onEdit}><RiEdit2Line size={18} /><span><strong>Edit draft</strong><small>Update metadata, timing and delivery settings.</small></span></button>
+      )}
+      {actions.map((action) => {
+        const ActionIcon = action.Icon
+        return (
+          <button key={action.key} type="button" disabled={action.disabled} className={action.danger ? 'teacher-exam-lifecycle__danger' : ''} onClick={() => onAction(action.key)}>
+            <ActionIcon size={18} />
+            <span><strong>{action.label}</strong><small>{action.copy}</small></span>
+          </button>
+        )
+      })}
+      {!actions.length && exam.status !== 'draft' && (
+        <div className="teacher-exam-lifecycle__info"><Icon name="info" size={18} /><p>This examination is preserved in its current terminal lifecycle state.</p></div>
+      )}
     </div>
   )
 }
@@ -213,15 +337,24 @@ function lifecycleActions(exam) {
 
 function LifecycleModal({ pending, reason, setReason, error, busy, onCancel, onConfirm }) {
   const copy = lifecycleCopy(pending.action)
+  const ModalIcon = copy.Icon
   return createPortal(
     <div className="teacher-exam-confirm-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !busy) onCancel() }}>
-      <section className={`teacher-exam-confirm-modal${copy.danger ? ' is-danger' : ''}`} role="alertdialog" aria-modal="true">
-        <div className="teacher-exam-confirm-modal__heading"><span><copy.Icon size={22} /></span><div><h2>{copy.title}</h2><p>{copy.description}</p></div></div>
+      <section className={`teacher-exam-confirm-modal${copy.danger ? ' is-danger' : ''}`} role="alertdialog" aria-modal="true" aria-labelledby="admin-exam-confirm-title" aria-describedby="admin-exam-confirm-description">
+        <div className="teacher-exam-confirm-modal__heading">
+          <span><ModalIcon size={22} /></span>
+          <div><h2 id="admin-exam-confirm-title">{copy.title}</h2><p id="admin-exam-confirm-description">{copy.description}</p></div>
+        </div>
         <div className="teacher-exam-confirm-modal__exam"><span>Examination</span><strong>{pending.exam.title}</strong><small>{pending.exam.subjectName} · {pending.exam.assessmentName}</small></div>
-        {copy.reason && <label className="admin-exam-reason"><span>Reason</span><textarea rows="3" value={reason} onChange={(event) => setReason(event.target.value)} placeholder={copy.reasonPlaceholder} /></label>}
+        {copy.reason && (
+          <label className="admin-exam-reason"><span>Reason {requiresReason(pending.action) ? '' : '(optional)'}</span><textarea rows="3" value={reason} onChange={(event) => setReason(event.target.value)} placeholder={copy.reasonPlaceholder} /></label>
+        )}
         <p className="teacher-exam-confirm-modal__warning">{copy.warning}</p>
         {error && <Notice tone="danger">{error}</Notice>}
-        <div className="teacher-exam-confirm-modal__actions"><button type="button" className="teacher-exam-confirm-modal__cancel" disabled={busy} onClick={onCancel}>Cancel</button><button type="button" className={`teacher-exam-confirm-modal__confirm${copy.danger ? ' is-danger' : ''}`} disabled={busy} onClick={onConfirm}>{busy ? 'Working…' : copy.confirm}</button></div>
+        <div className="teacher-exam-confirm-modal__actions">
+          <button type="button" className="teacher-exam-confirm-modal__cancel" disabled={busy} onClick={onCancel}>Cancel</button>
+          <button type="button" className={`teacher-exam-confirm-modal__confirm${copy.danger ? ' is-danger' : ''}`} disabled={busy} onClick={onConfirm}>{busy ? 'Working…' : copy.confirm}</button>
+        </div>
       </section>
     </div>,
     document.body,
@@ -241,8 +374,32 @@ function lifecycleCopy(action) {
     close: ['Close this examination?', 'This ends the operational lifecycle and preserves the completed paper.', 'Close exam', RiStopCircleLine, false, false],
     cancel: ['Cancel this examination?', 'Cancellation is permanent for this revision and requires an audit reason.', 'Cancel exam', RiCloseCircleLine, true, true],
   }
-  const [title, description, confirm, Icon, danger, reason] = entries[action]
-  return { title, description, confirm, Icon, danger, reason, reasonPlaceholder: action === 'resume' ? 'Optional note for resuming this exam.' : 'Explain why this lifecycle action is required.', warning: action === 'seal' ? 'Sealing freezes the executable paper. Further authoring requires a new revision.' : 'Weave will enforce the backend lifecycle rules and reject stale or invalid transitions.' }
+  const [title, description, confirm, IconComponent, danger, reason] = entries[action]
+  return {
+    title,
+    description,
+    confirm,
+    Icon: IconComponent,
+    danger,
+    reason,
+    reasonPlaceholder: action === 'resume' ? 'Optional note for resuming this exam.' : 'Explain why this lifecycle action is required.',
+    warning: action === 'seal'
+      ? 'Sealing freezes the executable paper. Further authoring requires a new revision.'
+      : 'Weave will enforce the backend lifecycle rules and reject stale or invalid transitions.',
+  }
+}
+
+function getPopoverPosition(trigger) {
+  const rect = trigger.getBoundingClientRect()
+  const width = Math.min(POPOVER_WIDTH, Math.max(260, window.innerWidth - VIEWPORT_GAP * 2))
+  const left = Math.max(VIEWPORT_GAP, Math.min(rect.right - width, window.innerWidth - width - VIEWPORT_GAP))
+  const below = Math.max(0, window.innerHeight - rect.bottom - VIEWPORT_GAP)
+  const above = Math.max(0, rect.top - VIEWPORT_GAP)
+  const placeAbove = below < 300 && above > below
+  const maxHeight = Math.max(220, Math.min(520, placeAbove ? above : below))
+  return placeAbove
+    ? { position: 'fixed', width, left, maxHeight, bottom: window.innerHeight - rect.top + 8, top: 'auto', right: 'auto' }
+    : { position: 'fixed', width, left, maxHeight, top: rect.bottom + 8, bottom: 'auto', right: 'auto' }
 }
 
 function requiresReason(action) { return action === 'suspend' || action === 'cancel' }
