@@ -8,6 +8,7 @@ from app.core.database import DbSession
 from app.core.exceptions import AcademicAuthorizationError
 from app.domains.auth.dependencies import CurrentLocalActor
 from app.domains.candidates.exceptions import CandidateRosterError
+from app.domains.candidates.lifecycle_service import CandidateService
 from app.domains.candidates.models import CandidateStatus
 from app.domains.candidates.schemas import (
     CandidateLateStartAuthorizationResponse,
@@ -17,7 +18,6 @@ from app.domains.candidates.schemas import (
     CandidateRosterResponse,
     CandidateStatusReasonPayload,
 )
-from app.domains.candidates.service import CandidateService
 from app.domains.exams.exceptions import ExamNotFound
 
 
