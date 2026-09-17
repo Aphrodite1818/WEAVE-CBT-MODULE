@@ -1,10 +1,10 @@
 /*
  * Staff dashboard finishing layer.
  *
- * This file intentionally loads after the feature styles. It owns a few
- * cross-role visual guarantees that should remain identical for both Teacher
- * and Administrator workspaces: comfortable viewport gutters and fully opaque
- * floating/dialog surfaces.
+ * This file intentionally loads after the feature styles. It owns the visual
+ * guarantees that should remain identical for both Teacher and Administrator
+ * workspaces: comfortable viewport gutters, opaque floating surfaces,
+ * deliberate form controls, and theme-aware dashboard actions.
  */
 
 /* Give dashboard content a little more breathing room at the viewport edge. */
@@ -23,26 +23,11 @@
 .admin-bank-lifecycle-modal {
   background: #ffffff !important;
   background-color: #ffffff !important;
-  color: #0f172a !important;
+  color: rgb(var(--color-text)) !important;
   opacity: 1 !important;
   isolation: isolate !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-}
-
-/* Keep modal form controls and secondary actions visually legible as well. */
-.admin-bank-editor-modal input,
-.admin-bank-editor-modal textarea,
-.admin-bank-editor-modal .weave-select__trigger,
-.admin-bank-editor-modal .weave-select__menu,
-.admin-bank-lifecycle-modal .teacher-secondary-action,
-.admin-bank-editor-modal .teacher-secondary-action,
-.teacher-lifecycle-confirm-modal__cancel,
-.teacher-exam-confirm-modal__cancel {
-  background: #ffffff !important;
-  background-color: #ffffff !important;
-  color: #0f172a !important;
-  opacity: 1 !important;
 }
 
 .admin-bank-lifecycle-modal__bank,
@@ -71,6 +56,208 @@
   isolation: isolate !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+}
+
+/*
+ * Staff form-control standard.
+ * Inputs should read as deliberate product controls, not browser defaults and
+ * not disappear into a white card. Search inputs are handled by their wrapper
+ * further below to avoid a double border.
+ */
+.teacher-shell input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]),
+.teacher-shell textarea,
+.teacher-shell select,
+.teacher-shell .weave-select__trigger,
+.admin-bank-editor-modal input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]),
+.admin-bank-editor-modal textarea,
+.admin-bank-editor-modal select,
+.admin-bank-editor-modal .weave-select__trigger,
+.teacher-lifecycle-confirm-modal input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]),
+.teacher-lifecycle-confirm-modal textarea,
+.teacher-exam-confirm-modal input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]),
+.teacher-exam-confirm-modal textarea {
+  border: 1.5px solid color-mix(in srgb, rgb(var(--color-primary)) 20%, #cbd5e1) !important;
+  background-color: #ffffff !important;
+  color: rgb(var(--color-text)) !important;
+  box-shadow: 0 1px 2px rgb(15 23 42 / .035) !important;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease !important;
+}
+
+.teacher-shell input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]),
+.admin-bank-editor-modal input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]),
+.teacher-lifecycle-confirm-modal input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]),
+.teacher-exam-confirm-modal input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]) {
+  min-height: 46px;
+  border-radius: 10px !important;
+  padding: 0 13px;
+}
+
+.teacher-shell textarea,
+.admin-bank-editor-modal textarea,
+.teacher-lifecycle-confirm-modal textarea,
+.teacher-exam-confirm-modal textarea {
+  min-height: 108px;
+  border-radius: 10px !important;
+  padding: 12px 13px !important;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.teacher-shell input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]):hover:not(:disabled),
+.teacher-shell textarea:hover:not(:disabled),
+.teacher-shell select:hover:not(:disabled),
+.teacher-shell .weave-select__trigger:hover:not(:disabled),
+.admin-bank-editor-modal input:hover:not(:disabled),
+.admin-bank-editor-modal textarea:hover:not(:disabled),
+.admin-bank-editor-modal .weave-select__trigger:hover:not(:disabled) {
+  border-color: rgb(var(--color-primary) / .48) !important;
+}
+
+.teacher-shell input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="hidden"]):focus,
+.teacher-shell textarea:focus,
+.teacher-shell select:focus,
+.teacher-shell select:focus-visible,
+.teacher-shell .weave-select.is-open .weave-select__trigger,
+.admin-bank-editor-modal input:focus,
+.admin-bank-editor-modal textarea:focus,
+.admin-bank-editor-modal .weave-select.is-open .weave-select__trigger,
+.teacher-lifecycle-confirm-modal input:focus,
+.teacher-lifecycle-confirm-modal textarea:focus,
+.teacher-exam-confirm-modal input:focus,
+.teacher-exam-confirm-modal textarea:focus {
+  outline: 0 !important;
+  border-color: rgb(var(--color-primary)) !important;
+  box-shadow: 0 0 0 3px rgb(var(--color-primary) / .12), 0 5px 16px rgb(var(--color-primary) / .07) !important;
+}
+
+.teacher-shell input::placeholder,
+.teacher-shell textarea::placeholder,
+.admin-bank-editor-modal input::placeholder,
+.admin-bank-editor-modal textarea::placeholder,
+.teacher-lifecycle-confirm-modal input::placeholder,
+.teacher-lifecycle-confirm-modal textarea::placeholder,
+.teacher-exam-confirm-modal input::placeholder,
+.teacher-exam-confirm-modal textarea::placeholder {
+  color: rgb(var(--color-text-muted)) !important;
+  opacity: .82;
+}
+
+.teacher-shell input:disabled,
+.teacher-shell textarea:disabled,
+.teacher-shell select:disabled,
+.teacher-shell .weave-select__trigger:disabled,
+.admin-bank-editor-modal input:disabled,
+.admin-bank-editor-modal textarea:disabled,
+.admin-bank-editor-modal .weave-select__trigger:disabled {
+  border-color: #d8dee8 !important;
+  background: #f8fafc !important;
+  color: rgb(var(--color-text-muted)) !important;
+  box-shadow: none !important;
+  cursor: not-allowed;
+}
+
+/* Search controls already own the visible border; keep the inner input clean. */
+.teacher-shell .teacher-search-control input,
+.teacher-shell .search-field input {
+  min-height: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+}
+
+.teacher-shell .teacher-search-control:focus-within,
+.teacher-shell .search-field:focus-within {
+  border-color: rgb(var(--color-primary)) !important;
+  box-shadow: 0 0 0 3px rgb(var(--color-primary) / .11), 0 8px 22px rgb(var(--color-primary) / .06) !important;
+}
+
+/* Native selects and the shared SelectControl use the same visible hierarchy. */
+.teacher-shell select,
+.admin-bank-editor-modal select,
+.teacher-shell .weave-select__trigger,
+.admin-bank-editor-modal .weave-select__trigger {
+  min-height: 46px;
+  border-radius: 10px !important;
+}
+
+.teacher-shell .weave-select__menu,
+.admin-bank-editor-modal .weave-select__menu {
+  border: 1px solid color-mix(in srgb, rgb(var(--color-primary)) 16%, #cbd5e1) !important;
+  box-shadow: 0 20px 48px rgb(15 23 42 / .16) !important;
+}
+
+/*
+ * Dashboard action standard.
+ * Primary actions use the school colour. Secondary actions use a soft version
+ * of the same colour instead of disappearing into the modal/card background.
+ */
+.teacher-shell .teacher-primary-action,
+.admin-modal-actions .teacher-primary-action,
+.teacher-lifecycle-confirm-modal__confirm,
+.teacher-exam-confirm-modal__confirm {
+  border: 1px solid rgb(var(--color-primary)) !important;
+  background: rgb(var(--color-primary)) !important;
+  background-color: rgb(var(--color-primary)) !important;
+  color: rgb(var(--color-on-primary)) !important;
+  box-shadow: 0 9px 20px rgb(var(--color-primary) / .18) !important;
+}
+
+.teacher-shell .teacher-secondary-action,
+.admin-modal-actions .teacher-secondary-action,
+.teacher-lifecycle-confirm-modal__cancel,
+.teacher-exam-confirm-modal__cancel {
+  border: 1px solid rgb(var(--color-primary) / .30) !important;
+  background: color-mix(in srgb, rgb(var(--color-primary-soft)) 76%, #ffffff) !important;
+  background-color: color-mix(in srgb, rgb(var(--color-primary-soft)) 76%, #ffffff) !important;
+  color: rgb(var(--color-primary)) !important;
+  box-shadow: none !important;
+}
+
+.teacher-shell .teacher-primary-action:hover:not(:disabled),
+.admin-modal-actions .teacher-primary-action:hover:not(:disabled),
+.teacher-lifecycle-confirm-modal__confirm:hover:not(:disabled),
+.teacher-exam-confirm-modal__confirm:hover:not(:disabled) {
+  filter: brightness(.94);
+}
+
+.teacher-shell .teacher-secondary-action:hover:not(:disabled),
+.admin-modal-actions .teacher-secondary-action:hover:not(:disabled),
+.teacher-lifecycle-confirm-modal__cancel:hover:not(:disabled),
+.teacher-exam-confirm-modal__cancel:hover:not(:disabled) {
+  border-color: rgb(var(--color-primary) / .48) !important;
+  background: color-mix(in srgb, rgb(var(--color-primary-soft)) 92%, #ffffff) !important;
+}
+
+.teacher-shell .teacher-primary-action:focus-visible,
+.teacher-shell .teacher-secondary-action:focus-visible,
+.admin-modal-actions .teacher-primary-action:focus-visible,
+.admin-modal-actions .teacher-secondary-action:focus-visible,
+.teacher-lifecycle-confirm-modal__actions button:focus-visible,
+.teacher-exam-confirm-modal__actions button:focus-visible {
+  outline: 0 !important;
+  box-shadow: 0 0 0 3px rgb(var(--color-primary) / .15), 0 8px 20px rgb(var(--color-primary) / .12) !important;
+}
+
+/* Destructive actions stay semantically red rather than inheriting the theme. */
+.admin-danger-action,
+.teacher-lifecycle-confirm-modal__confirm--danger,
+.teacher-exam-confirm-modal__confirm.is-danger {
+  border-color: #b91c1c !important;
+  background: #b91c1c !important;
+  background-color: #b91c1c !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 20px rgb(185 28 28 / .20) !important;
+}
+
+.admin-modal-actions button,
+.teacher-lifecycle-confirm-modal__actions button,
+.teacher-exam-confirm-modal__actions button {
+  min-height: 42px;
+  border-radius: 9px;
+  padding-inline: 16px;
+  font-weight: 760;
 }
 
 /* Backdrops stay intentionally translucent and are the only blurred layer. */
