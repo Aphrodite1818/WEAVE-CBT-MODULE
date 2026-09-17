@@ -19,3 +19,7 @@ class QuestionAuthorizationError(QuestionDomainError):
 
 class QuestionScopeError(QuestionDomainError):
     """Raised when a question bank references an invalid academic scope."""
+
+
+class QuestionConflictError(QuestionDomainError):
+    """Raised when a question mutation conflicts with newer persisted state."""
