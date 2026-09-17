@@ -6,7 +6,7 @@ import asyncio
 import logging
 import time
 from contextlib import suppress
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import text
@@ -27,16 +27,20 @@ RUNTIME_GAP_REASON = (
     "CBT server interruption detected. Examination paused automatically to protect "
     "candidate writing time."
 )
+RUNTIME_SHUTDOWN_EXAM_REASON = (
+    "CBT server is shutting down. Examination paused automatically until an "
+    "administrator confirms that the server and candidate devices are ready."
+)
 
 
 class RuntimeHeartbeatService:
-    """Own one durable heartbeat for the FastAPI runtime.
+    """Own one durable PostgreSQL heartbeat for the FastAPI runtime.
 
-    The service deliberately records heartbeats in PostgreSQL, not Redis. On an
-    unclean restart it suspends ACTIVE exams from the previous runtime's last
-    durable heartbeat. It also detects long in-process heartbeat gaps (database
-    outage, OS sleep, event-loop freeze) and applies the same conservative
-    suspension without requiring a process restart.
+    An unclean restart backdates system suspension to the previous runtime's
+    last durable heartbeat. Long in-process gaps (database outage, OS sleep,
+    event-loop freeze) use the same protection. A graceful server shutdown also
+    suspends ACTIVE exams first, so planned restarts cannot silently consume
+    candidate writing time.
     """
 
     def __init__(self) -> None:
@@ -52,9 +56,7 @@ class RuntimeHeartbeatService:
 
     async def _recover_pending_worker_operations(self) -> None:
         async with async_session_factory() as db:
-            closing, cancelling = await ExamExecutionService.list_pending_operation_exam_ids(
-                db
-            )
+            closing, cancelling = await ExamExecutionService.list_pending_operation_exam_ids(db)
             await db.rollback()
 
         for exam_id in closing:
@@ -69,12 +71,17 @@ class RuntimeHeartbeatService:
                 len(cancelling),
             )
 
-    async def _recover_runtime_gap(self, outage_started_at: datetime) -> None:
+    async def _recover_runtime_gap(
+        self,
+        outage_started_at: datetime,
+        *,
+        reason: str = RUNTIME_GAP_REASON,
+    ) -> None:
         async with async_session_factory() as db:
             suspended = await ExamExecutionService.suspend_active_exams_after_runtime_gap(
                 db,
                 outage_started_at=outage_started_at,
-                reason=RUNTIME_GAP_REASON,
+                reason=reason,
             )
         if suspended:
             logger.warning(
@@ -86,11 +93,10 @@ class RuntimeHeartbeatService:
         if self._task is not None:
             return
 
-        now = datetime.now(UTC)
-
-        # Serialize startup/crash recovery. Recovery happens before the new
-        # runtime row is inserted, so a second crash during recovery will see
-        # the same prior unclean runtime and safely repeat the operation.
+        # Recovery intentionally happens before a new runtime row is created.
+        # If the process dies halfway through recovery, the next boot sees the
+        # same unclean predecessor and safely repeats recovery from the same
+        # heartbeat cutoff.
         async with async_session_factory() as db:
             await db.execute(
                 text("SELECT pg_advisory_xact_lock(:lock_key)"),
@@ -111,6 +117,7 @@ class RuntimeHeartbeatService:
             )
             await self._recover_runtime_gap(previous_gap_at)
 
+        now = datetime.now(UTC)
         runtime_id = uuid4()
         async with async_session_factory() as db:
             runtime = CBTRuntimeState(
@@ -139,9 +146,7 @@ class RuntimeHeartbeatService:
         if runtime_id is None:
             return
         async with async_session_factory() as db:
-            runtime = await RuntimeRepository.get_runtime_state_by_id(
-                db, runtime_id, lock=True
-            )
+            runtime = await RuntimeRepository.get_runtime_state_by_id(db, runtime_id, lock=True)
             if runtime is None or runtime.stopped_at is not None:
                 await db.rollback()
                 raise RuntimeError("Active CBT runtime heartbeat row is unavailable")
@@ -164,23 +169,14 @@ class RuntimeHeartbeatService:
             monotonic_now = time.monotonic()
             last_at = self._last_successful_heartbeat_at
             last_mono = self._last_successful_monotonic
-
-            gap_seconds = (
-                monotonic_now - last_mono if last_mono is not None else 0.0
-            )
+            gap_seconds = monotonic_now - last_mono if last_mono is not None else 0.0
 
             try:
-                if (
-                    last_at is not None
-                    and gap_seconds >= RUNTIME_GAP_SUSPEND_AFTER_SECONDS
-                ):
-                    # A process that stayed alive but could not heartbeat for a
-                    # meaningful interval is operationally equivalent to an
-                    # outage for exam candidates. Suspend before advancing the
-                    # heartbeat so the timer cutoff remains the last known good
-                    # instant.
+                if last_at is not None and gap_seconds >= RUNTIME_GAP_SUSPEND_AFTER_SECONDS:
+                    # Do not advance the heartbeat before recovery. The previous
+                    # durable timestamp is the conservative cutoff protecting
+                    # candidate time through the entire unavailable interval.
                     await self._recover_runtime_gap(last_at)
-
                 await self._write_heartbeat(now)
             except asyncio.CancelledError:
                 raise
@@ -210,13 +206,16 @@ class RuntimeHeartbeatService:
 
         now = datetime.now(UTC)
         try:
+            # A graceful restart is still downtime to candidates. Pause ACTIVE
+            # exams before recording the runtime as cleanly stopped.
+            await self._recover_runtime_gap(
+                now,
+                reason=RUNTIME_SHUTDOWN_EXAM_REASON,
+            )
+
             async with async_session_factory() as db:
-                runtime = await RuntimeRepository.get_runtime_state_by_id(
-                    db, runtime_id, lock=True
-                )
+                runtime = await RuntimeRepository.get_runtime_state_by_id(db, runtime_id, lock=True)
                 if runtime is not None and runtime.stopped_at is None:
-                    # Keep the model's stopped_at >= last_heartbeat_at invariant
-                    # even if the wall clock moved slightly backwards.
                     stopped_at = max(now, runtime.last_heartbeat_at)
                     runtime.last_heartbeat_at = stopped_at
                     runtime.stopped_at = stopped_at
@@ -226,8 +225,8 @@ class RuntimeHeartbeatService:
                 else:
                     await db.rollback()
         except Exception:
-            # Failing to record clean shutdown is intentionally conservative:
-            # the next boot will treat it as unclean and suspend active exams.
+            # If clean shutdown cannot be persisted, the next boot treats the
+            # runtime as unclean and repeats conservative exam protection.
             logger.exception("Could not persist clean CBT runtime shutdown")
 
         logger.info("CBT runtime heartbeat stopped: %s", runtime_id)
