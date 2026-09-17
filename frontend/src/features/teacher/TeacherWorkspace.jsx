@@ -9,6 +9,7 @@ import { TeacherQuestionsPage } from "./TeacherQuestionsPage";
 import { TeacherQuestionPreviewPage } from "./TeacherQuestionPreviewPage";
 import "./teacher-dashboard.css";
 import "./teacher-selects.css";
+import "./teacher-exams.css";
 
 const emptyTeacherData = {
   banks: [],
@@ -94,6 +95,7 @@ export function TeacherWorkspace({
       )}
       {state.staff.section === "create-exam" && (
         <TeacherCreateExamPage
+          state={state}
           dispatch={dispatch}
           teacherData={teacherData}
           gateway={gateway}
@@ -259,13 +261,15 @@ async function loadTeacherData(gateway) {
 }
 
 function normalizeBank(bank, questions) {
+  const bankQuestions = questions.filter((question) => question.bankId === bank.id);
   return {
     id: bank.id,
     curriculumSubjectId: bank.curriculum_subject_id,
     name: bank.name,
     description: bank.description,
     status: bank.is_active ? "Ready" : "Archived",
-    count: questions.filter((question) => question.bankId === bank.id).length,
+    count: bankQuestions.length,
+    activeQuestionCount: bankQuestions.filter((question) => question.status === "Ready").length,
   };
 }
 
@@ -358,7 +362,10 @@ function normalizeExam(exam, subjectByCurriculum, componentById) {
   const component = componentById.get(exam.assessment_component_id);
   return {
     id: exam.id,
+    sessionId: exam.session_id,
+    termId: exam.term_id,
     title: exam.title,
+    instructions: exam.instructions || "",
     subjectName: subject?.name || "Subject",
     subjectCode: subject?.code || "",
     curriculumSubjectId: exam.curriculum_subject_id,
@@ -369,6 +376,8 @@ function normalizeExam(exam, subjectByCurriculum, componentById) {
     questionCount: exam.question_count,
     selectionMode: exam.question_selection_mode,
     durationMinutes: exam.duration_minutes,
+    shuffleQuestions: exam.shuffle_questions,
+    shuffleOptions: exam.shuffle_options,
     status,
     statusLabel: status
       .replaceAll("_", " ")
@@ -378,6 +387,9 @@ function normalizeExam(exam, subjectByCurriculum, componentById) {
     rosterStatus: exam.roster_status,
     rosterCandidateCount: exam.roster_candidate_count,
     authoringVersion: exam.authoring_version,
+    revisionNumber: exam.revision_number,
+    revisionOfExamId: exam.revision_of_exam_id,
+    createdByActorId: exam.created_by_actor_id,
     componentMaximumScore: exam.component_maximum_score,
     createdAt: exam.created_at,
     updatedAt: exam.updated_at,
