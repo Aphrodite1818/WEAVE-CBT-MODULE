@@ -5,10 +5,10 @@ import { DashboardAccountMenu, DashboardSchoolIdentity } from '../../shared/ui'
 import { QuestionBuilder } from '../teacher/QuestionBuilder'
 import { TeacherCreateExamPage } from '../teacher/TeacherExamsPage'
 import { TeacherQuestionPreviewPage } from '../teacher/TeacherQuestionPreviewPage'
-import { TeacherQuestionsPage } from '../teacher/TeacherQuestionsPage'
 import { AdminExamsPage } from './pages/AdminExamsPage'
 import { AdminOverview } from './pages/AdminOverview'
 import { AdminBankDetailPage, AdminQuestionBanksPage } from './pages/AdminQuestionBanks'
+import { AdminQuestionsPage } from './pages/AdminQuestionsPage'
 import { useAdminData } from './useAdminData'
 import '../teacher/teacher-dashboard.css'
 import '../teacher/teacher-selects.css'
@@ -115,7 +115,7 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
             <AdminQuestionBanksPage adminData={adminData} gateway={gateway} onNavigate={navigate} createRequested={workspaceView === 'create-bank'} onCreateHandled={() => setWorkspaceView('question-banks')} />
           )}
           {workspaceView === 'bank-detail' && <AdminBankDetailPage state={state} adminData={adminData} onNavigate={navigate} />}
-          {workspaceView === 'questions' && <TeacherQuestionsPage state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
+          {workspaceView === 'questions' && <AdminQuestionsPage state={state} dispatch={workspaceDispatch} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
           {workspaceView === 'preview-question' && <TeacherQuestionPreviewPage state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
           {workspaceView === 'create-question' && <QuestionBuilder mode="create" state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
           {workspaceView === 'edit-question' && <QuestionBuilder key={state.staff.selectedQuestionId || 'admin-question-editor'} mode="edit" state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
