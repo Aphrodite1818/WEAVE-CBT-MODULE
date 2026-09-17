@@ -59,6 +59,22 @@ class StudentAuthRepository:
         return list(result.scalars().all())
 
     @staticmethod
+    async def list_unrevoked_sessions_for_exam(
+        db: AsyncSession,
+        exam_id: UUID,
+        *,
+        lock: bool = False,
+    ) -> list[StudentExamSession]:
+        query = select(StudentExamSession).where(
+            StudentExamSession.exam_id == exam_id,
+            StudentExamSession.revoked_at.is_(None),
+        )
+        if lock:
+            query = query.with_for_update(of=StudentExamSession)
+        result = await db.execute(query.order_by(StudentExamSession.created_at.asc()))
+        return list(result.scalars().all())
+
+    @staticmethod
     async def list_unrevoked_sessions_for_student(
         db: AsyncSession,
         student_id: UUID,
