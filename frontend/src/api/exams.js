@@ -20,9 +20,19 @@ export function configureExamQuestions(examId, payload) {
   return weaveRequest(`/exams/${examId}/questions/configuration`, { method: 'PUT', body: payload })
 }
 
-export const submitExam = (examId) => weaveRequest(`/exams/${examId}/submit`, { method: 'POST' })
+export function submitExam(examId, expectedAuthoringVersion = 1) {
+  return weaveRequest(`/exams/${examId}/submit`, {
+    method: 'POST',
+    body: { expected_authoring_version: expectedAuthoringVersion },
+  })
+}
+
 export const returnExamToDraft = (examId) => weaveRequest(`/exams/${examId}/return-to-draft`, { method: 'POST' })
-export const deleteDraftExam = (examId) => weaveRequest(`/exams/${examId}`, { method: 'DELETE' })
+
+export function deleteDraftExam(examId, expectedAuthoringVersion = 1) {
+  return weaveRequest(`/exams/${examId}${queryString({ expected_authoring_version: expectedAuthoringVersion })}`, { method: 'DELETE' })
+}
+
 export const sealExam = (examId) => weaveRequest(`/exams/${examId}/seal`, { method: 'POST' })
 export const createRevision = (examId) => weaveRequest(`/exams/${examId}/revisions`, { method: 'POST' })
 export const activateExam = (examId) => weaveRequest(`/exams/${examId}/activate`, { method: 'POST' })
