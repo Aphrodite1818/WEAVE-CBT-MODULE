@@ -3,6 +3,8 @@ import { Metric, Notice, StatusBadge, WeaveLogo } from '../../shared/ui'
 import { FormattedText } from '../../shared/ui/FormattedText'
 import './student.css'
 
+const HEARTBEAT_RETRY_MS = 10_000
+
 export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnToSignIn }) {
   const [attempt, setAttempt] = useState(null)
   const [attemptError, setAttemptError] = useState('')
@@ -25,6 +27,54 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
       cancelled = true
     }
   }, [exam.stage, gateway])
+
+  useEffect(() => {
+    if (exam.stage !== 'active' || !attempt?.id || submitted) return undefined
+
+    let stopped = false
+    let timerId = null
+
+    const schedule = (milliseconds) => {
+      if (!stopped) timerId = window.setTimeout(sendHeartbeat, milliseconds)
+    }
+
+    const sendHeartbeat = async () => {
+      try {
+        const heartbeat = await gateway.attempts.heartbeatCurrentAttempt()
+        if (stopped) return
+        setAttempt((currentAttempt) => currentAttempt
+          ? {
+              ...currentAttempt,
+              remaining_seconds: heartbeat.remaining_seconds,
+              exam_suspended: heartbeat.exam_suspended,
+            }
+          : currentAttempt)
+        const nextSeconds = Number(heartbeat.next_heartbeat_after_seconds) || 20
+        schedule(Math.max(5, nextSeconds) * 1000)
+      } catch {
+        // Heartbeat loss is monitoring evidence, not an academic-state change.
+        // Keep the student UI usable and retry; answer saves/submission surface
+        // their own errors separately.
+        schedule(HEARTBEAT_RETRY_MS)
+      }
+    }
+
+    sendHeartbeat()
+
+    const handleVisibility = () => {
+      if (!document.hidden && !stopped) {
+        if (timerId) window.clearTimeout(timerId)
+        sendHeartbeat()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      stopped = true
+      if (timerId) window.clearTimeout(timerId)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [attempt?.id, exam.stage, gateway, submitted])
 
   if (exam.stage === 'submitted' || submitted) {
     return (
