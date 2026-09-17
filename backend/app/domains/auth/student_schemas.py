@@ -13,6 +13,7 @@ class StudentExamAvailability(str, PyEnum):
     NO_EXAM = "no_exam"
     WAITING_FOR_ACTIVATION = "waiting_for_activation"
     READY = "ready"
+    SUSPENDED = "suspended"
     MAKEUP = "makeup"
 
 
