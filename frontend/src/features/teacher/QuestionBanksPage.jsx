@@ -129,6 +129,18 @@ export function BankDetailPage({ state, dispatch, teacherData }) {
     return <><PageTitle title="Question Bank" subtitle="No bank selected." /><Notice>No authorable question banks were returned by the backend.</Notice></>
   }
 
+  const previewQuestion = (question) => {
+    dispatch({
+      type: 'staff',
+      patch: {
+        section: 'preview-question',
+        selectedBankId: question.bankId,
+        selectedQuestionId: question.id,
+        editingQuestion: null,
+      },
+    })
+  }
+
   return (
     <div className="teacher-reference-page teacher-bank-detail">
       <div className="teacher-bank-detail__heading">
@@ -143,7 +155,7 @@ export function BankDetailPage({ state, dispatch, teacherData }) {
           <RiArrowLeftLine size={18} aria-hidden="true" /> Back to question banks
         </button>
       </div>
-      <QuestionRows questions={questions} />
+      <QuestionRows questions={questions} onPreview={previewQuestion} />
     </div>
   )
 }

@@ -836,6 +836,11 @@ button.teacher-overview-stat:hover {
   min-height: 92px;
   border-bottom: 1px solid rgb(var(--color-border));
   padding: 18px 20px 18px 76px;
+  transition: background 150ms ease;
+}
+
+.teacher-bank-question-row:hover {
+  background: color-mix(in srgb, rgb(var(--color-primary-soft)) 22%, rgb(var(--color-surface)));
 }
 
 .teacher-bank-question-row:last-child {

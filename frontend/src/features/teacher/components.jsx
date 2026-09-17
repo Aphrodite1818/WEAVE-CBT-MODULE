@@ -6,7 +6,7 @@ export function BankIcon({ name }) {
   return <span className={`bank-icon bank-icon--${name}`}><Icon name={iconName} size={34} /></span>
 }
 
-export function QuestionRows({ questions }) {
+export function QuestionRows({ questions, onPreview }) {
   if (!questions.length) {
     return (
       <section className="teacher-bank-question-list teacher-bank-question-list--empty" aria-label="Questions in this bank">
@@ -26,6 +26,7 @@ export function QuestionRows({ questions }) {
       </div>
       {questions.map((question, index) => (
         <article className="teacher-bank-question-row" key={question.id}>
+          {onPreview && <button className="teacher-question-row__preview" type="button" aria-label={`Preview question: ${question.prompt}`} onClick={() => onPreview(question)} />}
           <span className="teacher-bank-question-row__number">{index + 1}</span>
           <div className="teacher-bank-question-row__prompt">
             <strong>{question.prompt}</strong>
