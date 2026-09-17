@@ -2,6 +2,7 @@ import { weaveBlobRequest, weaveRequest } from './client'
 
 export const startCurrentAttempt = () => weaveRequest('/student/attempts/current/start', { method: 'POST', staffAuth: false })
 export const getCurrentAttempt = () => weaveRequest('/student/attempts/current', { staffAuth: false })
+export const heartbeatCurrentAttempt = () => weaveRequest('/student/attempts/current/heartbeat', { method: 'POST', staffAuth: false })
 export const submitCurrentAttempt = () => weaveRequest('/student/attempts/current/submit', { method: 'POST', staffAuth: false })
 
 export function saveCurrentAnswer(attemptQuestionId, payload) {
