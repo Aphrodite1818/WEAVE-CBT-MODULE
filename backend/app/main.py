@@ -20,6 +20,7 @@ from app.domains.auth.student_router import router as student_auth_router
 from app.domains.branding.router import router as branding_router
 from app.domains.candidates.makeup_router import router as makeup_router
 from app.domains.candidates.router import router as candidates_router
+from app.domains.exams.execution_router import router as exam_execution_router
 from app.domains.exams.read_router import router as exam_read_router
 from app.domains.exams.router import router as exams_router
 from app.domains.exams.timetable_router import router as timetable_router
@@ -29,6 +30,7 @@ from app.domains.questions.exceptions import QuestionConflictError
 from app.domains.questions.management_router import router as question_management_router
 from app.domains.questions.router import router as questions_router
 from app.domains.results.router import router as results_router
+from app.domains.runtime.service import runtime_heartbeat_service
 from app.domains.sync.router import router as sync_router
 from app.domains.sync.supervisor import sync_supervisor
 from app.integrations.weave.client import weave_client
@@ -37,14 +39,18 @@ from app.workers.producer import arq_producer
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Start local infrastructure and non-blocking background coordination."""
+    """Start durable runtime recovery and non-blocking coordination."""
 
     await check_database_connection()
 
-    # ARQ/Redis is supporting infrastructure rather than durable state.
-    # Startup therefore continues in degraded mode when Redis is unavailable;
-    # PostgreSQL-backed maintenance recovery can reconstruct missed work later.
+    # Redis is supporting infrastructure. PostgreSQL remains authoritative and
+    # maintenance reconstructs missed jobs if queue delivery is unavailable.
     await arq_producer.start()
+
+    # Start the durable runtime heartbeat before serving traffic. An unclean
+    # previous boot is recovered here, including backdated exam suspension and
+    # re-enqueue of partially completed close/cancel operations.
+    await runtime_heartbeat_service.start()
 
     sync_task = asyncio.create_task(
         sync_supervisor.run(), name="weave-cbt-sync-supervisor"
@@ -58,6 +64,10 @@ async def lifespan(_app: FastAPI):
         with suppress(asyncio.CancelledError):
             await sync_task
 
+        # Persist clean shutdown before Redis/database resources are released.
+        # If this write fails, the next boot deliberately treats the stop as
+        # unclean and protects any active exam by suspending it.
+        await runtime_heartbeat_service.stop()
         await arq_producer.close()
         await weave_client.close()
         await close_redis_client()
@@ -102,6 +112,7 @@ for router in (
     questions_router,
     exam_read_router,
     exams_router,
+    exam_execution_router,
     timetable_router,
     candidates_router,
     makeup_router,
