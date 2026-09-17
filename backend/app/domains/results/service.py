@@ -96,7 +96,7 @@ class ResultService:
             component_maximum_score=component_max,
             calculated_at=datetime.now(UTC),
             sync_status=ResultSyncStatus.PENDING,
-            idempotency_key=f"cbt:{exam.id}:{candidate.id}",
+            sync_batch_id = None,
             sync_attempts=0,
         )
         try:

@@ -288,3 +288,108 @@ class WeaveSyncDelta(SyncContractBase):
     next_cursor: int = Field(ge=0)
     has_more: bool
     changes: list[WeaveSyncChange]
+
+
+
+
+
+class WeaveResultScore(BaseModel):
+    """One student's component score sent from CBT to Weave"""
+
+
+    model_config = ConfigDict(
+        extra = "forbid"
+    )
+
+
+    student_id :  UUID
+    score : Decimal = Field(
+        ge = 0,
+        max_digits = 5,
+        decimal_places = 2
+    )
+
+
+
+class WeaveResultBulkRequest(BaseModel):
+    """One local CBT exam result batch sent to Weave"""
+
+    model_config = ConfigDict(extra = "forbid")
+
+    batch_id : UUID
+    source_exam_id : UUID
+    academic_session_id : UUID
+    academic_term_id : UUID
+    curriculum_subject_id : UUID
+    assessment_component_id : UUID
+    exam_date : date
+
+
+
+    scores : list[WeaveResultScore] = Field(
+        min_length = 1,
+        max_length = 1000
+    )
+
+
+    @model_validator(mode="after")
+    def validate_unique_students(self) -> "WeaveResultBulkRequest":
+        student_ids = [item.student_id for item in self.scores]
+
+        if len(student_ids) != len(set(student_ids)):
+            raise ValueError(
+                "Each student may appear only once in a Weave result batch."
+            )
+
+        return self
+
+
+
+
+class WeaveResultBulkError(BaseModel):
+    """One student score rejected by Weave"""
+
+
+    model_config = ConfigDict(extra = "forbid")
+
+
+
+    student_id : UUID
+    code : str = Field(min_length = 1 , max_length = 100)
+    detail : str = Field(min_length = 1 , max_length=1000)
+
+
+
+class WeaveResultBulkResponse(BaseModel):
+    """Acknowledgement returned by Weave after processing a result batch"""
+
+
+    model_config = ConfigDict(extra = "forbid")
+
+
+    batch_id : UUID
+    source_exam_id : UUID
+    processed_at : datetime
+
+    received : int = Field(ge = 0)
+    applied : int = Field(ge = 0)
+    unchanged : int = Field(ge = 0)
+    rejected : int = Field(ge = 0)
+
+    errors : list[WeaveResultBulkError] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_processing_counts(self) -> "WeaveResultBulkResponse":
+        processed = self.applied + self.unchanged + self.rejected
+
+        if processed != self.received:
+            raise ValueError(
+                "Applied, unchanged and rejected counts must equal received count."
+            )
+
+        if len(self.errors) != self.rejected:
+            raise ValueError(
+                "Each rejected result must have a corresponding error."
+            )
+
+        return self

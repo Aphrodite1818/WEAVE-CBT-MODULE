@@ -19,7 +19,6 @@ from sqlalchemy import (
     Index,
     Integer,
     Numeric,
-    String,
     Text,
     UniqueConstraint,
     func,
@@ -30,8 +29,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
 
-WEAVE_ID_MAX_LENGTH = 128
-RESULT_IDEMPOTENCY_KEY_MAX_LENGTH = 128
 RESULT_SYNC_ERROR_MAX_LENGTH = 1024
 
 
@@ -239,21 +236,16 @@ class ExamResult(Base):
         index=True,
     )
 
-    # Stable key sent with synchronization requests so repeating the same
-    # job after a timeout/crash cannot create duplicate Weave results.
-    idempotency_key: Mapped[str] = mapped_column(
-        String(RESULT_IDEMPOTENCY_KEY_MAX_LENGTH),
-        nullable=False,
-        unique=True,
-        index=True,
-    )
+    # Stable Weave ingestion batch containing this result
+    #Weave performs CBT result ingestion in batches rather than assigning
+    #an independent idempotency key to every local result
+    #The batch UUID is persisted before the newtork request is made so an
+    #uncertain retry after timeout, crash or power loss can reconstruct
+    #and resend the exact same logical batch
 
-    # Identifier returned by Weave after successful synchronization.
-    weave_result_id: Mapped[str | None] = mapped_column(
-        String(WEAVE_ID_MAX_LENGTH),
-        nullable=True,
-        unique=True,
-        index=True,
+    sync_batch_id : Mapped[UUID | None] = mapped_column(
+        nullable = True,
+        index = True
     )
 
     sync_attempts: Mapped[int] = mapped_column(
@@ -341,6 +333,14 @@ class ExamResult(Base):
             "synced_at IS NULL OR sync_status = 'synced'",
             name="ck_exam_results_synced_at_matches_status",
         ),
+        CheckConstraint(
+            "sync_status != 'syncing' OR sync_batch_id IS NOT NULL",
+            name = "ck_exam_results_syncing_requires_batch"
+        ),
+        CheckConstraint(
+            "sync_status != 'synced' OR sync_batch_id IS NOT NULL",
+            name = "ck_exam_results_synced_requires_batch"
+        ),
         # ========================== #
         # INDEXES
         # ========================== #
@@ -359,4 +359,9 @@ class ExamResult(Base):
             "sync_status",
             "last_sync_attempt_at",
         ),
+        Index(
+            "ix_exam_results_sync_batch_status",
+            "sync_batch_id",
+            "sync_status"
+        )
     )

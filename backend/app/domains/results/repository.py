@@ -100,29 +100,143 @@ class ResultRepository:
             query = query.with_for_update(of=ExamResult)
         return (await db.execute(query)).scalar_one_or_none()
 
-    @staticmethod
-    async def get_result_by_idempotency_key(
-        db: AsyncSession,
-        idempotency_key: str,
-        *,
-        lock: bool = False,
-    ) -> ExamResult | None:
-        query = select(ExamResult).where(ExamResult.idempotency_key == idempotency_key)
-        if lock:
-            query = query.with_for_update(of=ExamResult)
-        return (await db.execute(query)).scalar_one_or_none()
+
 
     @staticmethod
-    async def get_result_by_weave_id(
+    async def get_retryable_sync_batch_id_for_exam(
         db: AsyncSession,
-        weave_result_id: str,
+        *,
+        exam_id: UUID,
+    ) -> UUID | None:
+        """
+        Return the oldest FAILED batch whose identity must be preserved.
+
+        A non-null sync_batch_id means the previous delivery outcome was
+        uncertain and the exact batch must be replayed.
+        """
+
+        query = (
+            select(ExamResult)
+            .where(
+                ExamResult.exam_id == exam_id,
+                ExamResult.sync_status == ResultSyncStatus.FAILED,
+                ExamResult.sync_batch_id.is_not(None),
+            )
+            .order_by(
+                ExamResult.last_sync_attempt_at.asc().nullsfirst(),
+                ExamResult.calculated_at.asc(),
+                ExamResult.id.asc(),
+            )
+            .limit(1)
+        )
+
+        row = (
+            await db.execute(query)
+        ).scalar_one_or_none()
+
+        if row is None:
+            return None
+
+        return row.sync_batch_id
+
+    @staticmethod
+    async def list_pending_results_for_exam_sync(
+        db: AsyncSession,
+        *,
+        exam_id: UUID,
+        limit: int,
+        lock: bool = False,
+    ) -> list[ExamResult]:
+        """
+        Return fresh PENDING results which have never been assigned to a batch.
+        """
+
+        query = (
+            select(ExamResult)
+            .where(
+                ExamResult.exam_id == exam_id,
+                ExamResult.sync_status == ResultSyncStatus.PENDING,
+                ExamResult.sync_batch_id.is_(None),
+            )
+            .order_by(
+                ExamResult.calculated_at.asc(),
+                ExamResult.candidate_id.asc(),
+                ExamResult.id.asc(),
+            )
+            .limit(limit)
+        )
+
+        if lock:
+            query = query.with_for_update(
+                of=ExamResult,
+            )
+
+        return list(
+            (
+                await db.execute(query)
+            )
+            .scalars()
+            .all()
+        )
+
+    @staticmethod
+    async def list_results_for_sync_batch(
+        db: AsyncSession,
+        sync_batch_id: UUID,
         *,
         lock: bool = False,
-    ) -> ExamResult | None:
-        query = select(ExamResult).where(ExamResult.weave_result_id == weave_result_id)
+    ) -> list[ExamResult]:
+        """
+        Return the exact durable membership of one Weave result batch.
+        """
+
+        query = (
+            select(ExamResult)
+            .where(
+                ExamResult.sync_batch_id == sync_batch_id
+            )
+            .order_by(
+                ExamResult.calculated_at.asc(),
+                ExamResult.candidate_id.asc(),
+                ExamResult.id.asc(),
+            )
+        )
+
         if lock:
-            query = query.with_for_update(of=ExamResult)
-        return (await db.execute(query)).scalar_one_or_none()
+            query = query.with_for_update(
+                of=ExamResult,
+            )
+
+        return list(
+            (
+                await db.execute(query)
+            )
+            .scalars()
+            .all()
+        )
+
+    @staticmethod
+    async def list_results_for_sync_batch(
+        db : AsyncSession,
+        sync_batch_id : UUID,
+        *,
+        lock : bool = False
+    ) -> list[ExamResult]:
+        """Return every local result belonging to one durable Weave sync batch"""
+
+        query = select(ExamResult).where(
+            ExamResult.sync_batch_id == sync_batch_id
+        ).order_by(
+            ExamResult.calculated_at.asc(),
+            ExamResult.candidate_id.asc(),
+            ExamResult.id.asc()
+        )
+
+
+        if lock:
+            query = query.with_for_update(of = ExamResult)
+
+        return list((await db.execute(query)).scalars().all())
 
     @staticmethod
     async def list_results_for_exam(

@@ -26,8 +26,9 @@ class ResultResponse(BaseModel):
     component_maximum_score: Decimal
     calculated_at: datetime
     sync_status: ResultSyncStatus
-    sync_attempts: int
-    weave_result_id: str | None
+    sync_batch_id : UUID | None
+    sync_attempts : int
+    last_sync_attempted_at :datetime | None
     synced_at: datetime | None
     sync_error: str | None
 
