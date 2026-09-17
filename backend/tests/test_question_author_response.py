@@ -62,6 +62,7 @@ class QuestionAuthorResponseTests(unittest.IsolatedAsyncioTestCase):
             last_name="Okafor",
         )
         question = _question(author_id=teacher.id)
+        db = object()
 
         with (
             patch.object(
@@ -76,7 +77,7 @@ class QuestionAuthorResponseTests(unittest.IsolatedAsyncioTestCase):
             ) as list_teachers,
         ):
             response = await build_question_response(
-                object(),
+                db,
                 question,
                 request_actor=teacher,
             )
@@ -84,7 +85,7 @@ class QuestionAuthorResponseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.author_name, "Ada Okafor")
         self.assertEqual(response.created_by_actor_id, teacher.id)
         list_teachers.assert_awaited_once_with(
-            object(),
+            db,
             [membership_id],
             active_only=False,
         )
