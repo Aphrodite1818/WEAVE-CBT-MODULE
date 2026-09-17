@@ -68,9 +68,12 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
       : examViews.has(view)
         ? 'exams'
         : view
+    const previewPatch = view === 'preview-question'
+      ? { questionPreviewOrigin: workspaceView === 'bank-detail' ? 'bank-detail' : 'questions' }
+      : {}
     setWorkspaceView(view)
-    dispatch({ type: 'staff', patch: { section: parentSection, ...patch } })
-  }, [dispatch])
+    dispatch({ type: 'staff', patch: { section: parentSection, ...previewPatch, ...patch } })
+  }, [dispatch, workspaceView])
 
   const workspaceDispatch = useCallback((action) => {
     if (action?.type === 'staff' && action.patch?.section) {
