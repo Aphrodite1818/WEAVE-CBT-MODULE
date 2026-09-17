@@ -6,6 +6,7 @@ import StaffApp from '../../../src/app/StaffApp.jsx'
 import '../../../src/app/theme/branding.css'
 import '../../../src/styles/product-shell.css'
 import '../../../src/styles/dashboard-polish.css'
+import '../../../src/styles/dashboard-controls.css'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
