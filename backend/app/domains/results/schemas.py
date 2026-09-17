@@ -39,3 +39,9 @@ class ResultListResponse(BaseModel):
     limit: int
     total: int
     results: list[ResultResponse]
+
+
+class ResultSyncRetryResponse(BaseModel):
+    exam_id: UUID
+    reset_count: int
+    queued: bool
