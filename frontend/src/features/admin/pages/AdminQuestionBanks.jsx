@@ -46,7 +46,7 @@ export function AdminQuestionBanksPage({ adminData, gateway, onNavigate, createR
   const banks = useMemo(() => {
     const needle = query.trim().toLowerCase()
     if (!needle) return adminData.banks
-    return adminData.banks.filter((bank) => `${bank.name} ${bank.description || ''} ${bank.subjectName || ''}`.toLowerCase().includes(needle))
+    return adminData.banks.filter((bank) => `${bank.name} ${bank.description || ''} ${bank.academicLevelName || ''} ${bank.subjectName || ''}`.toLowerCase().includes(needle))
   }, [adminData.banks, query])
 
   const requestLifecycle = (bank, action) => {
@@ -86,7 +86,7 @@ export function AdminQuestionBanksPage({ adminData, gateway, onNavigate, createR
         <div className="admin-bank-heading__actions">
           <label className="teacher-search-control">
             <RiSearchLine size={17} aria-hidden="true" />
-            <input aria-label="Search question banks" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search banks or subjects..." />
+            <input aria-label="Search question banks" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search banks, levels or subjects..." />
           </label>
           <button className="teacher-primary-action" type="button" onClick={() => setEditor({ mode: 'create', bank: null })}>
             <Icon name="plus" size={18} /> Create Bank
@@ -116,7 +116,7 @@ export function AdminQuestionBanksPage({ adminData, gateway, onNavigate, createR
                 <button type="button" aria-label={`Manage ${bank.name}`} aria-expanded={menuBankId === bank.id} onClick={() => setMenuBankId((current) => current === bank.id ? null : bank.id)}><RiMore2Line size={20} /></button>
                 {menuBankId === bank.id && (
                   <div className="admin-bank-card__popover" role="menu">
-                    <button type="button" role="menuitem" onClick={() => { setMenuBankId(null); setEditor({ mode: 'edit', bank }) }}><RiEdit2Line size={17} /><span><strong>Edit bank</strong><small>Change its name and description; empty banks may also move subject.</small></span></button>
+                    <button type="button" role="menuitem" onClick={() => { setMenuBankId(null); setEditor({ mode: 'edit', bank }) }}><RiEdit2Line size={17} /><span><strong>Edit bank</strong><small>Change its name and description; empty banks may also move level or subject.</small></span></button>
                     <button type="button" role="menuitem" onClick={() => requestLifecycle(bank, bank.status === 'Archived' ? 'reactivate' : 'archive')}>
                       {bank.status === 'Archived' ? <RiRefreshLine size={17} /> : <RiArchiveLine size={17} />}
                       <span><strong>{bank.status === 'Archived' ? 'Reactivate bank' : 'Archive bank'}</strong><small>{bank.status === 'Archived' ? 'Return it to active authoring.' : 'Keep its history but stop authoring.'}</small></span>
@@ -127,7 +127,7 @@ export function AdminQuestionBanksPage({ adminData, gateway, onNavigate, createR
               </div>
             </div>
             <div className="teacher-bank-card__body">
-              <div className="admin-bank-card__subject">{bank.subjectName}{bank.subjectCode ? ` · ${bank.subjectCode}` : ''}</div>
+              <div className="admin-bank-card__subject">{bank.academicLevelName ? `${bank.academicLevelName} · ` : ''}{bank.subjectName}{bank.subjectCode ? ` · ${bank.subjectCode}` : ''}</div>
               <h2>{bank.name}</h2>
               <p>{bank.description || 'School question bank available for examination authoring.'}</p>
               <div className="teacher-bank-card__meta">
@@ -143,7 +143,7 @@ export function AdminQuestionBanksPage({ adminData, gateway, onNavigate, createR
       </section>
 
       {!adminData.loading && adminData.banks.length > 0 && banks.length === 0 && (
-        <div className="teacher-reference-empty teacher-reference-empty--compact"><div><strong>No matching banks</strong><p>Try a different bank or subject name.</p></div></div>
+        <div className="teacher-reference-empty teacher-reference-empty--compact"><div><strong>No matching banks</strong><p>Try a different bank, level, or subject name.</p></div></div>
       )}
 
       {editor && <BankEditorModal editor={editor} subjects={adminData.subjects} gateway={gateway} onClose={() => setEditor(null)} onSaved={async () => { setEditor(null); await adminData.refresh() }} />}
@@ -158,13 +158,15 @@ export function AdminBankDetailPage({ state, adminData, onNavigate }) {
 
   if (!bank) return <><PageTitle title="Question Bank" subtitle="No bank selected." /><Notice>No question banks are available on this server.</Notice></>
 
+  const bankContext = `${bank.academicLevelName ? `${bank.academicLevelName} · ` : ''}${bank.subjectName}`
+
   return (
     <div className="teacher-reference-page teacher-bank-detail admin-bank-detail">
       <div className="teacher-bank-detail__heading">
         <div>
           <div className="teacher-page-title-line">
             <span className="teacher-page-title-icon"><Icon name="bank" size={27} /></span>
-            <PageTitle title={bank.name} subtitle={`${bank.subjectName} · ${questions.length} ${questions.length === 1 ? 'question' : 'questions'}`} />
+            <PageTitle title={bank.name} subtitle={`${bankContext} · ${questions.length} ${questions.length === 1 ? 'question' : 'questions'}`} />
           </div>
           <StatusBadge tone={bank.status === 'Ready' ? 'success' : 'warning'}>{bank.status}</StatusBadge>
         </div>
@@ -184,16 +186,48 @@ export function AdminBankDetailPage({ state, adminData, onNavigate }) {
 function BankEditorModal({ editor, subjects, gateway, onClose, onSaved }) {
   const editing = editor.mode === 'edit'
   const subjectLocked = editing && Number(editor.bank?.count || 0) > 0
-  const [subjectId, setSubjectId] = useState(editor.bank?.curriculumSubjectId || subjects[0]?.id || '')
+  const levels = buildAcademicLevels(subjects)
+  const existingSubject = subjects.find((subject) => subject.id === editor.bank?.curriculumSubjectId)
+  const initialLevelId = existingSubject?.academicLevelId || levels[0]?.id || ''
+  const initialSubjectId = existingSubject?.id || subjects.find((subject) => subject.academicLevelId === initialLevelId)?.id || ''
+
+  const [levelId, setLevelId] = useState(initialLevelId)
+  const [subjectId, setSubjectId] = useState(initialSubjectId)
   const [name, setName] = useState(editor.bank?.name || '')
   const [description, setDescription] = useState(editor.bank?.description || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  const subjectsForLevel = useMemo(
+    () => subjects.filter((subject) => subject.academicLevelId === levelId),
+    [levelId, subjects],
+  )
+
+  const levelOptions = levels.map((level) => ({
+    value: level.id,
+    label: level.name,
+    description: level.category ? humanize(level.category) : undefined,
+  }))
+  const subjectOptions = subjectsForLevel.map((subject) => ({
+    value: subject.id,
+    label: subject.name,
+    description: subject.code || undefined,
+  }))
+  const selectedLevel = levels.find((level) => level.id === levelId)
+  const selectedSubject = subjects.find((subject) => subject.id === subjectId)
+
+  const changeLevel = (nextLevelId) => {
+    setLevelId(nextLevelId)
+    const firstSubject = subjects.find((subject) => subject.academicLevelId === nextLevelId)
+    setSubjectId(firstSubject?.id || '')
+    setError('')
+  }
+
   const submit = async (event) => {
     event.preventDefault()
     setError('')
-    if (!subjectId || !name.trim()) return setError('Choose a curriculum subject and enter a bank name.')
+    if (!levelId) return setError('Choose an academic level before selecting a subject.')
+    if (!subjectId || !name.trim()) return setError('Choose a subject in this level and enter a bank name.')
     setSaving(true)
     try {
       if (editing) {
@@ -209,21 +243,44 @@ function BankEditorModal({ editor, subjects, gateway, onClose, onSaved }) {
     }
   }
 
-  const options = subjects.map((subject) => ({ value: subject.id, label: subject.name, description: subject.code || undefined }))
+  const bankNameExample = [selectedLevel?.name, selectedSubject?.name].filter(Boolean).join(' ') || 'JSS1 English Language'
 
   return createPortal(
     <div className="admin-modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !saving) onClose() }}>
       <form className="admin-bank-editor-modal" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="admin-bank-editor-title">
-        <div className="admin-bank-editor-modal__head"><span><Icon name="bank" size={22} /></span><div><h2 id="admin-bank-editor-title">{editing ? 'Edit question bank' : 'Create question bank'}</h2><p>{editing ? 'Update the school bank metadata without changing its questions.' : 'Create a reusable question container for one curriculum subject.'}</p></div></div>
+        <div className="admin-bank-editor-modal__head"><span><Icon name="bank" size={22} /></span><div><h2 id="admin-bank-editor-title">{editing ? 'Edit question bank' : 'Create question bank'}</h2><p>{editing ? 'Update the school bank metadata without changing its questions.' : 'Choose the academic level first, then select a subject from that level’s curriculum.'}</p></div></div>
         {error && <Notice tone="danger">{error}</Notice>}
+
         <label className="admin-modal-field">
-          <span>Curriculum subject</span>
-          <SelectControl label="Curriculum subject" value={subjectId} options={options} onChange={setSubjectId} disabled={subjectLocked} placeholder="Choose a subject" />
-          {subjectLocked && <small>This bank already contains questions, so its curriculum subject is locked.</small>}
+          <span>Academic level</span>
+          <SelectControl
+            label="Academic level"
+            value={levelId}
+            options={levelOptions}
+            onChange={changeLevel}
+            disabled={subjectLocked}
+            placeholder="Choose a level"
+          />
+          {!subjectLocked && <small>Subjects are filtered to the curriculum for the selected level.</small>}
         </label>
-        <label className="admin-modal-field"><span>Bank name</span><input value={name} maxLength={255} onChange={(event) => setName(event.target.value)} placeholder="e.g. JSS1 English Language" /></label>
+
+        <label className="admin-modal-field">
+          <span>Subject</span>
+          <SelectControl
+            label="Subject"
+            value={subjectId}
+            options={subjectOptions}
+            onChange={(value) => { setSubjectId(value); setError('') }}
+            disabled={subjectLocked || !levelId || subjectOptions.length === 0}
+            placeholder={levelId ? 'Choose a subject' : 'Choose a level first'}
+          />
+          {subjectLocked && <small>This bank already contains questions, so its academic level and subject are locked.</small>}
+          {!subjectLocked && levelId && subjectOptions.length === 0 && <small>No active curriculum subjects are available for this level.</small>}
+        </label>
+
+        <label className="admin-modal-field"><span>Bank name</span><input value={name} maxLength={255} onChange={(event) => setName(event.target.value)} placeholder={`e.g. ${bankNameExample}`} /></label>
         <label className="admin-modal-field"><span>Description <small>(optional)</small></span><textarea rows="4" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Describe the scope of questions expected in this bank." /></label>
-        <div className="admin-modal-actions"><button type="button" className="teacher-secondary-action" disabled={saving} onClick={onClose}>Cancel</button><button type="submit" className="teacher-primary-action" disabled={saving || !subjects.length}>{saving ? 'Saving…' : editing ? 'Save changes' : 'Create bank'}</button></div>
+        <div className="admin-modal-actions"><button type="button" className="teacher-secondary-action" disabled={saving} onClick={onClose}>Cancel</button><button type="submit" className="teacher-primary-action" disabled={saving || !levels.length || !subjectId}>{saving ? 'Saving…' : editing ? 'Save changes' : 'Create bank'}</button></div>
       </form>
     </div>,
     document.body,
@@ -242,11 +299,31 @@ function BankLifecycleModal({ pending, busy, error, onCancel, onConfirm }) {
     <div className="admin-modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !busy) onCancel() }}>
       <section className={`admin-bank-lifecycle-modal${destructive ? ' is-danger' : ''}`} role="alertdialog" aria-modal="true">
         <div className="admin-bank-editor-modal__head"><span>{destructive ? <RiDeleteBinLine size={22} /> : pending.action === 'archive' ? <RiArchiveLine size={22} /> : <RiRefreshLine size={22} />}</span><div><h2>{copy[0]}</h2><p>{copy[1]}</p></div></div>
-        <div className="admin-bank-lifecycle-modal__bank"><span>Question bank</span><strong>{pending.bank.name}</strong><small>{pending.bank.subjectName} · {pending.bank.count} questions</small></div>
+        <div className="admin-bank-lifecycle-modal__bank"><span>Question bank</span><strong>{pending.bank.name}</strong><small>{pending.bank.academicLevelName ? `${pending.bank.academicLevelName} · ` : ''}{pending.bank.subjectName} · {pending.bank.count} questions</small></div>
         {error && <Notice tone="danger">{error}</Notice>}
         <div className="admin-modal-actions"><button type="button" className="teacher-secondary-action" disabled={busy} onClick={onCancel}>Cancel</button><button type="button" className={`teacher-primary-action${destructive ? ' admin-danger-action' : ''}`} disabled={busy} onClick={onConfirm}>{busy ? 'Working…' : copy[2]}</button></div>
       </section>
     </div>,
     document.body,
   )
+}
+
+function buildAcademicLevels(subjects) {
+  const levels = new Map()
+  subjects.forEach((subject) => {
+    if (!subject.academicLevelId || !subject.academicLevelName) return
+    if (!levels.has(subject.academicLevelId)) {
+      levels.set(subject.academicLevelId, {
+        id: subject.academicLevelId,
+        name: subject.academicLevelName,
+        category: subject.academicLevelCategory,
+        position: subject.academicLevelPosition ?? 0,
+      })
+    }
+  })
+  return [...levels.values()].sort((left, right) => left.position - right.position || left.name.localeCompare(right.name))
+}
+
+function humanize(value) {
+  return String(value || '').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
