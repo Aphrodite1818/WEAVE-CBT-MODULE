@@ -11,6 +11,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.domains.questions.models import QuestionType
 
 
+MAX_BANK_DESCRIPTION_LENGTH = 4_000
+MAX_QUESTION_PROMPT_LENGTH = 20_000
+MAX_QUESTION_INSTRUCTION_LENGTH = 10_000
+MAX_OPTION_TEXT_LENGTH = 10_000
+MAX_OPTIONS_PER_QUESTION = 50
+
+
 class InputBase(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, use_enum_values=True)
 
@@ -21,12 +28,12 @@ class OutputBase(BaseModel):
 
 class QuestionBankCreate(InputBase):
     name: str = Field(min_length=1, max_length=255)
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=MAX_BANK_DESCRIPTION_LENGTH)
 
 
 class QuestionBankUpdate(InputBase):
     name: str | None = Field(default=None, max_length=255)
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=MAX_BANK_DESCRIPTION_LENGTH)
     curriculum_subject_id: UUID | None = None
 
 
@@ -40,7 +47,7 @@ class QuestionBankResponse(OutputBase):
 
 
 class QuestionOptionCreate(InputBase):
-    text: str | None = None
+    text: str | None = Field(default=None, max_length=MAX_OPTION_TEXT_LENGTH)
     image_asset_id: UUID | None = None
     is_correct: bool = False
 
@@ -52,26 +59,37 @@ class QuestionOptionCreate(InputBase):
 
 
 class SingleChoiceQuestionCreate(InputBase):
-    prompt: str = Field(min_length=1)
-    instruction: str | None = None
+    prompt: str = Field(min_length=1, max_length=MAX_QUESTION_PROMPT_LENGTH)
+    instruction: str | None = Field(default=None, max_length=MAX_QUESTION_INSTRUCTION_LENGTH)
     image_asset_id: UUID | None = None
-    options: list[QuestionOptionCreate] = Field(min_length=2)
+    options: list[QuestionOptionCreate] = Field(
+        min_length=2,
+        max_length=MAX_OPTIONS_PER_QUESTION,
+    )
 
 
 class MultipleChoiceQuestionCreate(InputBase):
-    prompt: str = Field(min_length=1)
-    instruction: str | None = None
+    prompt: str = Field(min_length=1, max_length=MAX_QUESTION_PROMPT_LENGTH)
+    instruction: str | None = Field(default=None, max_length=MAX_QUESTION_INSTRUCTION_LENGTH)
     image_asset_id: UUID | None = None
-    options: list[QuestionOptionCreate] = Field(min_length=2)
+    options: list[QuestionOptionCreate] = Field(
+        min_length=2,
+        max_length=MAX_OPTIONS_PER_QUESTION,
+    )
 
 
 class QuestionUpdate(InputBase):
     """PATCH payload; omitted fields are preserved, explicit null clears nullable fields."""
 
-    prompt: str | None = None
-    instruction: str | None = None
+    expected_version: int | None = Field(default=None, ge=1)
+    prompt: str | None = Field(default=None, max_length=MAX_QUESTION_PROMPT_LENGTH)
+    instruction: str | None = Field(default=None, max_length=MAX_QUESTION_INSTRUCTION_LENGTH)
     image_asset_id: UUID | None = None
-    options: list[QuestionOptionCreate] | None = None
+    options: list[QuestionOptionCreate] | None = Field(
+        default=None,
+        min_length=2,
+        max_length=MAX_OPTIONS_PER_QUESTION,
+    )
 
 
 class QuestionOptionResponse(OutputBase):
