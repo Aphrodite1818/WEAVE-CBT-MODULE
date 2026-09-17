@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
@@ -9,14 +8,15 @@ from app.core.database import DbSession
 from app.core.exceptions import AcademicAuthorizationError, AcademicScopeError
 from app.domains.auth.dependencies import CurrentLocalActor, CurrentLocalAdmin
 from app.domains.media.service import MediaService
-from app.domains.questions.models import Question
-from app.domains.questions.repository import QuestionRepository
+from app.domains.questions.response_builder import (
+    build_question_response,
+    build_question_responses,
+)
 from app.domains.questions.schemas import (
     MultipleChoiceQuestionCreate,
     QuestionBankCreate,
     QuestionBankResponse,
     QuestionBankUpdate,
-    QuestionOptionResponse,
     QuestionResponse,
     QuestionUpdate,
     SingleChoiceQuestionCreate,
@@ -63,62 +63,6 @@ def _domain_http_error(exc: Exception) -> HTTPException:
         code = status.HTTP_400_BAD_REQUEST
 
     return HTTPException(status_code=code, detail=detail)
-
-
-async def _question_response(
-    db: DbSession,
-    question: Question,
-) -> QuestionResponse:
-    options = await QuestionRepository.list_options_for_question(db, question.id)
-    return QuestionResponse(
-        id=question.id,
-        bank_id=question.bank_id,
-        question_type=question.question_type,
-        prompt=question.prompt,
-        instruction=question.instruction,
-        image_asset_id=question.image_asset_id,
-        version=question.version,
-        created_by_actor_id=question.created_by_actor_id,
-        last_edited_by_actor_id=question.last_edited_by_actor_id,
-        is_active=question.is_active,
-        options=[QuestionOptionResponse.model_validate(option) for option in options],
-    )
-
-
-async def _question_responses(
-    db: DbSession,
-    questions: list[Question],
-) -> list[QuestionResponse]:
-    if not questions:
-        return []
-
-    options = await QuestionRepository.list_options_for_questions(
-        db,
-        [question.id for question in questions],
-    )
-
-    grouped = defaultdict(list)
-    for option in options:
-        grouped[option.question_id].append(
-            QuestionOptionResponse.model_validate(option)
-        )
-
-    return [
-        QuestionResponse(
-            id=question.id,
-            bank_id=question.bank_id,
-            question_type=question.question_type,
-            prompt=question.prompt,
-            instruction=question.instruction,
-            image_asset_id=question.image_asset_id,
-            version=question.version,
-            created_by_actor_id=question.created_by_actor_id,
-            last_edited_by_actor_id=question.last_edited_by_actor_id,
-            is_active=question.is_active,
-            options=grouped[question.id],
-        )
-        for question in questions
-    ]
 
 
 @router.post(
@@ -296,7 +240,7 @@ async def create_single_choice_question(
     except (AcademicAuthorizationError, AcademicScopeError, ValueError) as exc:
         raise _domain_http_error(exc) from exc
 
-    return await _question_response(db, question)
+    return await build_question_response(db, question, request_actor=actor)
 
 
 @router.post(
@@ -320,7 +264,7 @@ async def create_multiple_choice_question(
     except (AcademicAuthorizationError, AcademicScopeError, ValueError) as exc:
         raise _domain_http_error(exc) from exc
 
-    return await _question_response(db, question)
+    return await build_question_response(db, question, request_actor=actor)
 
 
 @router.get(
@@ -343,7 +287,7 @@ async def list_questions_for_bank(
     except (AcademicAuthorizationError, AcademicScopeError, ValueError) as exc:
         raise _domain_http_error(exc) from exc
 
-    return await _question_responses(db, questions)
+    return await build_question_responses(db, questions, request_actor=actor)
 
 
 @router.get(
@@ -364,7 +308,7 @@ async def get_question(
     except (AcademicAuthorizationError, AcademicScopeError, ValueError) as exc:
         raise _domain_http_error(exc) from exc
 
-    return await _question_response(db, question)
+    return await build_question_response(db, question, request_actor=actor)
 
 
 @router.get("/{question_id}/image")
@@ -453,7 +397,7 @@ async def update_question(
     except (AcademicAuthorizationError, AcademicScopeError, ValueError) as exc:
         raise _domain_http_error(exc) from exc
 
-    return await _question_response(db, question)
+    return await build_question_response(db, question, request_actor=actor)
 
 
 @router.post(
@@ -474,7 +418,7 @@ async def archive_question(
     except (AcademicAuthorizationError, AcademicScopeError, ValueError) as exc:
         raise _domain_http_error(exc) from exc
 
-    return await _question_response(db, question)
+    return await build_question_response(db, question, request_actor=actor)
 
 
 @router.post(
@@ -495,7 +439,7 @@ async def reactivate_question(
     except (AcademicAuthorizationError, AcademicScopeError, ValueError) as exc:
         raise _domain_http_error(exc) from exc
 
-    return await _question_response(db, question)
+    return await build_question_response(db, question, request_actor=actor)
 
 
 @router.delete(
