@@ -13,7 +13,7 @@ export function TeacherQuestionPreviewPage({ state, dispatch, teacherData, gatew
   useEffect(() => {
     if (!questionId) {
       setLoading(false)
-      setError('Choose a question from the Questions page to preview it.')
+      setError('Choose a question to preview it.')
       return undefined
     }
     let cancelled = false
@@ -43,16 +43,25 @@ export function TeacherQuestionPreviewPage({ state, dispatch, teacherData, gatew
   })), [question])
 
   const selectedBank = teacherData.banks.find((bank) => bank.id === question?.bank_id)
+  const returnToBank = state.staff.questionPreviewOrigin === 'bank-detail'
+  const returnSection = returnToBank ? 'bank-detail' : 'questions'
+  const returnLabel = returnToBank ? `Back to ${selectedBank?.name || 'question bank'}` : 'Back to questions'
   const leavePreview = () => dispatch({
     type: 'staff',
-    patch: { section: 'questions', selectedQuestionId: null, editingQuestion: null },
+    patch: {
+      section: returnSection,
+      selectedBankId: question?.bank_id || state.staff.selectedBankId,
+      selectedQuestionId: null,
+      editingQuestion: null,
+      questionPreviewOrigin: null,
+    },
   })
 
   return (
     <div className="question-builder-page question-preview-page">
       <header className="question-preview-page__header">
         <div><h1>Question preview</h1><p>Review exactly how this saved question appears to students.</p></div>
-        <button className="question-preview-back" type="button" onClick={leavePreview}><RiArrowLeftLine size={19} /> Back to questions</button>
+        <button className="question-preview-back" type="button" onClick={leavePreview}><RiArrowLeftLine size={19} /> {returnLabel}</button>
       </header>
       {error && <Notice tone="danger">{error}</Notice>}
       {loading && <div className="question-builder-loading">Loading question preview…</div>}
