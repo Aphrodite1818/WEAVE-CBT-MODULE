@@ -116,7 +116,7 @@ export function AdminQuestionBanksPage({ adminData, gateway, onNavigate, createR
                 <button type="button" aria-label={`Manage ${bank.name}`} aria-expanded={menuBankId === bank.id} onClick={() => setMenuBankId((current) => current === bank.id ? null : bank.id)}><RiMore2Line size={20} /></button>
                 {menuBankId === bank.id && (
                   <div className="admin-bank-card__popover" role="menu">
-                    <button type="button" role="menuitem" onClick={() => { setMenuBankId(null); setEditor({ mode: 'edit', bank }) }}><RiEdit2Line size={17} /><span><strong>Edit bank</strong><small>Change its name, description or subject.</small></span></button>
+                    <button type="button" role="menuitem" onClick={() => { setMenuBankId(null); setEditor({ mode: 'edit', bank }) }}><RiEdit2Line size={17} /><span><strong>Edit bank</strong><small>Change its name and description; empty banks may also move subject.</small></span></button>
                     <button type="button" role="menuitem" onClick={() => requestLifecycle(bank, bank.status === 'Archived' ? 'reactivate' : 'archive')}>
                       {bank.status === 'Archived' ? <RiRefreshLine size={17} /> : <RiArchiveLine size={17} />}
                       <span><strong>{bank.status === 'Archived' ? 'Reactivate bank' : 'Archive bank'}</strong><small>{bank.status === 'Archived' ? 'Return it to active authoring.' : 'Keep its history but stop authoring.'}</small></span>
@@ -183,6 +183,7 @@ export function AdminBankDetailPage({ state, adminData, onNavigate }) {
 
 function BankEditorModal({ editor, subjects, gateway, onClose, onSaved }) {
   const editing = editor.mode === 'edit'
+  const subjectLocked = editing && Number(editor.bank?.count || 0) > 0
   const [subjectId, setSubjectId] = useState(editor.bank?.curriculumSubjectId || subjects[0]?.id || '')
   const [name, setName] = useState(editor.bank?.name || '')
   const [description, setDescription] = useState(editor.bank?.description || '')
@@ -215,7 +216,11 @@ function BankEditorModal({ editor, subjects, gateway, onClose, onSaved }) {
       <form className="admin-bank-editor-modal" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="admin-bank-editor-title">
         <div className="admin-bank-editor-modal__head"><span><Icon name="bank" size={22} /></span><div><h2 id="admin-bank-editor-title">{editing ? 'Edit question bank' : 'Create question bank'}</h2><p>{editing ? 'Update the school bank metadata without changing its questions.' : 'Create a reusable question container for one curriculum subject.'}</p></div></div>
         {error && <Notice tone="danger">{error}</Notice>}
-        <label className="admin-modal-field"><span>Curriculum subject</span><SelectControl label="Curriculum subject" value={subjectId} options={options} onChange={setSubjectId} placeholder="Choose a subject" /></label>
+        <label className="admin-modal-field">
+          <span>Curriculum subject</span>
+          <SelectControl label="Curriculum subject" value={subjectId} options={options} onChange={setSubjectId} disabled={subjectLocked} placeholder="Choose a subject" />
+          {subjectLocked && <small>This bank already contains questions, so its curriculum subject is locked.</small>}
+        </label>
         <label className="admin-modal-field"><span>Bank name</span><input value={name} maxLength={255} onChange={(event) => setName(event.target.value)} placeholder="e.g. JSS1 English Language" /></label>
         <label className="admin-modal-field"><span>Description <small>(optional)</small></span><textarea rows="4" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Describe the scope of questions expected in this bank." /></label>
         <div className="admin-modal-actions"><button type="button" className="teacher-secondary-action" disabled={saving} onClick={onClose}>Cancel</button><button type="submit" className="teacher-primary-action" disabled={saving || !subjects.length}>{saving ? 'Saving…' : editing ? 'Save changes' : 'Create bank'}</button></div>
