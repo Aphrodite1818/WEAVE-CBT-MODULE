@@ -9,12 +9,13 @@ from fastapi import APIRouter, HTTPException, status
 from app.core.database import DbSession
 from app.core.exceptions import AcademicAuthorizationError
 from app.domains.auth.dependencies import CurrentLocalActor
-from app.domains.exams.exceptions import ExamNotFound, ExamStateError
+from app.domains.exams.exceptions import ExamAuthorizationError, ExamNotFound, ExamStateError
 from app.domains.exams.execution_schemas import (
     ExamExecutionControlResponse,
     ResultDecisionReason,
 )
 from app.domains.exams.execution_service import ExamExecutionService
+from app.domains.exams.service import ExamService
 from app.workers.producer import arq_producer
 
 
@@ -24,7 +25,7 @@ router = APIRouter(prefix="/exams", tags=["Exam Results Review"])
 def _http_error(exc: Exception) -> HTTPException:
     if isinstance(exc, ExamNotFound):
         return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    if isinstance(exc, AcademicAuthorizationError):
+    if isinstance(exc, (AcademicAuthorizationError, ExamAuthorizationError)):
         return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
     if isinstance(exc, ExamStateError):
         return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
@@ -40,9 +41,17 @@ async def get_execution_control(
     db: DbSession,
     actor: CurrentLocalActor,
 ) -> ExamExecutionControlResponse | None:
-    if not actor.is_active or actor.role not in {"admin", "teacher"}:
-        raise HTTPException(status_code=403, detail="Active staff access is required")
-    control = await ExamExecutionService.get_control(db, exam_id=exam_id)
+    try:
+        await ExamService.get_exam(db, actor=actor, exam_id=exam_id)
+        control = await ExamExecutionService.get_control(db, exam_id=exam_id)
+    except (
+        AcademicAuthorizationError,
+        ExamAuthorizationError,
+        ExamNotFound,
+        ExamStateError,
+        ValueError,
+    ) as exc:
+        raise _http_error(exc) from exc
     return (
         ExamExecutionControlResponse.model_validate(control)
         if control is not None
