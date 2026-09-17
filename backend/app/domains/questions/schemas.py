@@ -110,6 +110,7 @@ class QuestionResponse(OutputBase):
     image_asset_id: UUID | None
     version: int
     created_by_actor_id: UUID
+    author_name: str
     last_edited_by_actor_id: UUID | None
     is_active: bool
     options: list[QuestionOptionResponse] = Field(default_factory=list)
