@@ -47,8 +47,29 @@ class AcademicQueryService:
                 for curriculum_subject in curriculum_subjects
             ],
         )
-
         subjects_by_id = {subject.id: subject for subject in subjects}
+
+        curriculum_ids = list(
+            dict.fromkeys(
+                curriculum_subject.curriculum_id
+                for curriculum_subject in curriculum_subjects
+            )
+        )
+        curricula_by_id = {}
+        for curriculum_id in curriculum_ids:
+            curriculum = await AcademicRepository.get_curriculum_by_id(
+                db,
+                curriculum_id,
+            )
+            if curriculum is None:
+                raise AcademicScopeError(
+                    "Curriculum subject references an unavailable curriculum"
+                )
+            curricula_by_id[curriculum.id] = curriculum
+
+        levels = await AcademicRepository.list_levels(db)
+        levels_by_id = {level.id: level for level in levels}
+        level_order = {level.id: index for index, level in enumerate(levels)}
 
         response: list[AuthorableCurriculumSubjectResponse] = []
         for curriculum_subject in curriculum_subjects:
@@ -58,10 +79,26 @@ class AcademicQueryService:
                     "Curriculum subject references an unavailable academic subject"
                 )
 
+            curriculum = curricula_by_id.get(curriculum_subject.curriculum_id)
+            if curriculum is None:
+                raise AcademicScopeError(
+                    "Curriculum subject references an unavailable curriculum"
+                )
+
+            level = levels_by_id.get(curriculum.academic_level_id)
+            if level is None:
+                raise AcademicScopeError(
+                    "Curriculum references an unavailable academic level"
+                )
+
             response.append(
                 AuthorableCurriculumSubjectResponse(
                     id=curriculum_subject.id,
                     curriculum_id=curriculum_subject.curriculum_id,
+                    academic_level_id=level.id,
+                    academic_level_name=level.name,
+                    academic_level_category=level.category,
+                    academic_level_position=level.position,
                     subject_id=subject.id,
                     subject_name=subject.name,
                     subject_code=subject.code,
@@ -70,6 +107,13 @@ class AcademicQueryService:
                 )
             )
 
+        response.sort(
+            key=lambda item: (
+                level_order.get(item.academic_level_id, len(level_order)),
+                item.subject_name.casefold(),
+                item.subject_code or "",
+            )
+        )
         return response
 
     @staticmethod
