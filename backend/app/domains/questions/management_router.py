@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from uuid import UUID
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.core.database import DbSession
 from app.core.exceptions import AcademicAuthorizationError, AcademicScopeError
@@ -62,13 +62,17 @@ async def list_manageable_questions(
     bank_id: UUID | None = Query(default=None),
     include_archived: bool = Query(default=True),
     offset: int = Query(default=0, ge=0),
-    limit: int = Query(default=500, ge=1, le=1000),
+    limit: int | None = Query(default=None, ge=1, le=1000),
 ) -> list[QuestionResponse]:
     """Return the question-management scope for the current actor.
 
     Administrators receive all questions on the local node. Teachers receive only
     questions they personally contributed, further constrained to question banks
     that remain inside their current synchronized teaching scope.
+
+    ``offset`` and ``limit`` are available for server-side pagination. Omitting
+    ``limit`` preserves the current workspace contract while callers migrate to a
+    paginated management view.
     """
 
     try:
@@ -81,22 +85,16 @@ async def list_manageable_questions(
             limit=limit,
         )
     except AcademicAuthorizationError as exc:
-        from fastapi import HTTPException
-
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(exc),
         ) from exc
     except AcademicScopeError as exc:
-        from fastapi import HTTPException
-
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
     except ValueError as exc:
-        from fastapi import HTTPException
-
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
