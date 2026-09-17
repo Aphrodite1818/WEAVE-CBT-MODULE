@@ -1,4 +1,4 @@
-"""Read routes for locally calculated CBT results."""
+"""Read and recovery routes for locally calculated CBT results."""
 
 from __future__ import annotations
 
@@ -9,9 +9,15 @@ from fastapi import APIRouter, HTTPException, Query, status
 from app.core.database import DbSession
 from app.core.exceptions import AcademicAuthorizationError, AcademicScopeError
 from app.domains.auth.dependencies import CurrentLocalActor
-from app.domains.exams.exceptions import ExamNotFound
-from app.domains.results.schemas import ResultListResponse, ResultResponse
+from app.domains.exams.exceptions import ExamNotFound, ExamStateError
+from app.domains.results.retry_service import ResultRetryService
+from app.domains.results.schemas import (
+    ResultListResponse,
+    ResultResponse,
+    ResultSyncRetryResponse,
+)
 from app.domains.results.service import ResultService
+from app.workers.producer import arq_producer
 
 
 router = APIRouter(tags=["Results"])
@@ -22,7 +28,7 @@ def _http_error(exc: Exception) -> HTTPException:
         return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     if isinstance(exc, AcademicAuthorizationError):
         return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
-    if isinstance(exc, AcademicScopeError):
+    if isinstance(exc, (AcademicScopeError, ExamStateError)):
         return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
@@ -74,4 +80,40 @@ async def list_exam_results(
         limit=limit,
         total=total,
         results=[ResultResponse.model_validate(row) for row in rows],
+    )
+
+
+@router.post(
+    "/exams/{exam_id}/results/retry-sync",
+    response_model=ResultSyncRetryResponse,
+)
+async def retry_failed_result_sync(
+    exam_id: UUID,
+    db: DbSession,
+    actor: CurrentLocalActor,
+) -> ResultSyncRetryResponse:
+    """Retry only definitive/detached failures after an administrator fixes them."""
+
+    try:
+        reset_count = await ResultRetryService.retry_detached_failures(
+            db,
+            actor=actor,
+            exam_id=exam_id,
+        )
+    except (
+        AcademicAuthorizationError,
+        AcademicScopeError,
+        ExamNotFound,
+        ExamStateError,
+        ValueError,
+    ) as exc:
+        raise _http_error(exc) from exc
+
+    queued = False
+    if reset_count:
+        queued = await arq_producer.enqueue("sync_exam_results", str(exam_id))
+    return ResultSyncRetryResponse(
+        exam_id=exam_id,
+        reset_count=reset_count,
+        queued=queued,
     )
