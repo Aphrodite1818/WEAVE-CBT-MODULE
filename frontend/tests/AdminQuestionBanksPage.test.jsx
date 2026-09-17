@@ -8,6 +8,8 @@ function adminData() {
       {
         id: 'bank-1',
         curriculumSubjectId: 'subject-1',
+        academicLevelId: 'level-jss1',
+        academicLevelName: 'JSS1',
         subjectName: 'English Language',
         subjectCode: 'ENG',
         name: 'JSS1 English',
@@ -19,6 +21,8 @@ function adminData() {
       {
         id: 'bank-2',
         curriculumSubjectId: 'subject-2',
+        academicLevelId: 'level-jss1',
+        academicLevelName: 'JSS1',
         subjectName: 'Mathematics',
         subjectCode: 'MTH',
         name: 'JSS1 Mathematics Archive',
@@ -29,8 +33,33 @@ function adminData() {
       },
     ],
     subjects: [
-      { id: 'subject-1', name: 'English Language', code: 'ENG' },
-      { id: 'subject-2', name: 'Mathematics', code: 'MTH' },
+      {
+        id: 'subject-1',
+        academicLevelId: 'level-jss1',
+        academicLevelName: 'JSS1',
+        academicLevelCategory: 'junior_secondary',
+        academicLevelPosition: 1,
+        name: 'English Language',
+        code: 'ENG',
+      },
+      {
+        id: 'subject-2',
+        academicLevelId: 'level-jss1',
+        academicLevelName: 'JSS1',
+        academicLevelCategory: 'junior_secondary',
+        academicLevelPosition: 1,
+        name: 'Mathematics',
+        code: 'MTH',
+      },
+      {
+        id: 'subject-3',
+        academicLevelId: 'level-jss2',
+        academicLevelName: 'JSS2',
+        academicLevelCategory: 'junior_secondary',
+        academicLevelPosition: 2,
+        name: 'Basic Science',
+        code: 'BSC',
+      },
     ],
     loading: false,
     error: '',
@@ -78,19 +107,46 @@ describe('Admin question bank workspace', () => {
     expect(screen.getByRole('menuitem', { name: /delete empty bank/i })).toBeEnabled()
   })
 
-  it('opens the backend-backed create-bank form rather than a fake question form', () => {
+  it('filters curriculum subjects by academic level before creating a bank', async () => {
     const data = adminData()
+    const gateway = {
+      questions: {
+        createQuestionBank: vi.fn().mockResolvedValue({ id: 'bank-new' }),
+        updateQuestionBank: vi.fn(),
+      },
+    }
+
     render(
       <AdminQuestionBanksPage
         adminData={data}
-        gateway={{ questions: {} }}
+        gateway={gateway}
         onNavigate={vi.fn()}
       />,
     )
 
     fireEvent.click(screen.getByRole('button', { name: /create bank/i }))
+
     expect(screen.getByRole('heading', { name: /create question bank/i })).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: /curriculum subject/i })).toBeInTheDocument()
-    expect(screen.getByPlaceholderText(/jss1 english language/i)).toBeInTheDocument()
+    const levelSelect = screen.getByRole('combobox', { name: /academic level/i })
+    const subjectSelect = screen.getByRole('combobox', { name: /^subject$/i })
+    expect(levelSelect).toHaveTextContent('JSS1')
+    expect(subjectSelect).toHaveTextContent('English Language')
+
+    fireEvent.click(levelSelect)
+    fireEvent.click(screen.getByRole('option', { name: /JSS2/i }))
+
+    expect(screen.getByRole('combobox', { name: /^subject$/i })).toHaveTextContent('Basic Science')
+    fireEvent.click(screen.getByRole('combobox', { name: /^subject$/i }))
+    expect(screen.getByRole('option', { name: /Basic Science/i })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /English Language/i })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('option', { name: /Basic Science/i }))
+
+    fireEvent.change(screen.getByPlaceholderText(/jss2 basic science/i), { target: { value: 'JSS2 Basic Science Bank' } })
+    fireEvent.click(screen.getByRole('button', { name: /^create bank$/i }))
+
+    await waitFor(() => expect(gateway.questions.createQuestionBank).toHaveBeenCalledWith(
+      'subject-3',
+      { name: 'JSS2 Basic Science Bank', description: null },
+    ))
   })
 })
