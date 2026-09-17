@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getLocalBrandLogoSrc } from '../../api/branding'
 import { Icon } from '../../shared/icons/Icon'
 import { DashboardAccountMenu, DashboardSchoolIdentity } from '../../shared/ui'
@@ -34,6 +34,11 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [workspaceView, setWorkspaceView] = useState(() => topLevelView(state.staff.section))
   const adminData = useAdminData(gateway)
+  const activeAuthoringData = useMemo(() => ({
+    ...adminData,
+    banks: adminData.banks.filter((bank) => bank.status === 'Ready'),
+  }), [adminData])
+  const examFormData = state.staff.selectedExamId ? adminData : activeAuthoringData
   const actor = state.session?.actor
   const adminName = actor?.display_name || state.session?.name || 'Administrator'
   const schoolName = state.branding?.school_name || state.installation?.status?.tenant_name || 'Weave CBT'
@@ -117,10 +122,10 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
           {workspaceView === 'bank-detail' && <AdminBankDetailPage state={state} adminData={adminData} onNavigate={navigate} />}
           {workspaceView === 'questions' && <AdminQuestionsPage state={state} dispatch={workspaceDispatch} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
           {workspaceView === 'preview-question' && <TeacherQuestionPreviewPage state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
-          {workspaceView === 'create-question' && <QuestionBuilder mode="create" state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
+          {workspaceView === 'create-question' && <QuestionBuilder mode="create" state={state} dispatch={workspaceDispatch} teacherData={activeAuthoringData} gateway={gateway} />}
           {workspaceView === 'edit-question' && <QuestionBuilder key={state.staff.selectedQuestionId || 'admin-question-editor'} mode="edit" state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
           {workspaceView === 'exams' && <AdminExamsPage state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
-          {workspaceView === 'create-exam' && <TeacherCreateExamPage state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
+          {workspaceView === 'create-exam' && <TeacherCreateExamPage state={state} dispatch={workspaceDispatch} teacherData={examFormData} gateway={gateway} />}
           {placeholderViews.has(workspaceView) && <AdminPlaceholderPage section={workspaceView} />}
         </div>
       </section>
