@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from secrets import SystemRandom
+from typing import Protocol, cast
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -35,6 +36,16 @@ from app.domains.questions.repository import QuestionRepository
 from app.domains.runtime.models import RealtimeOutboxEvent
 from app.domains.runtime.repository import RuntimeRepository
 from app.domains.sync.repository import SyncRepository
+
+
+class _RandomQuestionCapacityValidator(Protocol):
+    @staticmethod
+    async def _validate_random_question_capacity(
+        db: AsyncSession,
+        *,
+        question_bank_id: UUID,
+        question_count: int,
+    ) -> None: ...
 
 
 class ExamLifecycleServiceMixin:
@@ -232,7 +243,10 @@ class ExamLifecycleServiceMixin:
         selection_mode = ExamQuestionSelectionMode(exam.question_selection_mode)
 
         if selection_mode == ExamQuestionSelectionMode.RANDOM:
-            await cls._validate_random_question_capacity(
+            await cast(
+                _RandomQuestionCapacityValidator,
+                cls,
+            )._validate_random_question_capacity(
                 db,
                 question_bank_id=question_bank.id,
                 question_count=exam.question_count,
@@ -557,6 +571,41 @@ class ExamLifecycleServiceMixin:
             questions=questions,
         )
 
+
+
+        #Preserve manual-paper contribution before the temporary
+        #ExamQuestionSelection rows are deleted during sealing
+
+        #Random papers have no explicit contributor because the system chooses
+        #their questions automatically
+
+        contributor_by_question_id : dict[UUID, UUID ] = {}
+
+        if exam.question_selection_mode == ExamQuestionSelectionMode.MANUAL:
+            selections = await ExamRepository.list_question_selections(
+                db,
+                exam.id
+            )
+
+
+
+            contributor_by_question_id = {
+                selection.question_id : selection.added_by_actor_id
+                for selection in selections
+            }
+
+            missing_contributor_ids = [
+                question.id
+                for question in questions
+                if question.id not in contributor_by_question_id
+            ]
+
+
+            if missing_contributor_ids:
+                raise ExamStateError(
+                    "Manual examination question contributor provenance is incomplete"
+                )
+
         # The examination remains level-wide. At sealing, freeze the classes
         # that are academically eligible for this subject in this exact term.
         # Teacher assignments are authoring authority, not delivery scope.
@@ -585,6 +634,7 @@ class ExamLifecycleServiceMixin:
                 exam_id=exam.id,
                 source_question_id=question.id,
                 source_question_version=question.version,
+                added_by_actor_id = contributor_by_question_id.get(question.id),
                 question_type=question.question_type,
                 position=position,
                 prompt=question.prompt,
@@ -932,11 +982,27 @@ class ExamLifecycleServiceMixin:
                     db,
                     latest.id,
                 )
+
+
+                missing_contributor_ids = [
+                    question.source_question_id
+                    for question in frozen_questions
+                    if question.added_by_actor_id is None
+                ]
+
+                if missing_contributor_ids:
+                    raise ExamStateError(
+                        "Manual examination revision cannot be created because "
+                        "question contributor provenance is incomplete"
+                    )
+
+                
                 await ExamRepository.add_question_selections(
                     db,
                     [
                         ExamQuestionSelection(
                             exam_id=revision.id,
+                            added_by_actor_id = question.added_by_actor_id,
                             question_id=question.source_question_id,
                             position=question.position,
                         )
