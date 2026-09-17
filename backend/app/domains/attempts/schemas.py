@@ -55,6 +55,16 @@ class AttemptResponse(OutputBase):
     questions: list[AttemptQuestionResponse]
 
 
+class AttemptHeartbeatResponse(OutputBase):
+    attempt_id: UUID
+    status: AttemptStatus
+    server_time: datetime
+    last_heartbeat_at: datetime
+    remaining_seconds: int
+    exam_suspended: bool
+    next_heartbeat_after_seconds: int = Field(ge=5, le=120)
+
+
 class AttemptAnswerMutation(InputBase):
     mutation_sequence: int = Field(ge=1)
     selected_option_ids: list[UUID] = Field(default_factory=list)
