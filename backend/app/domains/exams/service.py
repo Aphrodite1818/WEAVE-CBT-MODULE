@@ -13,11 +13,13 @@ from app.domains.auth.models import LocalActor
 from app.domains.exams.authoring_service import ExamService as _AuthoringExamService
 from app.domains.exams.collaboration_service import ExamCollaborationLifecycleMixin
 from app.domains.exams.exceptions import ExamAuthorizationError, ExamNotFound
+from app.domains.exams.execution_service import ExamExecutionService
 from app.domains.exams.lifecycle_service import ExamLifecycleServiceMixin
 from app.domains.exams.models import Exam
 from app.domains.exams.repository import ExamRepository
 from app.domains.exams.schemas import ExamCreate, ExamUpdate
 from app.domains.exams.timetable_service import ExamTimetableService
+from app.workers.producer import arq_producer
 
 
 class ExamService(
@@ -65,31 +67,15 @@ class ExamService(
         )
 
     @classmethod
-    async def _before_activate_exam_save(
-        cls,
-        db: AsyncSession,
-        *,
-        exam: Exam,
-    ) -> None:
+    async def _before_activate_exam_save(cls, db: AsyncSession, *, exam: Exam) -> None:
         await ExamTimetableService.require_level_free(db, exam_id=exam.id)
 
     @classmethod
-    async def _before_resume_exam_save(
-        cls,
-        db: AsyncSession,
-        *,
-        exam: Exam,
-    ) -> None:
+    async def _before_resume_exam_save(cls, db: AsyncSession, *, exam: Exam) -> None:
         await ExamTimetableService.require_level_free(db, exam_id=exam.id)
 
     @classmethod
-    async def create_exam(
-        cls,
-        db: AsyncSession,
-        *,
-        actor: LocalActor,
-        payload: ExamCreate,
-    ) -> Exam:
+    async def create_exam(cls, db: AsyncSession, *, actor: LocalActor, payload: ExamCreate) -> Exam:
         return await super().create_exam(db, actor=actor, payload=payload)
 
     @classmethod
@@ -101,12 +87,7 @@ class ExamService(
         payload: ExamUpdate,
         exam_id: UUID,
     ) -> Exam:
-        return await super().update_exam(
-            db,
-            actor=actor,
-            payload=payload,
-            exam_id=exam_id,
-        )
+        return await super().update_exam(db, actor=actor, payload=payload, exam_id=exam_id)
 
     @classmethod
     async def seal_exam(
@@ -132,11 +113,7 @@ class ExamService(
 
     @classmethod
     async def activate_exam(
-        cls,
-        db: AsyncSession,
-        *,
-        actor: LocalActor,
-        exam_id: UUID,
+        cls, db: AsyncSession, *, actor: LocalActor, exam_id: UUID
     ) -> Exam:
         return await super().activate_exam(db, actor=actor, exam_id=exam_id)
 
@@ -149,12 +126,41 @@ class ExamService(
         exam_id: UUID,
         reason: str | None = None,
     ) -> Exam:
-        return await super().resume_exam(
+        return await super().resume_exam(db, actor=actor, exam_id=exam_id, reason=reason)
+
+    @classmethod
+    async def close_exam(
+        cls,
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        exam_id: UUID,
+    ) -> Exam:
+        exam = await ExamExecutionService.request_close(
+            db,
+            actor=actor,
+            exam_id=exam_id,
+        )
+        await arq_producer.enqueue("finalize_exam_close", str(exam.id))
+        return exam
+
+    @classmethod
+    async def cancel_exam(
+        cls,
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        exam_id: UUID,
+        reason: str,
+    ) -> Exam:
+        exam = await ExamExecutionService.request_cancel(
             db,
             actor=actor,
             exam_id=exam_id,
             reason=reason,
         )
+        await arq_producer.enqueue("finalize_exam_cancellation", str(exam.id))
+        return exam
 
     @staticmethod
     async def get_exam(
@@ -173,8 +179,6 @@ class ExamService(
         if actor.role != "teacher":
             raise ExamAuthorizationError("You are not allowed to view this examination")
         if exam.created_by_actor_id == actor.id:
-            # A lead who has since lost the academic assignment should not retain
-            # authoring visibility merely from historical provenance.
             try:
                 await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
                     db,
@@ -197,11 +201,7 @@ class ExamService(
                     "Teacher has an invalid Weave membership identity"
                 ) from exc
         if teacher_membership_id is not None:
-            invigilator = await ExamRepository.get_invigilator(
-                db,
-                exam.id,
-                teacher_membership_id,
-            )
+            invigilator = await ExamRepository.get_invigilator(db, exam.id, teacher_membership_id)
             if invigilator is not None:
                 return exam
 
