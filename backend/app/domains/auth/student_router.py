@@ -8,15 +8,15 @@ from fastapi import APIRouter, Cookie, HTTPException, Response, status
 
 from app.core.database import DbSession
 from app.domains.auth.student_dependencies import STUDENT_SESSION_COOKIE
+from app.domains.auth.student_lifecycle_service import (
+    INVALID_STUDENT_LOGIN,
+    StudentAuthenticationError,
+    StudentAuthService,
+)
 from app.domains.auth.student_schemas import (
     StudentLoginRequest,
     StudentLoginResponse,
     StudentSessionResponse,
-)
-from app.domains.auth.student_service import (
-    INVALID_STUDENT_LOGIN,
-    StudentAuthenticationError,
-    StudentAuthService,
 )
 
 
