@@ -40,6 +40,11 @@ class AuthorableCurriculumSubjectResponse(OutputBase):
     id: UUID
     curriculum_id: UUID
 
+    academic_level_id: UUID
+    academic_level_name: str
+    academic_level_category: str
+    academic_level_position: int
+
     subject_id: UUID
     subject_name: str
     subject_code: str | None
