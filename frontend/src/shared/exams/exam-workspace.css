@@ -166,7 +166,7 @@
 .exam-readiness li svg { flex-shrink: 0; }
 .exam-readiness .is-ready svg { color: #1b995b; }
 
-@container teacher-exam-workspace (max-width: 1120px) {
+@container teacher-exam-workspace (max-width: 980px) {
   .exam-collection { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .exam-collection--list { grid-template-columns: 1fr; }
   .exam-authoring-page .exam-section--paper .teacher-exam-section__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
