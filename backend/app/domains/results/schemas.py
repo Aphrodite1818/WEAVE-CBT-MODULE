@@ -8,6 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
+from app.domains.exams.execution_models import ExamResultDisposition
 from app.domains.results.models import ResultSyncStatus
 
 
@@ -33,12 +34,36 @@ class ResultResponse(BaseModel):
     sync_error: str | None
 
 
+class ResultReviewRowResponse(ResultResponse):
+    candidate_display_name: str
+    admission_number: str
+    class_id: UUID
+
+
 class ResultListResponse(BaseModel):
     exam_id: UUID
     offset: int
     limit: int
     total: int
-    results: list[ResultResponse]
+    results: list[ResultReviewRowResponse]
+
+
+class ResultReviewSetResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    exam_id: UUID
+    result_disposition: ExamResultDisposition | None = None
+    results_decided_at: datetime | None = None
+    results_decision_reason: str | None = None
+    result_count: int
+    pending_count: int
+    syncing_count: int
+    synced_count: int
+    failed_count: int
+
+
+class ResultReviewSetListResponse(BaseModel):
+    reviews: list[ResultReviewSetResponse]
 
 
 class ResultSyncRetryResponse(BaseModel):
