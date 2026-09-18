@@ -35,11 +35,24 @@ const teacherData = {
     },
   ],
   assignments: [{ teacherMembershipId: 'teacher-1', curriculumSubjectId: 'subject-1' }],
-  subjects: [{ id: 'subject-1', name: 'Mathematics' }],
+  subjects: [
+    {
+      id: 'subject-1',
+      academicLevelId: 'level-jss1',
+      academicLevelName: 'JSS1',
+      academicLevelCategory: 'junior_secondary',
+      academicLevelPosition: 1,
+      name: 'Mathematics',
+      code: 'MTH',
+    },
+  ],
   banks: [
     {
       id: 'bank-1',
       curriculumSubjectId: 'subject-1',
+      academicLevelId: 'level-jss1',
+      academicLevelName: 'JSS1',
+      subjectName: 'Mathematics',
       name: 'Mathematics Bank',
       count: 40,
       activeQuestionCount: 40,
@@ -110,6 +123,7 @@ describe('Teacher exams', () => {
     await waitFor(() =>
       expect(screen.getAllByText('Mathematics Bank').length).toBeGreaterThan(0),
     )
+    expect(screen.getByRole('combobox', { name: /academic level/i })).toHaveTextContent('JSS1')
     fireEvent.change(screen.getByLabelText(/exam title/i), {
       target: { value: 'Mathematics Mid Term' },
     })
@@ -139,6 +153,82 @@ describe('Teacher exams', () => {
       type: 'staff',
       patch: { section: 'exams', selectedExamId: null },
     })
+  })
+
+  it('filters duplicate subject names by academic level before exam creation', () => {
+    const scopedData = {
+      ...teacherData,
+      exams: [],
+      subjects: [
+        ...teacherData.subjects,
+        {
+          id: 'subject-2',
+          academicLevelId: 'level-jss2',
+          academicLevelName: 'JSS2',
+          academicLevelCategory: 'junior_secondary',
+          academicLevelPosition: 2,
+          name: 'Mathematics',
+          code: 'MTH',
+        },
+        {
+          id: 'subject-3',
+          academicLevelId: 'level-jss2',
+          academicLevelName: 'JSS2',
+          academicLevelCategory: 'junior_secondary',
+          academicLevelPosition: 2,
+          name: 'Basic Science',
+          code: 'BSC',
+        },
+      ],
+      banks: [
+        ...teacherData.banks,
+        {
+          id: 'bank-2',
+          curriculumSubjectId: 'subject-2',
+          academicLevelId: 'level-jss2',
+          academicLevelName: 'JSS2',
+          subjectName: 'Mathematics',
+          name: 'JSS2 Mathematics Bank',
+          count: 30,
+          activeQuestionCount: 30,
+        },
+        {
+          id: 'bank-3',
+          curriculumSubjectId: 'subject-3',
+          academicLevelId: 'level-jss2',
+          academicLevelName: 'JSS2',
+          subjectName: 'Basic Science',
+          name: 'JSS2 Science Bank',
+          count: 25,
+          activeQuestionCount: 25,
+        },
+      ],
+    }
+
+    render(
+      <ExamAuthoringPage
+        state={teacherState}
+        dispatch={vi.fn()}
+        teacherData={scopedData}
+        gateway={{ exams: { createExam: vi.fn() } }}
+      />,
+    )
+
+    const levelSelect = screen.getByRole('combobox', { name: /academic level/i })
+    const subjectSelect = screen.getByRole('combobox', { name: /^subject$/i })
+    expect(levelSelect).toHaveTextContent('JSS1')
+    expect(subjectSelect).toHaveTextContent('Mathematics')
+
+    fireEvent.click(levelSelect)
+    fireEvent.click(screen.getByRole('option', { name: /JSS2/i }))
+
+    expect(screen.getByRole('combobox', { name: /^subject$/i })).toHaveTextContent('Mathematics')
+    fireEvent.click(screen.getByRole('combobox', { name: /^subject$/i }))
+    expect(screen.getByRole('option', { name: /Basic Science/i })).toBeInTheDocument()
+    expect(screen.getAllByRole('option', { name: /Mathematics/i })).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('option', { name: /Basic Science/i }))
+    expect(screen.getByRole('combobox', { name: /question bank/i })).toHaveTextContent('JSS2 Science Bank')
   })
 
   it('uses the current authoring version when submitting a draft', async () => {
