@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   RiArrowLeftLine,
@@ -30,47 +30,38 @@ export function ExamOperations({ adminData, onNavigate }) {
   const [query, setQuery] = useState('')
   const [levelId, setLevelId] = useState('all')
   const [subjectId, setSubjectId] = useState('all')
+
+  const operationalExams = adminData.exams.filter((exam) => OPERATIONAL_STATUSES.has(exam.status))
+  const hasPollableExam = operationalExams.some((exam) => POLLABLE_STATUSES.has(exam.status))
+  const levels = buildAcademicLevels(adminData.subjects)
+  const levelSubjects = levelId === 'all' ? [] : listSubjectsForLevel(adminData.subjects, levelId)
   const now = new Date()
-
-  const operationalExams = useMemo(
-    () => adminData.exams.filter((exam) => OPERATIONAL_STATUSES.has(exam.status)),
-    [adminData.exams],
-  )
-  const levels = useMemo(() => buildAcademicLevels(adminData.subjects), [adminData.subjects])
-  const levelSubjects = useMemo(
-    () => levelId === 'all' ? [] : listSubjectsForLevel(adminData.subjects, levelId),
-    [adminData.subjects, levelId],
-  )
-
   const refreshExams = adminData.refreshExams
+
   useEffect(() => {
-    if (!operationalExams.some((exam) => POLLABLE_STATUSES.has(exam.status))) return undefined
+    if (!hasPollableExam) return undefined
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') void refreshExams({ silent: true })
     }, 5000)
     return () => window.clearInterval(timer)
-  }, [operationalExams, refreshExams])
+  }, [hasPollableExam, refreshExams])
 
-  const counts = useMemo(() => Object.fromEntries(
+  const counts = Object.fromEntries(
     TABS.map(([key]) => [key, operationalExams.filter((exam) => matchesTab(exam, key, now)).length]),
-  ), [operationalExams])
-
-  const metrics = useMemo(() => ({
+  )
+  const metrics = {
     today: operationalExams.filter((exam) => isScheduledToday(exam, now)).length,
     ready: operationalExams.filter((exam) => exam.status === 'sealed' && exam.rosterStatus === 'ready').length,
     live: operationalExams.filter((exam) => LIVE_STATUSES.has(exam.status)).length,
     attention: operationalExams.filter(needsAttention).length,
-  }), [operationalExams])
-
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase()
-    return operationalExams
-      .filter((exam) => matchesTab(exam, tab, now))
-      .filter((exam) => levelId === 'all' || exam.academicLevelId === levelId)
-      .filter((exam) => subjectId === 'all' || exam.curriculumSubjectId === subjectId)
-      .filter((exam) => !needle || `${exam.title} ${exam.academicLevelName} ${exam.subjectName} ${exam.assessmentName}`.toLowerCase().includes(needle))
-      .sort(compareOperationalExams)
-  }, [levelId, operationalExams, query, subjectId, tab])
+  }
+  const needle = query.trim().toLowerCase()
+  const filtered = operationalExams
+    .filter((exam) => matchesTab(exam, tab, now))
+    .filter((exam) => levelId === 'all' || exam.academicLevelId === levelId)
+    .filter((exam) => subjectId === 'all' || exam.curriculumSubjectId === subjectId)
+    .filter((exam) => !needle || `${exam.title} ${exam.academicLevelName} ${exam.subjectName} ${exam.assessmentName}`.toLowerCase().includes(needle))
+    .sort(compareOperationalExams)
 
   const levelOptions = [
     { value: 'all', label: 'All levels' },
@@ -169,6 +160,8 @@ export function ExamOperations({ adminData, onNavigate }) {
 
 export function ExamOperationsDetail({ state, adminData, gateway, onNavigate }) {
   const exam = adminData.exams.find((item) => item.id === state.staff.selectedExamId)
+  const examId = exam?.id
+  const examStatus = exam?.status
   const [pendingAction, setPendingAction] = useState(null)
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
@@ -176,12 +169,12 @@ export function ExamOperationsDetail({ state, adminData, gateway, onNavigate }) 
   const refreshExams = adminData.refreshExams
 
   useEffect(() => {
-    if (!exam || !POLLABLE_STATUSES.has(exam.status)) return undefined
+    if (!examId || !POLLABLE_STATUSES.has(examStatus)) return undefined
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') void refreshExams({ silent: true })
     }, 4000)
     return () => window.clearInterval(timer)
-  }, [exam?.id, exam?.status, refreshExams])
+  }, [examId, examStatus, refreshExams])
 
   if (!exam) {
     return (
@@ -524,15 +517,15 @@ function controlDescription(exam) {
     : `Roster status is ${rosterLabel(exam.rosterStatus)}. Open the roster to inspect preparation or reconciliation.`
   if (exam.status === 'active') return 'Use Suspend for a recoverable interruption. Close only when the sitting is genuinely finished.'
   if (exam.status === 'suspended') return 'Resume to continue the same sitting, or close/cancel it if execution should not continue.'
-  if (exam.status === 'closing' || exam.status === 'cancelling') return 'This transition is irreversible. Controls will remain unavailable until finalization completes.'
+  if (exam.status === 'closing' || exam.status === 'cancelling') return 'This transition is irreversible. Controls remain unavailable until finalization completes.'
   return 'Historical execution state remains available for operational review.'
 }
 
 function terminalControlCopy(status) {
   if (status === 'closing') return 'Finalization is in progress. Reverse lifecycle actions are unavailable.'
   if (status === 'cancelling') return 'Cancellation finalization is in progress. Reverse lifecycle actions are unavailable.'
-  if (status === 'closed') return 'This sitting is closed and read-only. Use Examinations if a new paper revision is required.'
-  if (status === 'cancelled') return 'This sitting is cancelled and read-only. A replacement revision is created from the Examinations workspace.'
+  if (status === 'closed') return 'This sitting is closed and read-only. Use Examinations if another paper revision is required.'
+  if (status === 'cancelled') return 'This sitting is cancelled and read-only. A replacement revision is created from Examinations.'
   return 'No operational actions are currently available.'
 }
 
@@ -595,8 +588,7 @@ function scheduleSentence(exam) {
 
 function formatSchedule(value) {
   if (!value) return 'Not scheduled'
-  const date = new Date(value)
-  return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(date)
+  return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(value))
 }
 
 function formatClock(value) {
