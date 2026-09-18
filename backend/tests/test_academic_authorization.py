@@ -71,9 +71,9 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch.object(
                 AcademicRepository,
-                "teacher_has_curriculum_subject_assignment",
-                new=AsyncMock(return_value=True),
-            ) as has_assignment,
+                "list_teacher_classes_for_curriculum_subject",
+                new=AsyncMock(return_value=[SimpleNamespace(id=uuid4())]),
+            ) as list_classes,
         ):
             await AcademicAuthorizationService.require_can_author_curriculum_subject(
                 object(),  # type: ignore[arg-type]
@@ -81,10 +81,10 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                 curriculum_subject_id=subject_id,
             )
 
-        has_assignment.assert_awaited_once_with(
+        list_classes.assert_awaited_once_with(
             ANY,
-            membership_id,
-            subject_id,
+            teacher_membership_id=membership_id,
+            curriculum_subject_id=subject_id,
         )
 
     async def test_teacher_without_subject_assignment_is_rejected(self) -> None:
@@ -114,8 +114,8 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch.object(
                 AcademicRepository,
-                "teacher_has_curriculum_subject_assignment",
-                new=AsyncMock(return_value=False),
+                "list_teacher_classes_for_curriculum_subject",
+                new=AsyncMock(return_value=[]),
             ),
         ):
             with self.assertRaisesRegex(
