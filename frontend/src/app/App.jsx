@@ -7,6 +7,7 @@ import { isSetupView } from '../features/setup/setupViews'
 import { StudentWorkspace } from '../features/student/StudentWorkspace'
 import { InitialSyncPage } from '../features/sync/InitialSyncPage'
 import { TeacherWorkspace } from '../features/teacher/TeacherWorkspace'
+import { ToastHost } from '../shared/ui/ToastHost'
 import { ProductLoadingScreen } from './ProductLoadingScreen'
 import { buildBrandingThemeStyle, createDefaultBranding } from './theme/branding'
 import { weaveGateway } from './gateway'
@@ -36,6 +37,7 @@ export default function App() {
       {state.view === 'student' && <StudentWorkspace exam={state.exam} resolution={state.studentResolution} gateway={weaveGateway} dispatch={dispatch} returnToSignIn={signOut} />}
       {state.view === 'staff' && currentRole === 'teacher' && <TeacherWorkspace state={state} dispatch={dispatch} signOut={signOut} gateway={weaveGateway} />}
       {state.view === 'staff' && currentRole === 'admin' && <AdminWorkspace state={state} dispatch={dispatch} signOut={signOut} gateway={weaveGateway} />}
+      <ToastHost />
     </div>
   )
 }
