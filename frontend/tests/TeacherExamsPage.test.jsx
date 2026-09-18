@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { TeacherCreateExamPage, TeacherExamsPage } from '../src/features/teacher/TeacherExamsPage'
+import { TeacherExamsPage } from '../src/features/teacher/TeacherExamsPage'
+
+import { ExamAuthoringPage } from '../src/shared/exams/ExamAuthoringPage'
 
 const teacherData = {
   exams: [
@@ -25,11 +27,13 @@ const teacherData = {
       authoringVersion: 3,
       revisionNumber: 1,
       createdByActorId: 'actor-1',
+      leadTeacherId: 'teacher-1',
       rosterCandidateCount: 0,
       scheduledStartAt: null,
       latestNormalStartAt: null,
     },
   ],
+  assignments: [{ teacherMembershipId: 'teacher-1', curriculumSubjectId: 'subject-1' }],
   subjects: [{ id: 'subject-1', name: 'Mathematics' }],
   banks: [
     {
@@ -77,9 +81,8 @@ describe('Teacher exams', () => {
     )
 
     expect(screen.getByRole('heading', { name: /examinations/i })).toBeInTheDocument()
-    expect(screen.getByText('Mathematics CA 1')).toBeInTheDocument()
-    expect(screen.getByText('30 questions')).toBeInTheDocument()
-    expect(screen.getByText('45 min')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Mathematics CA 1' })).toBeInTheDocument()
+    expect(screen.getByText(/30 questions/)).toHaveTextContent('45 min')
     expect(screen.getByText('Draft')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /^create exam$/i }))
@@ -95,7 +98,7 @@ describe('Teacher exams', () => {
     const refresh = vi.fn().mockResolvedValue(undefined)
 
     render(
-      <TeacherCreateExamPage
+      <ExamAuthoringPage
         state={teacherState}
         dispatch={dispatch}
         teacherData={{ ...teacherData, exams: [], refresh }}

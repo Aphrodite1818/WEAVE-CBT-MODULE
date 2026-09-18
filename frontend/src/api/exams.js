@@ -8,6 +8,17 @@ export function getExam(examId, options = {}) {
   return weaveRequest(`/exams/${examId}`, options)
 }
 
+export function listLeadCandidates(params, options = {}) {
+  return weaveRequest(`/exams/lead-candidates${queryString(params)}`, options)
+}
+
+export function assignExamLead(examId, leadTeacherId, expectedAuthoringVersion) {
+  return weaveRequest(`/exams/${examId}/lead`, {
+    method: 'PUT',
+    body: { lead_teacher_id: leadTeacherId || null, expected_authoring_version: expectedAuthoringVersion },
+  })
+}
+
 export function createExam(payload) {
   return weaveRequest('/exams', { method: 'POST', body: payload })
 }

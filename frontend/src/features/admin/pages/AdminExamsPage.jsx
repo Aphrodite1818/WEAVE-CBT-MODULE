@@ -14,20 +14,24 @@ import {
   RiShieldCheckLine,
   RiStopCircleLine,
 } from '@remixicon/react'
+import { ExamCard, ExamViewToggle } from '../../../shared/exams/ExamCard'
+import { examStatuses } from '../../../shared/exams/examPermissions'
+import '../../../shared/exams/exam-workspace.css'
 import { Icon } from '../../../shared/icons/Icon'
-import { Notice, SelectControl, StatusBadge } from '../../../shared/ui'
+import { Notice, SelectControl } from '../../../shared/ui'
 
-const PAGE_SIZE = 10
+const PAGE_SIZE = 12
 const POPOVER_WIDTH = 330
 const VIEWPORT_GAP = 12
-const tabs = ['all', 'draft', 'submitted', 'sealed', 'active', 'suspended', 'closed', 'cancelled']
+const tabs = examStatuses
 
 export function AdminExamsPage({ adminData, gateway, onNavigate }) {
+  const [view, setView] = useState('grid')
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
   const [subjectId, setSubjectId] = useState('all')
   const [componentId, setComponentId] = useState('all')
-  const [page, setPage] = useState(1)
+  const [requestedPage, setPage] = useState(1)
   const [menuExamId, setMenuExamId] = useState(null)
   const [menuPosition, setMenuPosition] = useState(null)
   const [pending, setPending] = useState(null)
@@ -44,12 +48,12 @@ export function AdminExamsPage({ adminData, gateway, onNavigate }) {
   useEffect(() => {
     if (!menuExamId) return undefined
     const closeOutside = (event) => {
-      if (!menuRef.current?.contains(event.target)) closeMenu()
+      if (!menuRef.current?.contains(event.target) && !event.target.closest?.('.teacher-exam-lifecycle__trigger')) closeMenu()
     }
     const closeEscape = (event) => {
       if (event.key === 'Escape') closeMenu()
     }
-    const closeViewport = () => closeMenu()
+    const closeViewport = (event) => { if (!menuRef.current?.contains(event.target) && !event.target.closest?.('.teacher-exam-lifecycle__trigger')) closeMenu() }
     document.addEventListener('pointerdown', closeOutside)
     document.addEventListener('keydown', closeEscape)
     window.addEventListener('resize', closeViewport)
@@ -96,11 +100,9 @@ export function AdminExamsPage({ adminData, gateway, onNavigate }) {
   }, [adminData.exams, componentId, query, status, subjectId])
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const page = Math.min(requestedPage, pageCount)
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
-  useEffect(() => {
-    if (page > pageCount) setPage(pageCount)
-  }, [page, pageCount])
 
   const setFilter = (setter) => (value) => {
     setter(value)
@@ -204,32 +206,21 @@ export function AdminExamsPage({ adminData, gateway, onNavigate }) {
         ))}
       </nav>
 
-      <div className="teacher-exam-filters teacher-exam-filters--refined">
+      <div className="teacher-exam-filters teacher-exam-filters--refined exam-filters">
         <label className="teacher-search-control teacher-search-control--grow">
           <RiSearchLine size={18} aria-hidden="true" />
           <input aria-label="Search examinations" type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1) }} placeholder="Search by title, subject, or assessment..." />
         </label>
         <SelectControl label="Exam subject filter" value={subjectId} options={subjectOptions} onChange={setFilter(setSubjectId)} />
         <SelectControl label="Assessment component filter" value={componentId} options={componentOptions} onChange={setFilter(setComponentId)} />
+        <ExamViewToggle value={view} onChange={setView} />
       </div>
 
-      <section className="teacher-exam-collection" aria-label="School examinations" aria-busy={adminData.loading}>
-        <div className="teacher-exam-collection__header" aria-hidden="true">
-          <span>Examination</span><span>Academic context</span><span>Paper</span><span>Schedule</span><span>Status</span><span>Updated</span><span>Actions</span>
-        </div>
-
+      <section className={`exam-collection exam-collection--${view}`} aria-label="School examinations" aria-busy={adminData.loading}>
         {visible.map((exam) => (
-          <article className="teacher-exam-entity" key={exam.id}>
-            <div className="teacher-exam-entity__title">
-              <span className="teacher-exam-entity__icon"><Icon name="exam" size={20} /></span>
-              <div><h2>{exam.title}</h2><p>{formatSelectionMode(exam.selectionMode)} · Revision {exam.revisionNumber || 1}</p></div>
-            </div>
-            <div className="teacher-exam-entity__stack" data-label="Academic context"><strong>{exam.subjectName}</strong><span>{exam.assessmentName}</span></div>
-            <div className="teacher-exam-entity__stack" data-label="Paper"><strong>{exam.questionCount} {exam.questionCount === 1 ? 'question' : 'questions'}</strong><span>{exam.durationMinutes} min</span></div>
-            <div className="teacher-exam-entity__stack" data-label="Schedule"><strong>{exam.scheduledStartAt ? formatDate(exam.scheduledStartAt) : 'Not scheduled'}</strong><span>{exam.scheduledStartAt ? formatTime(exam.scheduledStartAt) : 'Timing not set'}</span></div>
-            <div data-label="Status"><StatusBadge tone={statusTone(exam.status)}>{exam.statusLabel}</StatusBadge></div>
-            <div className="teacher-exam-entity__updated" data-label="Updated">{formatDate(exam.updatedAt)}</div>
-            <div className="teacher-exam-entity__actions" data-label="Actions">
+          <ExamCard key={exam.id} exam={exam}
+            onOpen={() => onNavigate('create-exam', { selectedExamId: exam.id })}
+            onEdit={exam.status === 'draft' ? () => onNavigate('create-exam', { selectedExamId: exam.id }) : undefined}>
               <div className="teacher-exam-lifecycle" ref={menuExamId === exam.id ? menuRef : undefined}>
                 <button
                   className="teacher-exam-lifecycle__trigger"
@@ -245,13 +236,14 @@ export function AdminExamsPage({ adminData, gateway, onNavigate }) {
                   <AdminLifecycleMenu
                     exam={exam}
                     style={menuPosition}
+                    menuRef={menuRef}
+                    onOpen={() => { closeMenu(); onNavigate('create-exam', { selectedExamId: exam.id }) }}
                     onEdit={() => { closeMenu(); onNavigate('create-exam', { selectedExamId: exam.id }) }}
                     onAction={(action) => request(exam, action)}
                   />
                 )}
               </div>
-            </div>
-          </article>
+          </ExamCard>
         ))}
 
         {!adminData.loading && visible.length === 0 && (
@@ -266,9 +258,9 @@ export function AdminExamsPage({ adminData, gateway, onNavigate }) {
         <div className="teacher-exam-pagination teacher-exam-pagination--refined">
           <span>{filtered.length === 0 ? '0 exams' : `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filtered.length)} of ${filtered.length} exams`}</span>
           <div>
-            <button type="button" aria-label="Previous page" disabled={page === 1} onClick={() => setPage((value) => value - 1)}>‹</button>
+            <button type="button" aria-label="Previous page" disabled={page === 1} onClick={() => setPage(page - 1)}>‹</button>
             <span>{page} / {pageCount}</span>
-            <button type="button" aria-label="Next page" disabled={page === pageCount} onClick={() => setPage((value) => value + 1)}>›</button>
+            <button type="button" aria-label="Next page" disabled={page === pageCount} onClick={() => setPage(page + 1)}>›</button>
           </div>
         </div>
       </section>
@@ -278,17 +270,19 @@ export function AdminExamsPage({ adminData, gateway, onNavigate }) {
   )
 }
 
-function AdminLifecycleMenu({ exam, style, onEdit, onAction }) {
+function AdminLifecycleMenu({ exam, style, menuRef, onOpen, onEdit, onAction }) {
   const actions = lifecycleActions(exam)
-  return (
-    <div className="teacher-exam-lifecycle__menu admin-exam-lifecycle__menu" role="dialog" aria-label={`Lifecycle for ${exam.title}`} style={style}>
+  return createPortal(
+    <div ref={menuRef} className="teacher-exam-lifecycle__menu admin-exam-lifecycle__menu" role="dialog" aria-label={`Lifecycle for ${exam.title}`} style={style}>
       <div className="teacher-exam-lifecycle__heading">
         <div><strong>Exam lifecycle</strong><span>{exam.statusLabel}</span></div>
         <small>v{exam.authoringVersion || 1}</small>
       </div>
+      <button type="button" onClick={onOpen}><Icon name="exam" size={18} /><span><strong>{['closing', 'cancelling'].includes(exam.status) ? 'View progress' : 'View examination'}</strong><small>Open the paper and its current settings.</small></span></button>
       {exam.status === 'draft' && (
         <button type="button" onClick={onEdit}><RiEdit2Line size={18} /><span><strong>Edit draft</strong><small>Update metadata, timing and delivery settings.</small></span></button>
       )}
+      {exam.status === 'draft' && <button type="button" onClick={onEdit}><Icon name="users" size={18} /><span><strong>Change lead</strong><small>Assign an eligible teacher in authoring ownership.</small></span></button>}
       {actions.map((action) => {
         const ActionIcon = action.Icon
         return (
@@ -299,9 +293,9 @@ function AdminLifecycleMenu({ exam, style, onEdit, onAction }) {
         )
       })}
       {!actions.length && exam.status !== 'draft' && (
-        <div className="teacher-exam-lifecycle__info"><Icon name="info" size={18} /><p>This examination is preserved in its current terminal lifecycle state.</p></div>
+        <div className="teacher-exam-lifecycle__info"><Icon name="info" size={18} /><p>{['closing', 'cancelling'].includes(exam.status) ? 'Finalization is in progress. Reverse actions are unavailable.' : 'This examination is read-only.'}</p></div>
       )}
-    </div>
+    </div>, document.body
   )
 }
 
@@ -404,7 +398,4 @@ function getPopoverPosition(trigger) {
 
 function requiresReason(action) { return action === 'suspend' || action === 'cancel' }
 function titleCase(value) { return String(value).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) }
-function formatSelectionMode(mode) { return mode === 'manual' ? 'Manual selection' : 'Random selection' }
-function formatDate(value) { if (!value) return '—'; const date = new Date(value); return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString() }
-function formatTime(value) { if (!value) return '—'; const date = new Date(value); return Number.isNaN(date.getTime()) ? '—' : date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) }
-function statusTone(status) { if (status === 'active' || status === 'closed') return 'success'; if (status === 'draft') return 'warning'; if (status === 'cancelled' || status === 'suspended') return 'danger'; return 'info' }
+

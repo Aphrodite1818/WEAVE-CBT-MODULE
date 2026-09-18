@@ -249,6 +249,8 @@ function normalizeExam(exam, subjectByCurriculum, componentById) {
     revisionNumber: exam.revision_number,
     revisionOfExamId: exam.revision_of_exam_id,
     createdByActorId: exam.created_by_actor_id,
+    leadTeacherId: exam.lead_teacher_id,
+    leadAssignedAt: exam.lead_assigned_at,
     componentMaximumScore: exam.component_maximum_score,
     createdAt: exam.created_at,
     updatedAt: exam.updated_at,

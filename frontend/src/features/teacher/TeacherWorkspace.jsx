@@ -4,7 +4,8 @@ import { TeacherLayout } from "./TeacherLayout";
 import { OverviewPage } from "./OverviewPage";
 import { BankDetailPage, QuestionBanksPage } from "./QuestionBanksPage";
 import { QuestionBuilder } from "./QuestionBuilder";
-import { TeacherCreateExamPage, TeacherExamsPage } from "./TeacherExamsPage";
+import { TeacherExamsPage } from "./TeacherExamsPage";
+import { ExamAuthoringPage } from "../../shared/exams/ExamAuthoringPage";
 import { TeacherQuestionsPage } from "./TeacherQuestionsPage";
 import { TeacherQuestionPreviewPage } from "./TeacherQuestionPreviewPage";
 import "./teacher-dashboard.css";
@@ -111,7 +112,7 @@ export function TeacherWorkspace({
         />
       )}
       {state.staff.section === "create-exam" && (
-        <TeacherCreateExamPage
+        <ExamAuthoringPage
           state={state}
           dispatch={workspaceDispatch}
           teacherData={teacherData}
@@ -340,6 +341,7 @@ function normalizeSubject(subject) {
 function normalizeAssignment(assignment) {
   return {
     id: assignment.id,
+    teacherMembershipId: assignment.teacher_membership_id,
     curriculumSubjectId: assignment.curriculum_subject_id,
     subjectId: assignment.subject_id,
     subjectName: assignment.subject_name,
@@ -420,6 +422,8 @@ function normalizeExam(exam, subjectByCurriculum, componentById) {
     revisionNumber: exam.revision_number,
     revisionOfExamId: exam.revision_of_exam_id,
     createdByActorId: exam.created_by_actor_id,
+    leadTeacherId: exam.lead_teacher_id,
+    leadAssignedAt: exam.lead_assigned_at,
     componentMaximumScore: exam.component_maximum_score,
     createdAt: exam.created_at,
     updatedAt: exam.updated_at,

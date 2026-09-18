@@ -3,7 +3,7 @@ import { getLocalBrandLogoSrc } from '../../api/branding'
 import { Icon } from '../../shared/icons/Icon'
 import { DashboardAccountMenu, DashboardSchoolIdentity } from '../../shared/ui'
 import { QuestionBuilder } from '../teacher/QuestionBuilder'
-import { TeacherCreateExamPage } from '../teacher/TeacherExamsPage'
+import { ExamAuthoringPage } from '../../shared/exams/ExamAuthoringPage'
 import { TeacherQuestionPreviewPage } from '../teacher/TeacherQuestionPreviewPage'
 import { AdminExamsPage } from './pages/AdminExamsPage'
 import { AdminOverview } from './pages/AdminOverview'
@@ -128,7 +128,7 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
           {workspaceView === 'create-question' && <QuestionBuilder mode="create" state={state} dispatch={workspaceDispatch} teacherData={activeAuthoringData} gateway={gateway} />}
           {workspaceView === 'edit-question' && <QuestionBuilder key={state.staff.selectedQuestionId || 'admin-question-editor'} mode="edit" state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
           {workspaceView === 'exams' && <AdminExamsPage state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
-          {workspaceView === 'create-exam' && <TeacherCreateExamPage state={state} dispatch={workspaceDispatch} teacherData={examFormData} gateway={gateway} />}
+          {workspaceView === 'create-exam' && <ExamAuthoringPage state={state} dispatch={workspaceDispatch} teacherData={examFormData} gateway={gateway} />}
           {placeholderViews.has(workspaceView) && <AdminPlaceholderPage section={workspaceView} />}
         </div>
       </section>
