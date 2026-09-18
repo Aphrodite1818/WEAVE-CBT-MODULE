@@ -110,8 +110,11 @@ for router in (
     academic_router,
     question_management_router,
     questions_router,
-    exam_read_router,
+    # Register the static exam-authoring routes before the generic /exams/{exam_id}
+    # read route. Starlette resolves routes in declaration order, so endpoints such
+    # as /exams/lead-candidates and /exams/invigilators/available must be seen first.
     exams_router,
+    exam_read_router,
     exam_execution_router,
     timetable_router,
     candidates_router,
