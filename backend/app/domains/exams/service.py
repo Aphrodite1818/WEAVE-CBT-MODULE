@@ -172,11 +172,15 @@ class ExamService(
         except (TypeError, ValueError):
             return False
 
-        if exam.lead_teacher_id is not None:
-            return teacher_id == exam.lead_teacher_id
+        lead_teacher_id = getattr(exam, "lead_teacher_id", None)
+        if lead_teacher_id is not None:
+            return teacher_id == lead_teacher_id
 
-        # Legacy/in-memory compatibility only. Migrated teacher-created rows are
-        # backfilled with lead_teacher_id. A new NULL lead means admin-led.
+        # Explicit NULL leadership on rows using the new contract means the
+        # administrator coordinates the paper. Only legacy/in-memory rows that
+        # predate lead-assignment metadata fall back to creator-as-lead.
+        if getattr(exam, "lead_assigned_at", None) is not None:
+            return False
         return actor.id == exam.created_by_actor_id
 
     @staticmethod
@@ -225,7 +229,9 @@ class ExamService(
                 term_id=exam.term_id,
             )
 
-        if exam.lead_teacher_id == lead_teacher_id:
+        if getattr(exam, "lead_teacher_id", None) == lead_teacher_id and getattr(
+            exam, "lead_assigned_at", None
+        ) is not None:
             await db.commit()
             return exam
 
@@ -305,10 +311,9 @@ class ExamService(
         )
         exam = await super().create_exam(db, actor=actor, payload=payload)
 
-        # Base authoring commits the new draft. Leadership is then attached to
-        # the returned row. The fields remain nullable at the schema level so a
-        # crash in this tiny post-create window degrades safely to admin-led
-        # rather than leaving an unusable examination.
+        # Base authoring creates the shared draft; this facade then attaches its
+        # explicit coordination identity. NULL is a valid, deliberate admin-led
+        # state rather than an absent creator identity.
         exam.lead_teacher_id = lead_teacher_id
         exam.lead_assigned_by_actor_id = actor.id
         exam.lead_assigned_at = datetime.now(UTC)
