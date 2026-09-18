@@ -6,6 +6,7 @@ import { QuestionBuilder } from '../teacher/QuestionBuilder'
 import { ExamAuthoringPage } from '../../shared/exams/ExamAuthoringPage'
 import { TeacherQuestionPreviewPage } from '../teacher/TeacherQuestionPreviewPage'
 import { AdminExamsPage } from './pages/AdminExamsPage'
+import { ExamOperations, ExamOperationsDetail } from './pages/ExamOperations'
 import { AdminOverview } from './pages/AdminOverview'
 import { AdminBankDetailPage, AdminQuestionBanksPage } from './pages/AdminQuestionBanks'
 import { AdminQuestionsPage } from './pages/AdminQuestionsPage'
@@ -19,6 +20,7 @@ import './admin.css'
 const bankViews = new Set(['question-banks', 'create-bank', 'bank-detail', 'questions', 'create-question', 'edit-question', 'preview-question'])
 const examViews = new Set(['exams', 'create-exam'])
 const rosterViews = new Set(['roster', 'roster-detail'])
+const operationViews = new Set(['operations', 'operation-detail'])
 const placeholderViews = new Set(['invigilators', 'results', 'reports'])
 
 const adminNav = [
@@ -27,6 +29,7 @@ const adminNav = [
   ['questions', 'fileText', 'Questions'],
   ['exams', 'calendar', 'Exams'],
   ['roster', 'roster', 'Roster'],
+  ['operations', 'operations', 'Exam Operations'],
   ['invigilators', 'shield', 'Invigilators'],
   ['results', 'results', 'Results'],
   ['reports', 'reports', 'Reports'],
@@ -63,6 +66,7 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
     if (state.staff.section === 'question-banks' && !bankViews.has(workspaceView)) setWorkspaceView('question-banks')
     if (state.staff.section === 'exams' && !examViews.has(workspaceView)) setWorkspaceView('exams')
     if (state.staff.section === 'roster' && !rosterViews.has(workspaceView)) setWorkspaceView('roster')
+    if (state.staff.section === 'operations' && !operationViews.has(workspaceView)) setWorkspaceView('operations')
   }, [state.staff.section, workspaceView])
 
   const navigate = useCallback((view, patch = {}) => {
@@ -72,7 +76,9 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
         ? 'exams'
         : rosterViews.has(view)
           ? 'roster'
-          : view
+          : operationViews.has(view)
+            ? 'operations'
+            : view
     const previewPatch = view === 'preview-question'
       ? { questionPreviewOrigin: workspaceView === 'bank-detail' ? 'bank-detail' : 'questions' }
       : {}
@@ -94,6 +100,7 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
     if (section === 'questions') return workspaceView === 'questions' || workspaceView === 'create-question' || workspaceView === 'edit-question' || workspaceView === 'preview-question'
     if (section === 'exams') return examViews.has(workspaceView)
     if (section === 'roster') return rosterViews.has(workspaceView)
+    if (section === 'operations') return operationViews.has(workspaceView)
     return workspaceView === section
   }
 
@@ -137,6 +144,8 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
           {workspaceView === 'create-exam' && <ExamAuthoringPage state={state} dispatch={workspaceDispatch} teacherData={examFormData} gateway={gateway} />}
           {workspaceView === 'roster' && <AdminRostersPage adminData={adminData} onNavigate={navigate} />}
           {workspaceView === 'roster-detail' && <AdminRosterDetailPage state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
+          {workspaceView === 'operations' && <ExamOperations adminData={adminData} onNavigate={navigate} />}
+          {workspaceView === 'operation-detail' && <ExamOperationsDetail state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
           {placeholderViews.has(workspaceView) && <AdminPlaceholderPage section={workspaceView} />}
         </div>
       </section>
@@ -162,5 +171,6 @@ function AdminPlaceholderPage({ section }) {
 function topLevelView(section) {
   if (section === 'overview') return 'dashboard'
   if (section === 'students') return 'roster'
+  if (section === 'exam-operations') return 'operations'
   return section || 'dashboard'
 }
