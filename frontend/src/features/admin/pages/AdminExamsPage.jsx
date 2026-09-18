@@ -103,7 +103,6 @@ export function AdminExamsPage({ adminData, gateway, onNavigate }) {
   const page = Math.min(requestedPage, pageCount)
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
-
   const setFilter = (setter) => (value) => {
     setter(value)
     setPage(1)
@@ -311,17 +310,17 @@ function lifecycleActions(exam) {
   if (exam.status === 'sealed') return [
     { key: 'activate', label: 'Activate examination', copy: exam.rosterStatus === 'ready' ? 'Open this sealed paper for candidates.' : 'Candidate roster must be ready before activation.', Icon: RiPlayCircleLine, disabled: exam.rosterStatus !== 'ready' },
     { key: 'revision', label: 'Create revision', copy: 'Start a new editable revision from this sealed paper.', Icon: RiRefreshLine },
-    { key: 'cancel', label: 'Cancel examination', copy: 'Cancel this sealed revision with an audit reason.', Icon: RiCloseCircleLine, danger: true },
+    { key: 'cancel', label: 'Cancel examination', copy: 'Invalidate this sealed sitting with an audit reason.', Icon: RiCloseCircleLine, danger: true },
   ]
   if (exam.status === 'active') return [
     { key: 'suspend', label: 'Suspend examination', copy: 'Temporarily pause the live examination.', Icon: RiPauseCircleLine },
-    { key: 'close', label: 'Close examination', copy: 'End the live examination normally.', Icon: RiStopCircleLine },
-    { key: 'cancel', label: 'Cancel examination', copy: 'Cancel the live examination with a reason.', Icon: RiCloseCircleLine, danger: true },
+    { key: 'close', label: 'Close examination', copy: 'Permanently finish this sitting and finalize unfinished attempts.', Icon: RiStopCircleLine },
+    { key: 'cancel', label: 'Cancel examination', copy: 'Invalidate this sitting and terminate unfinished attempts.', Icon: RiCloseCircleLine, danger: true },
   ]
   if (exam.status === 'suspended') return [
     { key: 'resume', label: 'Resume examination', copy: 'Return the suspended examination to active.', Icon: RiPlayCircleLine },
-    { key: 'close', label: 'Close examination', copy: 'Close the examination while suspended.', Icon: RiStopCircleLine },
-    { key: 'cancel', label: 'Cancel examination', copy: 'Cancel the suspended examination with a reason.', Icon: RiCloseCircleLine, danger: true },
+    { key: 'close', label: 'Close examination', copy: 'Permanently finish this sitting while suspended.', Icon: RiStopCircleLine },
+    { key: 'cancel', label: 'Cancel examination', copy: 'Invalidate the suspended sitting with a reason.', Icon: RiCloseCircleLine, danger: true },
   ]
   if (exam.status === 'cancelled') return [
     { key: 'revision', label: 'Create revision', copy: 'Start a clean revision from this cancelled paper.', Icon: RiRefreshLine },
@@ -363,12 +362,17 @@ function lifecycleCopy(action) {
     seal: ['Seal this examination?', 'Questions, options, component score and target classes will be frozen.', 'Seal examination', RiShieldCheckLine, false, false],
     revision: ['Create a new examination revision?', 'A new editable revision will be created without changing the historical revision.', 'Create revision', RiRefreshLine, false, false],
     activate: ['Activate this examination?', 'Candidates on the prepared roster will be able to start the exam.', 'Activate exam', RiPlayCircleLine, false, false],
-    suspend: ['Suspend this examination?', 'Active execution will be paused until an administrator resumes it.', 'Suspend exam', RiPauseCircleLine, false, true],
+    suspend: ['Suspend this examination?', 'Active execution will pause and candidate timers will remain protected until an administrator resumes or ends the sitting.', 'Suspend exam', RiPauseCircleLine, false, true],
     resume: ['Resume this examination?', 'The suspended examination will become active again.', 'Resume exam', RiPlayCircleLine, false, true],
-    close: ['Close this examination?', 'This ends the operational lifecycle and preserves the completed paper.', 'Close exam', RiStopCircleLine, false, false],
-    cancel: ['Cancel this examination?', 'Cancellation is permanent for this revision and requires an audit reason.', 'Cancel exam', RiCloseCircleLine, true, true],
+    close: ['Close this examination?', 'Closing permanently ends this sitting. Unfinished attempts will be finalized using their saved work at the closing cutoff.', 'Close exam', RiStopCircleLine, false, false],
+    cancel: ['Cancel this examination?', 'Cancellation invalidates this sitting. Unfinished attempts will be terminated and this sitting will not be used as a valid result source.', 'Cancel exam', RiCloseCircleLine, true, true],
   }
   const [title, description, confirm, IconComponent, danger, reason] = entries[action]
+  const warnings = {
+    seal: 'Sealing freezes the executable paper. Further authoring requires a new revision.',
+    close: 'Once CLOSING begins it cannot be reversed back to ACTIVE. Use Suspend instead if you may need to continue the examination.',
+    cancel: 'Once CANCELLING begins it cannot be reversed. Cancellation is an invalidation action, not a temporary pause.',
+  }
   return {
     title,
     description,
@@ -377,9 +381,7 @@ function lifecycleCopy(action) {
     danger,
     reason,
     reasonPlaceholder: action === 'resume' ? 'Optional note for resuming this exam.' : 'Explain why this lifecycle action is required.',
-    warning: action === 'seal'
-      ? 'Sealing freezes the executable paper. Further authoring requires a new revision.'
-      : 'Weave will enforce the backend lifecycle rules and reject stale or invalid transitions.',
+    warning: warnings[action] || 'Weave will enforce the backend lifecycle rules and reject stale or invalid transitions.',
   }
 }
 
@@ -398,4 +400,3 @@ function getPopoverPosition(trigger) {
 
 function requiresReason(action) { return action === 'suspend' || action === 'cancel' }
 function titleCase(value) { return String(value).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) }
-
