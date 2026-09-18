@@ -47,6 +47,8 @@ export function LandingPage({ dispatch, audience = 'combined' }) {
 
   return (
     <main className="landing-page">
+      <h1 className="landing-sr-only">A smarter way to take exams</h1>
+
       <nav className="landing-nav" aria-label="Sign in">
         {showStudentLogin && (
           <button className="landing-primary" type="button" onClick={() => openLogin('student')}>
