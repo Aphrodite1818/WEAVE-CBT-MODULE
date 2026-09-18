@@ -8,7 +8,11 @@ function rememberQuestionVersion(question) {
 }
 
 export function createQuestionBank(curriculumSubjectId, payload) {
-  return weaveRequest(`/questions/banks/${curriculumSubjectId}`, { method: 'POST', body: payload })
+  return weaveRequest(`/questions/banks/${curriculumSubjectId}`, {
+    method: 'POST',
+    body: payload,
+    successMessage: 'Question bank created.',
+  })
 }
 
 export const listAuthorableQuestionBanks = () => weaveRequest('/questions/banks/authorable')
@@ -18,19 +22,40 @@ export function listAdminQuestionBanks(params = {}, options = {}) {
 }
 
 export function updateQuestionBank(bankId, payload) {
-  return weaveRequest(`/questions/banks/${bankId}`, { method: 'PATCH', body: payload })
+  return weaveRequest(`/questions/banks/${bankId}`, {
+    method: 'PATCH',
+    body: payload,
+    successMessage: 'Question bank updated.',
+  })
 }
 
-export const archiveQuestionBank = (bankId) => weaveRequest(`/questions/banks/${bankId}/archive`, { method: 'POST' })
-export const reactivateQuestionBank = (bankId) => weaveRequest(`/questions/banks/${bankId}/reactivate`, { method: 'POST' })
-export const deleteEmptyQuestionBank = (bankId) => weaveRequest(`/questions/banks/${bankId}`, { method: 'DELETE' })
+export const archiveQuestionBank = (bankId) => weaveRequest(`/questions/banks/${bankId}/archive`, {
+  method: 'POST',
+  successMessage: 'Question bank archived.',
+})
+export const reactivateQuestionBank = (bankId) => weaveRequest(`/questions/banks/${bankId}/reactivate`, {
+  method: 'POST',
+  successMessage: 'Question bank reactivated.',
+})
+export const deleteEmptyQuestionBank = (bankId) => weaveRequest(`/questions/banks/${bankId}`, {
+  method: 'DELETE',
+  successMessage: 'Empty question bank deleted.',
+})
 
 export function createSingleChoiceQuestion(bankId, payload) {
-  return weaveRequest(`/questions/banks/${bankId}/single-choice`, { method: 'POST', body: payload }).then(rememberQuestionVersion)
+  return weaveRequest(`/questions/banks/${bankId}/single-choice`, {
+    method: 'POST',
+    body: payload,
+    successMessage: 'Question created.',
+  }).then(rememberQuestionVersion)
 }
 
 export function createMultipleChoiceQuestion(bankId, payload) {
-  return weaveRequest(`/questions/banks/${bankId}/multiple-choice`, { method: 'POST', body: payload }).then(rememberQuestionVersion)
+  return weaveRequest(`/questions/banks/${bankId}/multiple-choice`, {
+    method: 'POST',
+    body: payload,
+    successMessage: 'Question created.',
+  }).then(rememberQuestionVersion)
 }
 
 export function listQuestionsForBank(bankId, params = {}, options = {}) {
@@ -52,13 +77,26 @@ export async function updateQuestion(questionId, payload) {
   const guardedPayload = expectedVersion == null
     ? payload
     : { ...payload, expected_version: expectedVersion }
-  const question = await weaveRequest(`/questions/${questionId}`, { method: 'PATCH', body: guardedPayload })
+  const question = await weaveRequest(`/questions/${questionId}`, {
+    method: 'PATCH',
+    body: guardedPayload,
+    successMessage: 'Question changes saved.',
+  })
   return rememberQuestionVersion(question)
 }
 
-export const archiveQuestion = (questionId) => weaveRequest(`/questions/${questionId}/archive`, { method: 'POST' }).then(rememberQuestionVersion)
-export const reactivateQuestion = (questionId) => weaveRequest(`/questions/${questionId}/reactivate`, { method: 'POST' }).then(rememberQuestionVersion)
-export const deleteUnusedQuestion = (questionId) => weaveRequest(`/questions/${questionId}`, { method: 'DELETE' }).then((result) => {
+export const archiveQuestion = (questionId) => weaveRequest(`/questions/${questionId}/archive`, {
+  method: 'POST',
+  successMessage: 'Question archived.',
+}).then(rememberQuestionVersion)
+export const reactivateQuestion = (questionId) => weaveRequest(`/questions/${questionId}/reactivate`, {
+  method: 'POST',
+  successMessage: 'Question reactivated.',
+}).then(rememberQuestionVersion)
+export const deleteUnusedQuestion = (questionId) => weaveRequest(`/questions/${questionId}`, {
+  method: 'DELETE',
+  successMessage: 'Unused question deleted.',
+}).then((result) => {
   questionVersions.delete(questionId)
   return result
 })
