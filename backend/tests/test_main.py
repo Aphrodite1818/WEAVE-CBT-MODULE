@@ -65,12 +65,12 @@ class MainTests(unittest.TestCase):
         )
 
         self.assertIn(
-            "/api/v1/academics/sessions/current",
+            "/api/v1/academics/session/current",
             paths,
         )
 
         self.assertIn(
-            "/api/v1/academics/terms/current",
+            "/api/v1/academics/term/current",
             paths,
         )
 
