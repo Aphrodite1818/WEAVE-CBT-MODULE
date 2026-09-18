@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.core.frontend import register_frontend_routes
 from app.core.database import check_database_connection, dispose_database_engine
 from app.core.integration_errors import register_weave_integration_error_handlers
 from app.core.redis import close_redis_client
@@ -125,3 +126,6 @@ for router in (
     results_router,
 ):
     app.include_router(router, prefix=settings.API_V1_PREFIX)
+
+
+register_frontend_routes(app)

@@ -8,6 +8,7 @@ const publicDir = fileURLToPath(new URL('./public/', import.meta.url))
 const outDir = fileURLToPath(new URL('./dist/staff/', import.meta.url))
 
 export default defineConfig({
+  base: '/staff/',
   root: appRoot,
   publicDir,
   plugins: [react()],

@@ -8,7 +8,7 @@ import '../../../src/styles/product-shell.css'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename="/student">
       <StudentApp />
     </BrowserRouter>
   </StrictMode>,

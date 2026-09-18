@@ -1,2 +1,2 @@
-# Common Nuitka options placeholder.
-# Shared API/worker compilation flags will live here once the first standalone build is proven.
+--mode=standalone
+--include-package=app

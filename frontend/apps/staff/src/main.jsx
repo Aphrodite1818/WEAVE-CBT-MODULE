@@ -10,7 +10,7 @@ import '../../../src/styles/dashboard-controls.css'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename = "/staff">
       <StaffApp />
     </BrowserRouter>
   </StrictMode>,
