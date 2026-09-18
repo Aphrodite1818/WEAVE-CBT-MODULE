@@ -10,6 +10,7 @@ import { ExamOperations, ExamOperationsDetail } from './pages/ExamOperations'
 import { AdminOverview } from './pages/AdminOverview'
 import { AdminBankDetailPage, AdminQuestionBanksPage } from './pages/AdminQuestionBanks'
 import { AdminQuestionsPage } from './pages/AdminQuestionsPage'
+import { AdminResultDetailPage, AdminResultsPage } from './pages/AdminResultsPage'
 import { AdminRosterDetailPage, AdminRostersPage } from './pages/AdminRostersPage'
 import { useAdminData } from './useAdminData'
 import '../teacher/teacher-dashboard.css'
@@ -21,7 +22,8 @@ const bankViews = new Set(['question-banks', 'create-bank', 'bank-detail', 'ques
 const examViews = new Set(['exams', 'create-exam'])
 const rosterViews = new Set(['roster', 'roster-detail'])
 const operationViews = new Set(['operations', 'operation-detail'])
-const placeholderViews = new Set(['invigilators', 'results', 'reports'])
+const resultViews = new Set(['results', 'result-detail'])
+const placeholderViews = new Set(['invigilators', 'reports'])
 
 const adminNav = [
   ['dashboard', 'home', 'Dashboard'],
@@ -67,6 +69,7 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
     if (state.staff.section === 'exams' && !examViews.has(workspaceView)) setWorkspaceView('exams')
     if (state.staff.section === 'roster' && !rosterViews.has(workspaceView)) setWorkspaceView('roster')
     if (state.staff.section === 'operations' && !operationViews.has(workspaceView)) setWorkspaceView('operations')
+    if (state.staff.section === 'results' && !resultViews.has(workspaceView)) setWorkspaceView('results')
   }, [state.staff.section, workspaceView])
 
   const navigate = useCallback((view, patch = {}) => {
@@ -78,7 +81,9 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
           ? 'roster'
           : operationViews.has(view)
             ? 'operations'
-            : view
+            : resultViews.has(view)
+              ? 'results'
+              : view
     const previewPatch = view === 'preview-question'
       ? { questionPreviewOrigin: workspaceView === 'bank-detail' ? 'bank-detail' : 'questions' }
       : {}
@@ -101,6 +106,7 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
     if (section === 'exams') return examViews.has(workspaceView)
     if (section === 'roster') return rosterViews.has(workspaceView)
     if (section === 'operations') return operationViews.has(workspaceView)
+    if (section === 'results') return resultViews.has(workspaceView)
     return workspaceView === section
   }
 
@@ -146,6 +152,8 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
           {workspaceView === 'roster-detail' && <AdminRosterDetailPage state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
           {workspaceView === 'operations' && <ExamOperations adminData={adminData} onNavigate={navigate} />}
           {workspaceView === 'operation-detail' && <ExamOperationsDetail state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
+          {workspaceView === 'results' && <AdminResultsPage adminData={adminData} gateway={gateway} onNavigate={navigate} />}
+          {workspaceView === 'result-detail' && <AdminResultDetailPage state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
           {placeholderViews.has(workspaceView) && <AdminPlaceholderPage section={workspaceView} />}
         </div>
       </section>
@@ -156,7 +164,6 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
 function AdminPlaceholderPage({ section }) {
   const labels = {
     invigilators: ['Invigilators', 'Invigilation assignment and monitoring will be connected in a later workspace pass.'],
-    results: ['Results', 'Result review and synchronization controls will be connected in a later workspace pass.'],
     reports: ['Reports', 'Administrative reporting will be connected in a later workspace pass.'],
   }
   const [title, copy] = labels[section] || ['Administrator', 'This workspace is not connected yet.']
