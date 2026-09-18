@@ -5,7 +5,10 @@ def _route_index(path: str, method: str = "GET") -> int:
     method = method.upper()
     for index, route in enumerate(app.routes):
         methods = getattr(route, "methods", set()) or set()
-        if getattr(route, "path", None) == path and method in methods:
+        registered_path = getattr(route, "path_format", None) or getattr(
+            route, "path", None
+        )
+        if registered_path == path and method in methods:
             return index
     raise AssertionError(f"Route {method} {path} was not registered")
 
