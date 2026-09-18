@@ -146,6 +146,10 @@ class Exam(Base):
 
     instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Presentation-only identity for the folder-style exam card. Existing rows
+    # may remain NULL and use the frontend's deterministic fallback colour.
+    folder_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
+
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
 
     shuffle_questions: Mapped[bool] = mapped_column(
