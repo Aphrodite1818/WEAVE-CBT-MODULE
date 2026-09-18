@@ -92,7 +92,8 @@ describe('Weave backend integration shell', () => {
     renderApp()
 
     expect(screen.getByRole('heading', { name: /starting weave/i })).toBeInTheDocument()
-    expect(await screen.findByRole('heading', { name: /a smarter way to take exams/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /login as staff/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /login as student/i })).toBeInTheDocument()
     expect(screen.queryByLabelText(/temporary role switcher/i)).not.toBeInTheDocument()
   })
 
@@ -119,7 +120,7 @@ describe('Weave backend integration shell', () => {
 
     expect(await screen.findByRole('heading', { name: /successfully paired/i })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /continue to home/i }))
-    expect(await screen.findByRole('heading', { name: /a smarter way to take exams/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /login as staff/i })).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/installation/pair', expect.objectContaining({ method: 'POST' }))
   })
 
@@ -133,8 +134,8 @@ describe('Weave backend integration shell', () => {
 
     renderApp()
 
-    await screen.findByRole('heading', { name: /a smarter way to take exams/i })
-    fireEvent.click(screen.getByRole('button', { name: /login as staff/i }))
+    const staffLoginButton = await screen.findByRole('button', { name: /login as staff/i })
+    fireEvent.click(staffLoginButton)
     fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'teacher@brightfield.test' } })
     fireEvent.change(screen.getByPlaceholderText(/enter your password/i), { target: { value: 'secret' } })
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
@@ -202,8 +203,8 @@ describe('Weave backend integration shell', () => {
 
     renderApp()
 
-    await screen.findByRole('heading', { name: /a smarter way to take exams/i })
-    fireEvent.click(screen.getByRole('button', { name: /login as student/i }))
+    const studentLoginButton = await screen.findByRole('button', { name: /login as student/i })
+    fireEvent.click(studentLoginButton)
     fireEvent.change(screen.getByLabelText(/admission number/i), { target: { value: 'bfa/24/001' } })
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'bfa/24/001' } })
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
@@ -218,8 +219,8 @@ describe('Weave backend integration shell', () => {
 })
 
 async function loginAsAdmin() {
-  await screen.findByRole('heading', { name: /a smarter way to take exams/i })
-  fireEvent.click(screen.getByRole('button', { name: /login as staff/i }))
+  const staffLoginButton = await screen.findByRole('button', { name: /login as staff/i })
+  fireEvent.click(staffLoginButton)
   fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'admin@brightfield.test' } })
   fireEvent.change(screen.getByPlaceholderText(/enter your password/i), { target: { value: 'secret' } })
   fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
