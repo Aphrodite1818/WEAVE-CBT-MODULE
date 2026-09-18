@@ -398,6 +398,7 @@ function normalizeExam(exam, subjectByCurriculum, componentById) {
     termId: exam.term_id,
     title: exam.title,
     instructions: exam.instructions || "",
+    folderColor: exam.folder_color || null,
     subjectName: subject?.name || "Subject",
     subjectCode: subject?.code || "",
     curriculumSubjectId: exam.curriculum_subject_id,
