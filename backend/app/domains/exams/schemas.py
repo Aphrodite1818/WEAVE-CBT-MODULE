@@ -61,6 +61,10 @@ class ExamCreate(InputBase):
     shuffle_options: bool = True
     scheduled_start_at: datetime | None = None
     latest_normal_start_at: datetime | None = None
+    # Admins may nominate an academically eligible teacher as lead at create
+    # time. Teacher creators are always their own lead, so this field may be
+    # omitted by teacher clients.
+    lead_teacher_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate_start_window(self) -> ExamCreate:
@@ -178,6 +182,13 @@ class ExamAuthoringAction(InputBase):
     expected_authoring_version: int = Field(default=1, ge=1)
 
 
+class ExamLeadAssignment(InputBase):
+    """Assign an eligible teacher as lead, or null to return leadership to admin."""
+
+    lead_teacher_id: UUID | None = None
+    expected_authoring_version: int = Field(default=1, ge=1)
+
+
 class ExamInvigilatorAssignment(InputBase):
     teacher_ids: list[UUID] = Field(min_length=1)
 
@@ -220,6 +231,9 @@ class ExamResponse(OutputBase):
     revision_number: int
     revision_of_exam_id: UUID | None
     created_by_actor_id: UUID
+    lead_teacher_id: UUID | None
+    lead_assigned_by_actor_id: UUID | None
+    lead_assigned_at: datetime | None
     submitted_by_actor_id: UUID | None
     submitted_at: datetime | None
     sealed_by_actor_id: UUID | None
