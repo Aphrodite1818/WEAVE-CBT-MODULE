@@ -280,6 +280,8 @@ function normalizeExam(exam, subjectByCurriculum, componentById) {
     leadTeacherId: exam.lead_teacher_id,
     leadAssignedAt: exam.lead_assigned_at,
     componentMaximumScore: exam.component_maximum_score,
+    closedAt: exam.closed_at || null,
+    cancelledAt: exam.cancelled_at || null,
     createdAt: exam.created_at,
     updatedAt: exam.updated_at,
   }
