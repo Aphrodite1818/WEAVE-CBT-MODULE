@@ -29,7 +29,12 @@ from app.domains.exams.execution_models import (
     ExamResultDisposition,
 )
 from app.domains.exams.execution_repository import ExamExecutionRepository
-from app.domains.exams.models import Exam, ExamStatus, ExamSuspension, ExamSuspensionSource
+from app.domains.exams.models import (
+    Exam,
+    ExamStatus,
+    ExamSuspension,
+    ExamSuspensionSource,
+)
 from app.domains.exams.repository import ExamRepository
 from app.domains.results.models import ExamResult, ResultSyncStatus
 from app.domains.results.service import ResultService
@@ -104,17 +109,19 @@ class ExamExecutionService:
             await db.commit()
             return exam
         if control.operation is not None:
-            raise ExamStateError("Examination already has a terminal operation in progress")
-        if exam.status not in {ExamStatus.ACTIVE, ExamStatus.SUSPENDED}:
             raise ExamStateError(
-                "Only ACTIVE or SUSPENDED examinations can be closed"
+                "Examination already has a terminal operation in progress"
             )
+        if exam.status not in {ExamStatus.ACTIVE, ExamStatus.SUSPENDED}:
+            raise ExamStateError("Only ACTIVE or SUSPENDED examinations can be closed")
 
         now = requested_at or datetime.now(UTC)
         control.operation = ExamExecutionOperation.CLOSING
         control.operation_source = source
         control.operation_requested_at = now
-        control.operation_requested_by_actor_id = actor.id if actor is not None else None
+        control.operation_requested_by_actor_id = (
+            actor.id if actor is not None else None
+        )
         control.operation_reason = reason.strip() if reason and reason.strip() else None
         control.operation_error = None
         exam.status = ExamStatus.CLOSING
@@ -186,7 +193,9 @@ class ExamExecutionService:
             await db.commit()
             return exam
         if control.operation is not None:
-            raise ExamStateError("Examination already has a terminal operation in progress")
+            raise ExamStateError(
+                "Examination already has a terminal operation in progress"
+            )
         if exam.status not in {
             ExamStatus.SEALED,
             ExamStatus.ACTIVE,
@@ -301,7 +310,9 @@ class ExamExecutionService:
                     db, attempt.candidate_id, lock=True
                 )
                 if candidate is None:
-                    raise ExamStateError("Examination attempt candidate no longer exists")
+                    raise ExamStateError(
+                        "Examination attempt candidate no longer exists"
+                    )
 
                 if attempt.status == AttemptStatus.IN_PROGRESS:
                     await AttemptService._checkpoint_active_segment(
@@ -311,8 +322,10 @@ class ExamExecutionService:
                         at=cutoff,
                     )
                 else:
-                    interruption = await AttemptRepository.get_open_interruption_for_attempt(
-                        db, attempt.id, lock=True
+                    interruption = (
+                        await AttemptRepository.get_open_interruption_for_attempt(
+                            db, attempt.id, lock=True
+                        )
                     )
                     if interruption is not None:
                         actor_id = control.operation_requested_by_actor_id
@@ -439,8 +452,10 @@ class ExamExecutionService:
                         at=cutoff,
                     )
                 else:
-                    interruption = await AttemptRepository.get_open_interruption_for_attempt(
-                        db, attempt.id, lock=True
+                    interruption = (
+                        await AttemptRepository.get_open_interruption_for_attempt(
+                            db, attempt.id, lock=True
+                        )
                     )
                     if interruption is not None:
                         interruption.resumed_at = cutoff
@@ -525,7 +540,9 @@ class ExamExecutionService:
         if exam is None:
             raise ExamNotFound("Examination does not exist")
         if exam.status != ExamStatus.CLOSED:
-            raise ExamStateError("Results can only be approved for a CLOSED examination")
+            raise ExamStateError(
+                "Results can only be approved for a CLOSED examination"
+            )
 
         control = await ExamExecutionRepository.get_or_create_control(
             db, exam.id, lock=True
@@ -668,8 +685,7 @@ class ExamExecutionService:
 
         unstarted_candidate_exists = await db.scalar(
             select(
-                exists()
-                .where(
+                exists().where(
                     ExamCandidate.exam_id == exam.id,
                     ExamCandidate.status == CandidateStatus.ELIGIBLE,
                     ~exists().where(ExamAttempt.candidate_id == ExamCandidate.id),
@@ -688,8 +704,7 @@ class ExamExecutionService:
 
         usable_late_start_exists = await db.scalar(
             select(
-                exists()
-                .where(
+                exists().where(
                     ExamCandidate.exam_id == exam.id,
                     ExamCandidate.status == CandidateStatus.ELIGIBLE,
                     ~exists().where(ExamAttempt.candidate_id == ExamCandidate.id),
@@ -773,7 +788,9 @@ class ExamExecutionService:
         return suspended_ids
 
     @staticmethod
-    async def list_pending_operation_exam_ids(db: AsyncSession) -> tuple[list[UUID], list[UUID]]:
+    async def list_pending_operation_exam_ids(
+        db: AsyncSession,
+    ) -> tuple[list[UUID], list[UUID]]:
         closing = list(
             (
                 await db.execute(
@@ -781,7 +798,9 @@ class ExamExecutionService:
                     .where(Exam.status == ExamStatus.CLOSING)
                     .order_by(Exam.id.asc())
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
         cancelling = list(
             (
@@ -790,6 +809,8 @@ class ExamExecutionService:
                     .where(Exam.status == ExamStatus.CANCELLING)
                     .order_by(Exam.id.asc())
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
         return closing, cancelling

@@ -43,9 +43,7 @@ class AttemptService(_AttemptService):
         )
         control = await ExamExecutionRepository.get_control(db, exam.id)
         if control is None or control.operation_requested_at is None:
-            raise AttemptStateError(
-                "Examination finalization metadata is unavailable"
-            )
+            raise AttemptStateError("Examination finalization metadata is unavailable")
 
         response = await cls._build_attempt_response(
             db,
@@ -115,7 +113,9 @@ class AttemptService(_AttemptService):
             server_time=now,
             last_heartbeat_at=now,
             remaining_seconds=remaining,
-            exam_suspended=(exam.status == ExamStatus.SUSPENDED and not context.is_makeup),
+            exam_suspended=(
+                exam.status == ExamStatus.SUSPENDED and not context.is_makeup
+            ),
             next_heartbeat_after_seconds=ATTEMPT_HEARTBEAT_RECOMMENDED_INTERVAL_SECONDS,
         )
 
@@ -204,7 +204,9 @@ class AttemptService(_AttemptService):
         attempt = await AttemptRepository.get_attempt_by_id(db, attempt_id)
         if attempt is None:
             raise AttemptStateError("Attempt does not exist")
-        candidate = await CandidateRepository.get_candidate_by_id(db, attempt.candidate_id)
+        candidate = await CandidateRepository.get_candidate_by_id(
+            db, attempt.candidate_id
+        )
         if candidate is None:
             raise AttemptStateError("Attempt candidate does not exist")
         exam = await ExamRepository.get_exam_by_id(db, exam_id=candidate.exam_id)
@@ -235,7 +237,9 @@ class AttemptService(_AttemptService):
         attempt = await AttemptRepository.get_attempt_by_id(db, attempt_id)
         if attempt is None:
             raise AttemptStateError("Attempt does not exist")
-        candidate = await CandidateRepository.get_candidate_by_id(db, attempt.candidate_id)
+        candidate = await CandidateRepository.get_candidate_by_id(
+            db, attempt.candidate_id
+        )
         if candidate is None:
             raise AttemptStateError("Attempt candidate does not exist")
         exam = await ExamRepository.get_exam_by_id(db, exam_id=candidate.exam_id)

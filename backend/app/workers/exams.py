@@ -36,9 +36,7 @@ async def finalize_exam_close(_ctx: dict, exam_id: str) -> None:
 
 
 async def finalize_exam_cancellation(_ctx: dict, exam_id: str) -> None:
-    parsed_exam_id = _parse_exam_id(
-        exam_id, job_name="finalize_exam_cancellation"
-    )
+    parsed_exam_id = _parse_exam_id(exam_id, job_name="finalize_exam_cancellation")
     try:
         async with async_session_factory() as db:
             await ExamExecutionService.finalize_cancellation(

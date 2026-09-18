@@ -58,7 +58,9 @@ async def sync_exam_results(_ctx: dict, exam_id: str) -> None:
                     response.rejected,
                 )
     except Exception:
-        logger.exception("Result synchronization job failed for exam %s", parsed_exam_id)
+        logger.exception(
+            "Result synchronization job failed for exam %s", parsed_exam_id
+        )
         raise
 
     logger.info(

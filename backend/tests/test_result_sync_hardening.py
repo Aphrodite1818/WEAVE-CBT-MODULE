@@ -28,7 +28,9 @@ class ResultSyncApprovalTests(unittest.IsolatedAsyncioTestCase):
         db = AsyncMock()
         exam_id = uuid4()
         current_exam = SimpleNamespace(id=exam_id, status=ExamStatus.CLOSED)
-        control = SimpleNamespace(result_disposition=ExamResultDisposition.PENDING_REVIEW)
+        control = SimpleNamespace(
+            result_disposition=ExamResultDisposition.PENDING_REVIEW
+        )
         service = ResultSyncService()
 
         with (

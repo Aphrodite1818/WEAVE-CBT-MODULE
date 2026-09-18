@@ -133,14 +133,20 @@ class ExecutionFinalizationBatchTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIs(result, exam)
         self.assertEqual(exam.status, ExamStatus.CLOSED)
-        self.assertEqual(control.result_disposition, ExamResultDisposition.PENDING_REVIEW)
+        self.assertEqual(
+            control.result_disposition, ExamResultDisposition.PENDING_REVIEW
+        )
         self.assertEqual(calculate.await_count, 450)
         self.assertTrue(all(row.status == AttemptStatus.SUBMITTED for row in rows))
-        self.assertTrue(all(row.end_reason == AttemptEndReason.EXAM_CLOSED for row in rows))
+        self.assertTrue(
+            all(row.end_reason == AttemptEndReason.EXAM_CLOSED for row in rows)
+        )
         # Three candidate batches plus the final CLOSED transaction.
         self.assertGreaterEqual(db.commit.await_count, 4)
 
-    async def test_cancel_large_exam_terminates_without_calculating_results(self) -> None:
+    async def test_cancel_large_exam_terminates_without_calculating_results(
+        self,
+    ) -> None:
         db = AsyncMock()
         actor_id = uuid4()
         cutoff = datetime.now(UTC)
@@ -219,7 +225,9 @@ class ExecutionFinalizationBatchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(exam.status, ExamStatus.CANCELLED)
         self.assertEqual(control.result_disposition, ExamResultDisposition.VOIDED)
         self.assertTrue(all(row.status == AttemptStatus.TERMINATED for row in rows))
-        self.assertTrue(all(row.end_reason == AttemptEndReason.EXAM_CANCELLED for row in rows))
+        self.assertTrue(
+            all(row.end_reason == AttemptEndReason.EXAM_CANCELLED for row in rows)
+        )
         calculate.assert_not_awaited()
         self.assertGreaterEqual(db.commit.await_count, 4)
 

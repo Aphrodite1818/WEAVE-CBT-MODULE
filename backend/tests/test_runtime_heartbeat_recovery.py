@@ -46,7 +46,9 @@ class RuntimeHeartbeatRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(RuntimeHeartbeatService._is_healthy_runtime(healthy, now=now))
         self.assertFalse(RuntimeHeartbeatService._is_healthy_runtime(stale, now=now))
 
-    async def test_local_process_gap_does_not_suspend_when_peer_is_healthy(self) -> None:
+    async def test_local_process_gap_does_not_suspend_when_peer_is_healthy(
+        self,
+    ) -> None:
         service = RuntimeHeartbeatService()
         runtime_id = uuid4()
         service._runtime_id = runtime_id

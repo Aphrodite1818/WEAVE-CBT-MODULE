@@ -68,7 +68,9 @@ async def _recover_stale_result_batches(*, now: datetime) -> set[UUID]:
                     .order_by(ExamResult.sync_batch_id.asc())
                     .limit(MAINTENANCE_SCAN_LIMIT)
                 )
-            ).tuples().all()
+            )
+            .tuples()
+            .all()
         )
         await db.rollback()
 
@@ -84,7 +86,9 @@ async def _recover_stale_result_batches(*, now: datetime) -> set[UUID]:
                         .order_by(ExamResult.id.asc())
                         .with_for_update(of=ExamResult)
                     )
-                ).scalars().all()
+                )
+                .scalars()
+                .all()
             )
             changed = 0
             for row in rows:
@@ -134,7 +138,9 @@ async def _list_roster_exam_ids_needing_recovery() -> tuple[list[UUID], list[UUI
                     .order_by(Exam.updated_at.asc(), Exam.id.asc())
                     .limit(MAINTENANCE_SCAN_LIMIT)
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
         stale = list(
             (
@@ -147,13 +153,17 @@ async def _list_roster_exam_ids_needing_recovery() -> tuple[list[UUID], list[UUI
                     .order_by(Exam.updated_at.asc(), Exam.id.asc())
                     .limit(MAINTENANCE_SCAN_LIMIT)
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
         await db.rollback()
         return pending, stale
 
 
-async def _list_exam_execution_recovery_ids() -> tuple[list[UUID], list[UUID], list[UUID]]:
+async def _list_exam_execution_recovery_ids() -> tuple[
+    list[UUID], list[UUID], list[UUID]
+]:
     async with async_session_factory() as db:
         closing = list(
             (
@@ -163,7 +173,9 @@ async def _list_exam_execution_recovery_ids() -> tuple[list[UUID], list[UUID], l
                     .order_by(Exam.updated_at.asc(), Exam.id.asc())
                     .limit(MAINTENANCE_SCAN_LIMIT)
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
         cancelling = list(
             (
@@ -173,7 +185,9 @@ async def _list_exam_execution_recovery_ids() -> tuple[list[UUID], list[UUID], l
                     .order_by(Exam.updated_at.asc(), Exam.id.asc())
                     .limit(MAINTENANCE_SCAN_LIMIT)
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
         active = list(
             (
@@ -183,7 +197,9 @@ async def _list_exam_execution_recovery_ids() -> tuple[list[UUID], list[UUID], l
                     .order_by(Exam.updated_at.asc(), Exam.id.asc())
                     .limit(MAINTENANCE_SCAN_LIMIT)
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
         return closing, cancelling, active
 
@@ -247,7 +263,10 @@ async def recover_background_work(ctx: dict[str, Any]) -> dict[str, int]:
     now = datetime.now(UTC)
 
     stale_result_exam_ids = await _recover_stale_result_batches(now=now)
-    pending_roster_ids, stale_roster_ids = await _list_roster_exam_ids_needing_recovery()
+    (
+        pending_roster_ids,
+        stale_roster_ids,
+    ) = await _list_roster_exam_ids_needing_recovery()
     closing_ids, cancelling_ids, active_ids = await _list_exam_execution_recovery_ids()
     result_exam_ids = set(await _list_result_exam_ids_needing_recovery(now=now))
     result_exam_ids.update(await _filter_approved_exam_ids(stale_result_exam_ids))

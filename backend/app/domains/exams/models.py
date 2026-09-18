@@ -501,14 +501,20 @@ class ExamTargetClass(Base):
         ForeignKey("exams.id", ondelete="CASCADE"), nullable=False, index=True
     )
     class_id: Mapped[UUID] = mapped_column(
-        ForeignKey("academic_classes.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("academic_classes.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
     teacher_assignment_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("teacher_assignments.id", ondelete="RESTRICT"), nullable=True, index=True
+        ForeignKey("teacher_assignments.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
     )
 
     __table_args__ = (
-        UniqueConstraint("exam_id", "class_id", name="uq_exam_target_classes_exam_class"),
+        UniqueConstraint(
+            "exam_id", "class_id", name="uq_exam_target_classes_exam_class"
+        ),
         Index("ix_exam_target_classes_class_exam", "class_id", "exam_id"),
         Index("ix_exam_target_classes_assignment", "teacher_assignment_id"),
     )
@@ -523,11 +529,15 @@ class ExamInvigilator(Base):
         ForeignKey("exams.id", ondelete="CASCADE"), nullable=False, index=True
     )
     teacher_id: Mapped[UUID] = mapped_column(
-        ForeignKey("academic_teachers.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("academic_teachers.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
     )
 
     __table_args__ = (
-        UniqueConstraint("exam_id", "teacher_id", name="uq_exam_invigilators_exam_teacher"),
+        UniqueConstraint(
+            "exam_id", "teacher_id", name="uq_exam_invigilators_exam_teacher"
+        ),
         Index("ix_exam_invigilators_teacher_exam", "teacher_id", "exam_id"),
     )
 
@@ -551,12 +561,16 @@ class ExamSuspension(Base):
         ),
         nullable=False,
     )
-    suspended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    suspended_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     suspended_by_actor_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("local_actors.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     reason: Mapped[str] = mapped_column(Text, nullable=False)
-    resumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     resumed_by_actor_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("local_actors.id", ondelete="RESTRICT"), nullable=True, index=True
     )
@@ -613,9 +627,16 @@ class ExamQuestion(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("exam_id", "source_question_id", name="uq_exam_questions_exam_source_question"),
+        UniqueConstraint(
+            "exam_id",
+            "source_question_id",
+            name="uq_exam_questions_exam_source_question",
+        ),
         UniqueConstraint("exam_id", "position", name="uq_exam_questions_exam_position"),
-        CheckConstraint("source_question_version >= 1", name="ck_exam_questions_source_version_positive"),
+        CheckConstraint(
+            "source_question_version >= 1",
+            name="ck_exam_questions_source_version_positive",
+        ),
         CheckConstraint("position >= 1", name="ck_exam_questions_position_positive"),
         Index("ix_exam_questions_exam_position", "exam_id", "position"),
     )
@@ -639,11 +660,19 @@ class ExamQuestionOption(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("exam_question_id", "position", name="uq_exam_question_options_question_position"),
-        CheckConstraint("position >= 1", name="ck_exam_question_options_position_positive"),
+        UniqueConstraint(
+            "exam_question_id",
+            "position",
+            name="uq_exam_question_options_question_position",
+        ),
+        CheckConstraint(
+            "position >= 1", name="ck_exam_question_options_position_positive"
+        ),
         CheckConstraint(
             "text IS NOT NULL OR image_asset_id IS NOT NULL",
             name="ck_exam_question_options_content_required",
         ),
-        Index("ix_exam_question_options_question_position", "exam_question_id", "position"),
+        Index(
+            "ix_exam_question_options_question_position", "exam_question_id", "position"
+        ),
     )

@@ -13,7 +13,12 @@ from sqlalchemy import select, text
 
 from app.core.database import async_session_factory
 from app.domains.exams.execution_service import ExamExecutionService
-from app.domains.exams.models import Exam, ExamStatus, ExamSuspension, ExamSuspensionSource
+from app.domains.exams.models import (
+    Exam,
+    ExamStatus,
+    ExamSuspension,
+    ExamSuspensionSource,
+)
 from app.domains.exams.repository import ExamRepository
 from app.domains.runtime.models import CBTRuntimeState, RealtimeOutboxEvent
 from app.domains.runtime.repository import RuntimeRepository
@@ -171,9 +176,10 @@ class RuntimeHeartbeatService:
 
     async def _recover_pending_worker_operations(self) -> None:
         async with async_session_factory() as db:
-            closing, cancelling = await ExamExecutionService.list_pending_operation_exam_ids(
-                db
-            )
+            (
+                closing,
+                cancelling,
+            ) = await ExamExecutionService.list_pending_operation_exam_ids(db)
             await db.rollback()
 
         for exam_id in closing:
@@ -208,9 +214,7 @@ class RuntimeHeartbeatService:
                 # Use the freshest durable beat from the previous cluster. With
                 # 5-second heartbeats this may give candidates a few seconds in
                 # their favour, but can never steal outage time from them.
-                recovery_cutoff = max(
-                    row.last_heartbeat_at for row in open_runtimes
-                )
+                recovery_cutoff = max(row.last_heartbeat_at for row in open_runtimes)
                 suspended_ids = await self._suspend_active_exams_in_transaction(
                     db,
                     outage_started_at=recovery_cutoff,

@@ -25,12 +25,7 @@ from app.domains.exams.service import ExamService  # noqa: E402
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = (
-    BACKEND_ROOT
-    / "alembic"
-    / "versions"
-    / "20260918_exam_lead_author.py"
-)
+MIGRATION = BACKEND_ROOT / "alembic" / "versions" / "20260918_exam_lead_author.py"
 
 
 def make_actor(
@@ -112,7 +107,10 @@ class ExamLeadContractTests(unittest.TestCase):
     def test_migration_is_valid_and_backfills_teacher_creator_lead(self) -> None:
         source = MIGRATION.read_text(encoding="utf-8")
         ast.parse(source)
-        self.assertIn('down_revision: str | Sequence[str] | None = "20260917_exam_execution"', source)
+        self.assertIn(
+            'down_revision: str | Sequence[str] | None = "20260917_exam_execution"',
+            source,
+        )
         self.assertIn('"lead_teacher_id"', source)
         self.assertIn('"lead_assigned_by_actor_id"', source)
         self.assertIn('"lead_assigned_at"', source)
@@ -166,7 +164,9 @@ class ExamLeadPolicyTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(resolved)
         validate.assert_not_awaited()
 
-    async def test_admin_selected_lead_is_validated_against_academic_scope(self) -> None:
+    async def test_admin_selected_lead_is_validated_against_academic_scope(
+        self,
+    ) -> None:
         db = AsyncMock()
         admin = make_actor(role="admin")
         selected_teacher = uuid4()
@@ -212,7 +212,9 @@ class ExamLeadPolicyTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(ExamService._is_lead_or_admin(lead, exam))
         self.assertFalse(ExamService._is_lead_or_admin(creator, exam))
 
-    def test_explicit_admin_led_paper_does_not_fall_back_to_teacher_creator(self) -> None:
+    def test_explicit_admin_led_paper_does_not_fall_back_to_teacher_creator(
+        self,
+    ) -> None:
         creator_actor_id = uuid4()
         creator = make_actor(
             role="teacher",
@@ -232,7 +234,9 @@ class ExamLeadPolicyTests(unittest.IsolatedAsyncioTestCase):
         admin = make_actor(role="admin")
         self.assertTrue(ExamService._is_lead_or_admin(admin, exam))
 
-    async def test_admin_can_reassign_draft_lead_without_rewriting_creator(self) -> None:
+    async def test_admin_can_reassign_draft_lead_without_rewriting_creator(
+        self,
+    ) -> None:
         db = AsyncMock()
         admin = make_actor(role="admin")
         creator_id = uuid4()

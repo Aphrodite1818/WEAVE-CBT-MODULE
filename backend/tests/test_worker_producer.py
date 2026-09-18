@@ -53,9 +53,7 @@ class ArqProducerDeduplicationTests(unittest.IsolatedAsyncioTestCase):
             "evaluate_exam_completion",
             exam_id,
         )
-        self.assertIsNone(
-            durable_exam_job_id("evaluate_exam_completion", exam_id)
-        )
+        self.assertIsNone(durable_exam_job_id("evaluate_exam_completion", exam_id))
 
 
 if __name__ == "__main__":

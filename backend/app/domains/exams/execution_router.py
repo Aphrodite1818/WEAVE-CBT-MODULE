@@ -9,7 +9,11 @@ from fastapi import APIRouter, HTTPException, status
 from app.core.database import DbSession
 from app.core.exceptions import AcademicAuthorizationError
 from app.domains.auth.dependencies import CurrentLocalActor
-from app.domains.exams.exceptions import ExamAuthorizationError, ExamNotFound, ExamStateError
+from app.domains.exams.exceptions import (
+    ExamAuthorizationError,
+    ExamNotFound,
+    ExamStateError,
+)
 from app.domains.exams.execution_schemas import (
     ExamExecutionControlResponse,
     ResultDecisionReason,
@@ -74,7 +78,12 @@ async def approve_exam_results(
             actor=actor,
             exam_id=exam_id,
         )
-    except (AcademicAuthorizationError, ExamNotFound, ExamStateError, ValueError) as exc:
+    except (
+        AcademicAuthorizationError,
+        ExamNotFound,
+        ExamStateError,
+        ValueError,
+    ) as exc:
         raise _http_error(exc) from exc
 
     # Approval is the only normal trigger that permits local scores to leave CBT.
@@ -100,6 +109,11 @@ async def void_exam_results(
             exam_id=exam_id,
             reason=payload.reason,
         )
-    except (AcademicAuthorizationError, ExamNotFound, ExamStateError, ValueError) as exc:
+    except (
+        AcademicAuthorizationError,
+        ExamNotFound,
+        ExamStateError,
+        ValueError,
+    ) as exc:
         raise _http_error(exc) from exc
     return ExamExecutionControlResponse.model_validate(control)

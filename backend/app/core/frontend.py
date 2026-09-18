@@ -7,9 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
 
-WEB_ROOT = Path(
-    os.getenv("WEAVE_WEB_ROOT", "/app/web")
-).resolve()
+WEB_ROOT = Path(os.getenv("WEAVE_WEB_ROOT", "/app/web")).resolve()
 
 
 def register_frontend_routes(app: FastAPI) -> None:

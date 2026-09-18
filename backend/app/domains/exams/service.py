@@ -15,7 +15,11 @@ from app.domains.academics.repository import AcademicRepository
 from app.domains.auth.models import LocalActor
 from app.domains.exams.authoring_service import ExamService as _AuthoringExamService
 from app.domains.exams.collaboration_service import ExamCollaborationLifecycleMixin
-from app.domains.exams.exceptions import ExamAuthorizationError, ExamNotFound, ExamStateError
+from app.domains.exams.exceptions import (
+    ExamAuthorizationError,
+    ExamNotFound,
+    ExamStateError,
+)
 from app.domains.exams.execution_service import ExamExecutionService
 from app.domains.exams.lifecycle_service import ExamLifecycleServiceMixin
 from app.domains.exams.models import (
@@ -169,7 +173,9 @@ class ExamService(
             return False
 
         try:
-            teacher_id = UUID(actor.weave_membership_id) if actor.weave_membership_id else None
+            teacher_id = (
+                UUID(actor.weave_membership_id) if actor.weave_membership_id else None
+            )
         except (TypeError, ValueError):
             return False
 
@@ -230,9 +236,10 @@ class ExamService(
                 term_id=exam.term_id,
             )
 
-        if getattr(exam, "lead_teacher_id", None) == lead_teacher_id and getattr(
-            exam, "lead_assigned_at", None
-        ) is not None:
+        if (
+            getattr(exam, "lead_teacher_id", None) == lead_teacher_id
+            and getattr(exam, "lead_assigned_at", None) is not None
+        ):
             await db.commit()
             return exam
 
@@ -334,11 +341,13 @@ class ExamService(
                 "Academic term does not belong to the selected academic session"
             )
 
-        await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
-            db,
-            actor=actor,
-            curriculum_subject_id=payload.curriculum_subject_id,
-            academic_term_id=term.id,
+        await (
+            AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+                db,
+                actor=actor,
+                curriculum_subject_id=payload.curriculum_subject_id,
+                academic_term_id=term.id,
+            )
         )
 
         assessment_scheme = await AcademicRepository.get_assessment_scheme_by_id(
@@ -462,7 +471,9 @@ class ExamService(
         payload: ExamUpdate,
         exam_id: UUID,
     ) -> Exam:
-        return await super().update_exam(db, actor=actor, payload=payload, exam_id=exam_id)
+        return await super().update_exam(
+            db, actor=actor, payload=payload, exam_id=exam_id
+        )
 
     @classmethod
     async def remove_manual_question(
@@ -571,7 +582,9 @@ class ExamService(
         exam_id: UUID,
         reason: str | None = None,
     ) -> Exam:
-        return await super().resume_exam(db, actor=actor, exam_id=exam_id, reason=reason)
+        return await super().resume_exam(
+            db, actor=actor, exam_id=exam_id, reason=reason
+        )
 
     @staticmethod
     async def _preflight_suspended_terminal_transition(
@@ -588,9 +601,7 @@ class ExamService(
             lock=True,
         )
         if suspension is None:
-            raise ExamStateError(
-                "Suspended examination has no open suspension record"
-            )
+            raise ExamStateError("Suspended examination has no open suspension record")
         # Flush the locked row before staging terminal state. Besides validating
         # the durable suspension row, this preserves the old all-or-nothing
         # behavior if its persistence is inconsistent.
@@ -697,8 +708,12 @@ class ExamService(
         try:
             revision = await ExamRepository.add_exam(db, revision)
             if revision.question_selection_mode == ExamQuestionSelectionMode.MANUAL:
-                frozen_questions = await ExamRepository.list_exam_questions(db, latest.id)
-                if any(question.added_by_actor_id is None for question in frozen_questions):
+                frozen_questions = await ExamRepository.list_exam_questions(
+                    db, latest.id
+                )
+                if any(
+                    question.added_by_actor_id is None for question in frozen_questions
+                ):
                     raise ExamStateError(
                         "Manual examination revision cannot be created because "
                         "question contributor provenance is incomplete"
@@ -748,7 +763,9 @@ class ExamService(
                 await db.commit()
             except IntegrityError as exc:
                 await db.rollback()
-                raise ValueError("The examination revision lead could not be preserved") from exc
+                raise ValueError(
+                    "The examination revision lead could not be preserved"
+                ) from exc
             return revision
 
         if not await ExamExecutionService.results_are_voided(db, exam_id=latest.id):

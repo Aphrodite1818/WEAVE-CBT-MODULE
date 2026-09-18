@@ -27,7 +27,9 @@ class TimetableImpact:
 
 class ExamTimetableService:
     @staticmethod
-    def intervals_overlap(a_start: datetime, a_end: datetime, b_start: datetime, b_end: datetime) -> bool:
+    def intervals_overlap(
+        a_start: datetime, a_end: datetime, b_start: datetime, b_end: datetime
+    ) -> bool:
         return a_start < b_end and b_start < a_end
 
     @staticmethod
@@ -42,7 +44,9 @@ class ExamTimetableService:
         return value
 
     @staticmethod
-    async def acquire_level_lock(db: AsyncSession, *, session_id: UUID, term_id: UUID, level_id: UUID) -> None:
+    async def acquire_level_lock(
+        db: AsyncSession, *, session_id: UUID, term_id: UUID, level_id: UUID
+    ) -> None:
         scope = f"exam-timetable:{session_id}:{term_id}:{level_id}"
         await db.execute(
             text("SELECT pg_advisory_xact_lock(hashtextextended(:scope, 0))"),
@@ -61,7 +65,9 @@ class ExamTimetableService:
         exclude_exam_id: UUID | None = None,
     ) -> list[Exam]:
         child = aliased(Exam)
-        has_child = select(child.id).where(child.revision_of_exam_id == Exam.id).exists()
+        has_child = (
+            select(child.id).where(child.revision_of_exam_id == Exam.id).exists()
+        )
         query = (
             select(Exam)
             .join(CurriculumSubject, CurriculumSubject.id == Exam.curriculum_subject_id)
@@ -76,7 +82,9 @@ class ExamTimetableService:
         )
         if exclude_exam_id is not None:
             query = query.where(Exam.id != exclude_exam_id)
-        result = await db.execute(query.order_by(Exam.scheduled_start_at.asc().nulls_last(), Exam.id.asc()))
+        result = await db.execute(
+            query.order_by(Exam.scheduled_start_at.asc().nulls_last(), Exam.id.asc())
+        )
         return list(result.scalars().all())
 
     @classmethod
@@ -94,7 +102,9 @@ class ExamTimetableService:
         if scheduled_start_at is None:
             return
         level_id = await cls.level_id(db, curriculum_subject_id)
-        await cls.acquire_level_lock(db, session_id=session_id, term_id=term_id, level_id=level_id)
+        await cls.acquire_level_lock(
+            db, session_id=session_id, term_id=term_id, level_id=level_id
+        )
         proposed_end = scheduled_start_at + timedelta(minutes=duration_minutes)
         rows = await cls.list_leaf_exams(
             db,
@@ -116,7 +126,9 @@ class ExamTimetableService:
             if row.scheduled_start_at is None:
                 continue
             row_end = row.scheduled_start_at + timedelta(minutes=row.duration_minutes)
-            if cls.intervals_overlap(scheduled_start_at, proposed_end, row.scheduled_start_at, row_end):
+            if cls.intervals_overlap(
+                scheduled_start_at, proposed_end, row.scheduled_start_at, row_end
+            ):
                 raise ExamStateError(
                     f"Academic level already has a planned examination overlapping this slot: {row.title}"
                 )
@@ -127,7 +139,9 @@ class ExamTimetableService:
         if exam is None:
             raise ExamNotFound("Examination does not exist")
         level_id = await cls.level_id(db, exam.curriculum_subject_id)
-        await cls.acquire_level_lock(db, session_id=exam.session_id, term_id=exam.term_id, level_id=level_id)
+        await cls.acquire_level_lock(
+            db, session_id=exam.session_id, term_id=exam.term_id, level_id=level_id
+        )
         rows = await cls.list_leaf_exams(
             db,
             session_id=exam.session_id,
@@ -147,7 +161,9 @@ class ExamTimetableService:
             )
 
     @classmethod
-    async def impact_after_start(cls, db: AsyncSession, *, exam_id: UUID) -> list[TimetableImpact]:
+    async def impact_after_start(
+        cls, db: AsyncSession, *, exam_id: UUID
+    ) -> list[TimetableImpact]:
         exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id)
         if exam is None:
             raise ExamNotFound("Examination does not exist")
@@ -167,14 +183,23 @@ class ExamTimetableService:
         for row in rows:
             if row.scheduled_start_at is None:
                 continue
-            if exam.scheduled_start_at is not None and row.scheduled_start_at <= exam.scheduled_start_at:
+            if (
+                exam.scheduled_start_at is not None
+                and row.scheduled_start_at <= exam.scheduled_start_at
+            ):
                 continue
             if row.scheduled_start_at >= current_end:
                 break
             proposed_start = current_end
             proposed_end = proposed_start + timedelta(minutes=row.duration_minutes)
             impacts.append(
-                TimetableImpact(row.id, row.title, row.scheduled_start_at, proposed_start, proposed_end)
+                TimetableImpact(
+                    row.id,
+                    row.title,
+                    row.scheduled_start_at,
+                    proposed_start,
+                    proposed_end,
+                )
             )
             current_end = proposed_end
         return impacts

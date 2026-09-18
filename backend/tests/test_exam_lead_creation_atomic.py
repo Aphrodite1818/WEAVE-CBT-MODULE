@@ -65,7 +65,9 @@ class AtomicExamLeadCreationTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 AcademicRepository,
                 "get_session_by_id",
-                new=AsyncMock(return_value=SimpleNamespace(id=current_payload.session_id)),
+                new=AsyncMock(
+                    return_value=SimpleNamespace(id=current_payload.session_id)
+                ),
             ),
             patch.object(
                 AcademicRepository,
@@ -86,7 +88,9 @@ class AtomicExamLeadCreationTests(unittest.IsolatedAsyncioTestCase):
                 AcademicRepository,
                 "get_assessment_scheme_by_id",
                 new=AsyncMock(
-                    return_value=SimpleNamespace(id=current_payload.assessment_scheme_id)
+                    return_value=SimpleNamespace(
+                        id=current_payload.assessment_scheme_id
+                    )
                 ),
             ),
             patch.object(

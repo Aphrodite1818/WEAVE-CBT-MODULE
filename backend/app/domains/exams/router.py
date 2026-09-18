@@ -237,10 +237,7 @@ async def seal_exam(
     except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
 
-    await arq_producer.enqueue(
-        "prepare_exam_roster",
-        str(exam.id)
-    )
+    await arq_producer.enqueue("prepare_exam_roster", str(exam.id))
     return ExamResponse.model_validate(exam)
 
 
@@ -323,10 +320,7 @@ async def close_exam(
     except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
 
-    await arq_producer.enqueue(
-        "sync_exam_results",
-        str(exam.id)
-    )
+    await arq_producer.enqueue("sync_exam_results", str(exam.id))
     return ExamResponse.model_validate(exam)
 
 

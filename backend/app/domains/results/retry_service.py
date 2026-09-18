@@ -73,7 +73,9 @@ class ResultRetryService:
                     .order_by(ExamResult.calculated_at.asc(), ExamResult.id.asc())
                     .with_for_update(of=ExamResult)
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
 
         for row in rows:

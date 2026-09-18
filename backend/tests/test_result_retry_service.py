@@ -23,7 +23,9 @@ from app.domains.results.retry_service import ResultRetryService  # noqa: E402
 
 
 class ResultRetryServiceTests(unittest.IsolatedAsyncioTestCase):
-    async def test_detached_failed_rows_return_to_pending_without_losing_history(self) -> None:
+    async def test_detached_failed_rows_return_to_pending_without_losing_history(
+        self,
+    ) -> None:
         db = AsyncMock()
         exam_id = uuid4()
         current_exam = SimpleNamespace(id=exam_id, status=ExamStatus.CLOSED)

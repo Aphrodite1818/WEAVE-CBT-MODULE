@@ -86,7 +86,9 @@ class RosterReconciliationWorkerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class RosterMaintenanceRecoveryTests(unittest.IsolatedAsyncioTestCase):
-    async def test_maintenance_recovers_pending_and_stale_rosters_separately(self) -> None:
+    async def test_maintenance_recovers_pending_and_stale_rosters_separately(
+        self,
+    ) -> None:
         pending_exam_id = uuid4()
         stale_exam_id = uuid4()
         redis = SimpleNamespace(enqueue_job=AsyncMock())

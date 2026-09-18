@@ -84,8 +84,15 @@ def upgrade() -> None:
         sa.Column("operation_requested_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("operation_requested_by_actor_id", sa.Uuid(), nullable=True),
         sa.Column("operation_reason", sa.Text(), nullable=True),
-        sa.Column("operation_attempts", sa.Integer(), server_default=sa.text("0"), nullable=False),
-        sa.Column("last_operation_attempt_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "operation_attempts",
+            sa.Integer(),
+            server_default=sa.text("0"),
+            nullable=False,
+        ),
+        sa.Column(
+            "last_operation_attempt_at", sa.DateTime(timezone=True), nullable=True
+        ),
         sa.Column("operation_error", sa.Text(), nullable=True),
         sa.Column(
             "result_disposition",
@@ -103,9 +110,22 @@ def upgrade() -> None:
         sa.Column("results_decided_by_actor_id", sa.Uuid(), nullable=True),
         sa.Column("results_decision_reason", sa.Text(), nullable=True),
         sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.CheckConstraint("operation_attempts >= 0", name="ck_exam_execution_controls_attempts_nonnegative"),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.CheckConstraint(
+            "operation_attempts >= 0",
+            name="ck_exam_execution_controls_attempts_nonnegative",
+        ),
         sa.CheckConstraint(
             "operation_error IS NULL OR char_length(operation_error) <= 2048",
             name="ck_exam_execution_controls_error_length",
@@ -188,26 +208,59 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("UPDATE exams SET status = 'suspended' WHERE status IN ('closing','cancelling')")
-    op.execute("UPDATE exam_attempts SET end_reason = 'admin_terminated' WHERE end_reason = 'exam_cancelled'")
+    op.execute(
+        "UPDATE exams SET status = 'suspended' WHERE status IN ('closing','cancelling')"
+    )
+    op.execute(
+        "UPDATE exam_attempts SET end_reason = 'admin_terminated' WHERE end_reason = 'exam_cancelled'"
+    )
 
-    op.drop_index("ix_exam_execution_controls_result_disposition_exam", table_name="exam_execution_controls")
-    op.drop_index("ix_exam_execution_controls_operation_requested", table_name="exam_execution_controls")
-    op.drop_index(op.f("ix_exam_execution_controls_results_decided_by_actor_id"), table_name="exam_execution_controls")
-    op.drop_index(op.f("ix_exam_execution_controls_result_disposition"), table_name="exam_execution_controls")
-    op.drop_index(op.f("ix_exam_execution_controls_operation_requested_by_actor_id"), table_name="exam_execution_controls")
-    op.drop_index(op.f("ix_exam_execution_controls_operation_requested_at"), table_name="exam_execution_controls")
-    op.drop_index(op.f("ix_exam_execution_controls_operation"), table_name="exam_execution_controls")
-    op.drop_index(op.f("ix_exam_execution_controls_exam_id"), table_name="exam_execution_controls")
+    op.drop_index(
+        "ix_exam_execution_controls_result_disposition_exam",
+        table_name="exam_execution_controls",
+    )
+    op.drop_index(
+        "ix_exam_execution_controls_operation_requested",
+        table_name="exam_execution_controls",
+    )
+    op.drop_index(
+        op.f("ix_exam_execution_controls_results_decided_by_actor_id"),
+        table_name="exam_execution_controls",
+    )
+    op.drop_index(
+        op.f("ix_exam_execution_controls_result_disposition"),
+        table_name="exam_execution_controls",
+    )
+    op.drop_index(
+        op.f("ix_exam_execution_controls_operation_requested_by_actor_id"),
+        table_name="exam_execution_controls",
+    )
+    op.drop_index(
+        op.f("ix_exam_execution_controls_operation_requested_at"),
+        table_name="exam_execution_controls",
+    )
+    op.drop_index(
+        op.f("ix_exam_execution_controls_operation"),
+        table_name="exam_execution_controls",
+    )
+    op.drop_index(
+        op.f("ix_exam_execution_controls_exam_id"), table_name="exam_execution_controls"
+    )
     op.drop_table("exam_execution_controls")
 
-    op.drop_constraint("ck_exam_attempts_submitted_not_admin_terminated", "exam_attempts", type_="check")
+    op.drop_constraint(
+        "ck_exam_attempts_submitted_not_admin_terminated",
+        "exam_attempts",
+        type_="check",
+    )
     op.create_check_constraint(
         "ck_exam_attempts_submitted_not_admin_terminated",
         "exam_attempts",
         "status <> 'submitted' OR end_reason <> 'admin_terminated'",
     )
-    op.drop_constraint("ck_exam_attempts_termination_reason_consistent", "exam_attempts", type_="check")
+    op.drop_constraint(
+        "ck_exam_attempts_termination_reason_consistent", "exam_attempts", type_="check"
+    )
     op.create_check_constraint(
         "ck_exam_attempts_termination_reason_consistent",
         "exam_attempts",

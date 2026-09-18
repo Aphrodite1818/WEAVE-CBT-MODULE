@@ -91,8 +91,12 @@ class CandidateService(_CandidateService):
             )
             if classroom is not None:
                 class_rows.append(classroom)
-        class_rows.sort(key=lambda classroom: (classroom.display_name.casefold(), str(classroom.id)))
-        class_name_by_id = {classroom.id: classroom.display_name for classroom in class_rows}
+        class_rows.sort(
+            key=lambda classroom: (classroom.display_name.casefold(), str(classroom.id))
+        )
+        class_name_by_id = {
+            classroom.id: classroom.display_name for classroom in class_rows
+        }
 
         candidate_rows = [
             CandidateResponse.model_validate(candidate).model_copy(

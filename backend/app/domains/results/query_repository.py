@@ -70,7 +70,9 @@ class ResultQueryRepository:
         return int((await db.execute(query)).scalar_one() or 0)
 
     @staticmethod
-    def _apply_result_filters(query, *, search: str | None, sync_status: ResultSyncStatus | None):
+    def _apply_result_filters(
+        query, *, search: str | None, sync_status: ResultSyncStatus | None
+    ):
         if sync_status is not None:
             query = query.where(ExamResult.sync_status == sync_status)
         needle = (search or "").strip()
@@ -113,7 +115,9 @@ class ResultQueryRepository:
                 completed_at.label("completed_at"),
                 ExamExecutionControl.result_disposition.label("result_disposition"),
                 ExamExecutionControl.results_decided_at.label("results_decided_at"),
-                ExamExecutionControl.results_decision_reason.label("results_decision_reason"),
+                ExamExecutionControl.results_decision_reason.label(
+                    "results_decision_reason"
+                ),
                 result_count.label("result_count"),
                 pending_count.label("pending_count"),
                 syncing_count.label("syncing_count"),

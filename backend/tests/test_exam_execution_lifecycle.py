@@ -30,7 +30,9 @@ def admin() -> SimpleNamespace:
     return SimpleNamespace(id=uuid4(), role="admin", is_active=True)
 
 
-def exam(*, status: ExamStatus = ExamStatus.ACTIVE, activated_at=None) -> SimpleNamespace:
+def exam(
+    *, status: ExamStatus = ExamStatus.ACTIVE, activated_at=None
+) -> SimpleNamespace:
     return SimpleNamespace(
         id=uuid4(),
         status=status,
@@ -145,7 +147,9 @@ class ExamExecutionLifecycleTests(unittest.IsolatedAsyncioTestCase):
     async def test_closed_results_require_explicit_approval(self) -> None:
         db = AsyncMock()
         current_exam = exam(status=ExamStatus.CLOSED)
-        current_control = control(result_disposition=ExamResultDisposition.PENDING_REVIEW)
+        current_control = control(
+            result_disposition=ExamResultDisposition.PENDING_REVIEW
+        )
         current_actor = admin()
 
         with (
@@ -267,10 +271,12 @@ class ExamExecutionLifecycleTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(),
             ),
         ):
-            recovered = await ExamExecutionService.suspend_active_exams_after_runtime_gap(
-                db,
-                outage_started_at=last_healthy,
-                reason="Server interruption",
+            recovered = (
+                await ExamExecutionService.suspend_active_exams_after_runtime_gap(
+                    db,
+                    outage_started_at=last_healthy,
+                    reason="Server interruption",
+                )
             )
 
         self.assertEqual(recovered, [current_exam.id])
