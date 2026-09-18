@@ -78,16 +78,20 @@ def upgrade() -> None:
         """
     )
 
-    # Preserve who made the initial leadership decision for historical rows.
-    # Admin-created rows keep lead_teacher_id NULL, which now explicitly means
-    # administrator-led.
+    # Mark only leadership decisions that can be reconstructed safely. Admin
+    # creators become explicitly admin-led. Teacher creators become explicit
+    # teacher-led only when their synchronized teacher row was resolved above.
+    # Any malformed legacy teacher identity is left without assignment metadata
+    # so the service's legacy creator-as-lead fallback remains available until
+    # an administrator deliberately assigns a valid lead.
     op.execute(
         """
-        UPDATE exams
-        SET lead_assigned_by_actor_id = created_by_actor_id,
-            lead_assigned_at = created_at
-        WHERE lead_assigned_by_actor_id IS NULL
-           OR lead_assigned_at IS NULL
+        UPDATE exams AS e
+        SET lead_assigned_by_actor_id = e.created_by_actor_id,
+            lead_assigned_at = e.created_at
+        FROM local_actors AS a
+        WHERE e.created_by_actor_id = a.id
+          AND (a.role = 'admin' OR e.lead_teacher_id IS NOT NULL)
         """
     )
 
