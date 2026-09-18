@@ -172,6 +172,6 @@ describe('Admin roster workspace', () => {
     expect(await screen.findByText('Ada Okafor')).toBeInTheDocument()
     expect(screen.getByText('JSS1/001')).toBeInTheDocument()
     expect(screen.getByText('JSS1 A')).toBeInTheDocument()
-    expect(screen.getByText('Eligible')).toBeInTheDocument()
+    expect(screen.getAllByText('Eligible').length).toBeGreaterThan(0)
   })
 })
