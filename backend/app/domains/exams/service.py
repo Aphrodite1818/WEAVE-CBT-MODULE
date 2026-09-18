@@ -422,6 +422,7 @@ class ExamService(
             question_count=payload.question_count,
             title=payload.title,
             instructions=normalized_instructions,
+            folder_color=payload.folder_color,
             duration_minutes=payload.duration_minutes,
             shuffle_questions=payload.shuffle_questions,
             shuffle_options=payload.shuffle_options,
@@ -674,6 +675,7 @@ class ExamService(
             question_count=latest.question_count,
             title=latest.title,
             instructions=latest.instructions,
+            folder_color=latest.folder_color,
             duration_minutes=latest.duration_minutes,
             shuffle_questions=latest.shuffle_questions,
             shuffle_options=latest.shuffle_options,
@@ -737,6 +739,7 @@ class ExamService(
         latest = await cls._latest_revision_in_lineage(db, exam)
         if latest.status != ExamStatus.CLOSED:
             revision = await super().create_revision(db, actor=actor, exam_id=exam_id)
+            revision.folder_color = latest.folder_color
             revision.lead_teacher_id = getattr(latest, "lead_teacher_id", None)
             revision.lead_assigned_by_actor_id = actor.id
             revision.lead_assigned_at = datetime.now(UTC)
