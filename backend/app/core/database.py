@@ -29,7 +29,7 @@ Architectural rules:
 """
 
 from collections.abc import AsyncIterator
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, TypeAlias
 from uuid import UUID, uuid4
 
@@ -54,7 +54,7 @@ from app.core.settings import settings
 CONSTRAINT_NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
     "uq": "uq_%(table_name)s_%(column_0_name)s",
-    "ck": "ck_%(table_name)s_%(column_0_name)s",
+    "ck": "ck_%(table_name)s_%(constraint_name)s",
     "fk": ("fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s"),
     "pk": "pk_%(table_name)s",
 }
@@ -72,25 +72,40 @@ metadata = MetaData(naming_convention=CONSTRAINT_NAMING_CONVENTION)
 # ========================== #
 
 
+def _utc_now() -> datetime:
+    """Return an aware UTC timestamp for ORM-managed audit fields.
+
+    Using a Python value for ORM INSERT/UPDATE timestamps keeps those attributes
+    resident after flush/commit. A SQL expression such as ``onupdate=func.now()``
+    can leave the generated value expired; synchronous response serialization on
+    an AsyncSession may then attempt implicit I/O and turn a successful mutation
+    into a 500 response. PostgreSQL defaults remain as a database-side fallback.
+    """
+
+    return datetime.now(UTC)
+
+
 class TimestampMixin:
     """
-    Track when a local projection row was created and last updated
+    Track when a local projection row was created and last updated.
 
     These timestamps describe the local CBT copy, not the original
-    creation/update timestamp in Weave
+    creation/update timestamp in Weave.
     """
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
+        default=_utc_now,
         server_default=func.now(),
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
+        default=_utc_now,
         server_default=func.now(),
-        onupdate=func.now(),
+        onupdate=_utc_now,
     )
 
 
