@@ -105,10 +105,12 @@ class ResultQueryRepository:
         failed_count = func.count(ExamResult.id).filter(
             ExamResult.sync_status == ResultSyncStatus.FAILED
         )
+        completed_at = func.coalesce(Exam.closed_at, Exam.cancelled_at)
 
         query = (
             select(
                 Exam.id.label("exam_id"),
+                completed_at.label("completed_at"),
                 ExamExecutionControl.result_disposition.label("result_disposition"),
                 ExamExecutionControl.results_decided_at.label("results_decided_at"),
                 ExamExecutionControl.results_decision_reason.label("results_decision_reason"),
@@ -123,11 +125,13 @@ class ResultQueryRepository:
             .where(Exam.status.in_([ExamStatus.CLOSED, ExamStatus.CANCELLED]))
             .group_by(
                 Exam.id,
+                Exam.closed_at,
+                Exam.cancelled_at,
                 ExamExecutionControl.result_disposition,
                 ExamExecutionControl.results_decided_at,
                 ExamExecutionControl.results_decision_reason,
             )
-            .order_by(Exam.closed_at.desc().nullslast(), Exam.cancelled_at.desc().nullslast(), Exam.id.desc())
+            .order_by(completed_at.desc().nullslast(), Exam.id.desc())
         )
         if exam_ids is not None:
             ids = list(exam_ids)
