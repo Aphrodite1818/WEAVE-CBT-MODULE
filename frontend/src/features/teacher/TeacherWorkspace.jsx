@@ -274,7 +274,7 @@ async function loadTeacherData(gateway) {
 
   return {
     data: {
-      banks: bankRows.map((bank) => normalizeBank(bank, bankQuestions)),
+      banks: bankRows.map((bank) => normalizeBank(bank, bankQuestions, subjectByCurriculum)),
       questions,
       bankQuestions,
       exams: examRows.map((exam) =>
@@ -291,11 +291,16 @@ async function loadTeacherData(gateway) {
   };
 }
 
-function normalizeBank(bank, questions) {
+function normalizeBank(bank, questions, subjectByCurriculum) {
   const bankQuestions = questions.filter((question) => question.bankId === bank.id);
+  const subject = subjectByCurriculum.get(bank.curriculum_subject_id);
   return {
     id: bank.id,
     curriculumSubjectId: bank.curriculum_subject_id,
+    academicLevelId: subject?.academicLevelId || null,
+    academicLevelName: subject?.academicLevelName || "",
+    subjectName: subject?.name || "Subject",
+    subjectCode: subject?.code || "",
     name: bank.name,
     description: bank.description,
     status: bank.is_active ? "Ready" : "Archived",
@@ -330,6 +335,10 @@ function normalizeSubject(subject) {
   return {
     id: subject.id,
     curriculumId: subject.curriculum_id,
+    academicLevelId: subject.academic_level_id,
+    academicLevelName: subject.academic_level_name,
+    academicLevelCategory: subject.academic_level_category,
+    academicLevelPosition: Number(subject.academic_level_position ?? 0),
     subjectId: subject.subject_id,
     name: subject.subject_name,
     code: subject.subject_code,
