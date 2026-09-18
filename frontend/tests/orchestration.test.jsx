@@ -43,8 +43,8 @@ async function submitCode() {
 }
 
 async function openStaff() {
-  await screen.findByRole('heading', { name: /a smarter way to take exams/i })
-  fireEvent.click(screen.getByRole('button', { name: /login as staff/i }))
+  const staffLoginButton = await screen.findByRole('button', { name: /login as staff/i })
+  fireEvent.click(staffLoginButton)
   fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'admin@school.test' } })
   fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'secret' } })
   fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
@@ -75,7 +75,8 @@ describe('Weave setup and first sync orchestration', () => {
   it('skips setup on a configured server even after a new render', async () => {
     routes()
     renderApp()
-    expect(await screen.findByRole('heading', { name: /a smarter way to take exams/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /login as staff/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /login as student/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /get started/i })).not.toBeInTheDocument()
   })
 
@@ -144,14 +145,14 @@ describe('Weave setup and first sync orchestration', () => {
   it('continues with default Weave blue when branding fails', async () => {
     routes({ 'GET /api/v1/branding': () => reply({ detail: 'Unavailable' }, 503) })
     const { container } = render(<BrowserRouter><App /></BrowserRouter>)
-    expect(await screen.findByRole('heading', { name: /a smarter way to take exams/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /login as staff/i })).toBeInTheDocument()
     expect(container.firstChild.style.getPropertyValue('--color-primary')).toBe('29 78 216')
   })
 
   it('applies local school branding and uses the local logo endpoint', async () => {
     routes()
     const { container } = render(<BrowserRouter><App /></BrowserRouter>)
-    await screen.findByRole('heading', { name: /a smarter way to take exams/i })
+    await screen.findByRole('button', { name: /login as staff/i })
     await waitFor(() => expect(container.firstChild.style.getPropertyValue('--color-primary')).toBe('4 120 87'))
     expect(screen.getByAltText(/brightfield academy logo/i).getAttribute('src')).toBe('/api/v1/branding/logo?v=logo-revision')
   })
@@ -159,8 +160,8 @@ describe('Weave setup and first sync orchestration', () => {
   it('routes landing actions to separate staff and student pages with no role selector', async () => {
     routes()
     renderApp()
-    await screen.findByRole('heading', { name: /a smarter way to take exams/i })
-    fireEvent.click(screen.getByRole('button', { name: /login as student/i }))
+    const studentLoginButton = await screen.findByRole('button', { name: /login as student/i })
+    fireEvent.click(studentLoginButton)
     expect(screen.getByRole('heading', { name: /student login/i })).toBeInTheDocument()
     expect(screen.getByLabelText(/admission number/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^password$/i)).toBeInTheDocument()
