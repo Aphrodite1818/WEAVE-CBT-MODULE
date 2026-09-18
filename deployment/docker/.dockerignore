@@ -1,1 +1,2 @@
-# Phase 1 Docker build-context exclusions will be defined here once the source and frontend build contexts are finalized.
+# The production Docker build uses the repository root as its build context.
+# The authoritative ignore rules therefore live in /.dockerignore.

@@ -14,6 +14,42 @@ from app.workers.broker import create_arq_pool
 logger = logging.getLogger(__name__)
 
 
+# These jobs represent durable, exam-scoped operations whose authoritative
+# state lives in PostgreSQL. Multiple API replicas may discover or request the
+# same work at nearly the same time, especially during runtime recovery.
+#
+# A deterministic ARQ job ID prevents duplicate queue entries while one copy is
+# already queued/running (or while its short-lived result key is retained).
+# `evaluate_exam_completion` is intentionally excluded because it is a
+# repeatable evaluation trigger and may need to run again after exam state
+# changes.
+_UNIQUE_DURABLE_EXAM_JOBS = frozenset(
+    {
+        "prepare_exam_roster",
+        "reconcile_exam_roster",
+        "finalize_exam_close",
+        "finalize_exam_cancellation",
+        "sync_exam_results",
+    }
+)
+
+
+def durable_exam_job_id(
+    function_name: str,
+    *args: Any,
+) -> str | None:
+    """Return a deterministic ARQ job ID for one-shot exam-scoped work."""
+
+    if function_name not in _UNIQUE_DURABLE_EXAM_JOBS or not args:
+        return None
+
+    exam_identity = str(args[0]).strip()
+    if not exam_identity:
+        return None
+
+    return f"weave-cbt:{function_name}:{exam_identity}"
+
+
 class ArqProducer:
     """Own the FastAPI process's ARQ connection used to enqueue jobs.
 
@@ -53,11 +89,14 @@ class ArqProducer:
         *args: Any,
         **job_options: Any,
     ) -> bool:
-        """Attempt to enqueue one ARQ job.
+        """Ensure one ARQ job is queued for the requested durable work.
 
-        False means the job was not queued. Callers should log that condition
-        but should not roll back already-committed PostgreSQL state; the
-        maintenance sweep can reconstruct durable work later.
+        For one-shot exam-scoped jobs, this method automatically supplies a
+        deterministic ARQ job ID. That makes simultaneous enqueue attempts from
+        several FastAPI replicas collapse into one queue entry.
+
+        True means the requested work is queued or an equivalent deterministic
+        job already exists. False means queue delivery was unavailable.
         """
 
         redis = self._redis
@@ -68,6 +107,13 @@ class ArqProducer:
                 function_name,
             )
             return False
+
+        if job_options.get("_job_id") is None:
+            generated_job_id = durable_exam_job_id(function_name, *args)
+            if generated_job_id is not None:
+                job_options["_job_id"] = generated_job_id
+
+        requested_job_id = job_options.get("_job_id")
 
         try:
             job = await redis.enqueue_job(
@@ -83,6 +129,14 @@ class ArqProducer:
             return False
 
         if job is None:
+            if requested_job_id is not None:
+                logger.debug(
+                    "ARQ job %s is already queued or retained under job ID %s",
+                    function_name,
+                    requested_job_id,
+                )
+                return True
+
             logger.warning(
                 "ARQ did not enqueue job %s",
                 function_name,

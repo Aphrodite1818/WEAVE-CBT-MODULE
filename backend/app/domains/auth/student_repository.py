@@ -5,10 +5,26 @@ from __future__ import annotations
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.auth.student_models import StudentExamSession
+
+
+_ADVISORY_LOCK_MASK = (1 << 64) - 1
+_ADVISORY_LOCK_SIGN_BIT = 1 << 63
+_ADVISORY_LOCK_MODULUS = 1 << 64
+
+
+def _student_session_lock_key(student_id: UUID) -> int:
+    """Map a student UUID to PostgreSQL's signed 64-bit advisory-lock space."""
+
+    # UUIDs are 128-bit while pg_advisory_xact_lock(bigint) accepts 64 bits.
+    # Fold both UUID halves together so the lock key depends on the full UUID.
+    folded = ((student_id.int >> 64) ^ student_id.int) & _ADVISORY_LOCK_MASK
+    if folded >= _ADVISORY_LOCK_SIGN_BIT:
+        folded -= _ADVISORY_LOCK_MODULUS
+    return folded
 
 
 class StudentAuthRepository:
@@ -81,6 +97,16 @@ class StudentAuthRepository:
         *,
         lock: bool = False,
     ) -> list[StudentExamSession]:
+        if lock:
+            # Row locks alone cannot serialize two first-time/waiting-room logins
+            # when no StudentExamSession row exists yet. A transaction-scoped
+            # advisory lock gives every API replica the same per-student mutex.
+            # It is released automatically on commit/rollback.
+            await db.execute(
+                text("SELECT pg_advisory_xact_lock(:lock_key)"),
+                {"lock_key": _student_session_lock_key(student_id)},
+            )
+
         query = select(StudentExamSession).where(
             StudentExamSession.student_id == student_id,
             StudentExamSession.revoked_at.is_(None),

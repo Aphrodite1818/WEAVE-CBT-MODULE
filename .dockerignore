@@ -1,0 +1,45 @@
+# Git / editor metadata
+.git/
+.github/
+.vscode/
+.idea/
+
+# Python caches, environments and test output
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+**/htmlcov/
+**/.venv/
+**/venv/
+backend/tests/
+
+# Frontend dependency/build output
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/.vite/
+
+# Local deployment/build artifacts
+deployment/docker/app/build/
+
+# Secrets and local environment files
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+
+# Logs and local databases
+**/*.log
+**/*.sqlite
+**/*.sqlite3
+**/*.db
+
+# OS noise
+.DS_Store
+**/.DS_Store
+Thumbs.db
+**/Thumbs.db
