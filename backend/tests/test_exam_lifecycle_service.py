@@ -374,6 +374,7 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
             question_id=source_question.id,
             position=1,
             text="4",
+            image_asset_id=None,
             is_correct=True,
         )
         first_class = SimpleNamespace(id=uuid4())
@@ -517,6 +518,7 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
             question_id=source_question.id,
             position=1,
             text="Answer",
+            image_asset_id=None,
             is_correct=True,
         )
         integrity_error = IntegrityError("insert", {}, Exception("boom"))
