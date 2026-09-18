@@ -162,7 +162,7 @@ describe('Weave backend integration shell', () => {
     renderApp()
 
     await loginAsAdmin()
-    expect(screen.getByRole('navigation', { name: /admin navigation/i })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: /administrator navigation/i })).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/sync/status', expect.anything())
   })
 
