@@ -16,60 +16,115 @@ export function assignExamLead(examId, leadTeacherId, expectedAuthoringVersion) 
   return weaveRequest(`/exams/${examId}/lead`, {
     method: 'PUT',
     body: { lead_teacher_id: leadTeacherId || null, expected_authoring_version: expectedAuthoringVersion },
+    successMessage: 'Examination lead updated.',
   })
 }
 
 export function createExam(payload) {
-  return weaveRequest('/exams', { method: 'POST', body: payload })
+  return weaveRequest('/exams', {
+    method: 'POST',
+    body: payload,
+    successMessage: 'Examination draft created.',
+  })
 }
 
 export function updateExam(examId, payload) {
-  return weaveRequest(`/exams/${examId}`, { method: 'PATCH', body: payload })
+  return weaveRequest(`/exams/${examId}`, {
+    method: 'PATCH',
+    body: payload,
+    successMessage: 'Examination changes saved.',
+  })
 }
 
 export function configureExamQuestions(examId, payload) {
-  return weaveRequest(`/exams/${examId}/questions/configuration`, { method: 'PUT', body: payload })
+  return weaveRequest(`/exams/${examId}/questions/configuration`, {
+    method: 'PUT',
+    body: payload,
+    successMessage: 'Question configuration updated.',
+  })
 }
 
 export function submitExam(examId, expectedAuthoringVersion = 1) {
   return weaveRequest(`/exams/${examId}/submit`, {
     method: 'POST',
     body: { expected_authoring_version: expectedAuthoringVersion },
+    successMessage: 'Examination submitted for review.',
   })
 }
 
-export const returnExamToDraft = (examId) => weaveRequest(`/exams/${examId}/return-to-draft`, { method: 'POST' })
+export const returnExamToDraft = (examId) => weaveRequest(`/exams/${examId}/return-to-draft`, {
+  method: 'POST',
+  successMessage: 'Examination returned to draft.',
+})
 
 export function deleteDraftExam(examId, expectedAuthoringVersion = 1) {
-  return weaveRequest(`/exams/${examId}${queryString({ expected_authoring_version: expectedAuthoringVersion })}`, { method: 'DELETE' })
+  return weaveRequest(`/exams/${examId}${queryString({ expected_authoring_version: expectedAuthoringVersion })}`, {
+    method: 'DELETE',
+    successMessage: 'Draft examination deleted.',
+  })
 }
 
-export const sealExam = (examId) => weaveRequest(`/exams/${examId}/seal`, { method: 'POST' })
-export const createRevision = (examId) => weaveRequest(`/exams/${examId}/revisions`, { method: 'POST' })
-export const activateExam = (examId) => weaveRequest(`/exams/${examId}/activate`, { method: 'POST' })
-export const closeExam = (examId) => weaveRequest(`/exams/${examId}/close`, { method: 'POST' })
+export const sealExam = (examId) => weaveRequest(`/exams/${examId}/seal`, {
+  method: 'POST',
+  successMessage: 'Examination sealed. Candidate roster preparation has started.',
+})
+
+export const createRevision = (examId) => weaveRequest(`/exams/${examId}/revisions`, {
+  method: 'POST',
+  successMessage: 'New examination revision created.',
+})
+
+export const activateExam = (examId) => weaveRequest(`/exams/${examId}/activate`, {
+  method: 'POST',
+  successMessage: 'Examination activated.',
+})
+
+export const closeExam = (examId) => weaveRequest(`/exams/${examId}/close`, {
+  method: 'POST',
+  successMessage: 'Examination closed.',
+})
 
 export function suspendExam(examId, reason) {
-  return weaveRequest(`/exams/${examId}/suspend`, { method: 'POST', body: { reason } })
+  return weaveRequest(`/exams/${examId}/suspend`, {
+    method: 'POST',
+    body: { reason },
+    successMessage: 'Examination suspended.',
+  })
 }
 
 export function resumeExam(examId, reason) {
-  return weaveRequest(`/exams/${examId}/resume`, { method: 'POST', body: reason ? { reason } : {} })
+  return weaveRequest(`/exams/${examId}/resume`, {
+    method: 'POST',
+    body: reason ? { reason } : {},
+    successMessage: 'Examination resumed.',
+  })
 }
 
 export function cancelExam(examId, reason) {
-  return weaveRequest(`/exams/${examId}/cancel`, { method: 'POST', body: { reason } })
+  return weaveRequest(`/exams/${examId}/cancel`, {
+    method: 'POST',
+    body: { reason },
+    successMessage: 'Examination sitting cancelled.',
+  })
 }
 
 export const listAvailableInvigilators = () => weaveRequest('/exams/invigilators/available')
 export const listExamInvigilators = (examId) => weaveRequest(`/exams/${examId}/invigilators`)
 
 export function assignExamInvigilators(examId, teacherIds) {
-  return weaveRequest(`/exams/${examId}/invigilators`, { method: 'POST', body: { teacher_ids: teacherIds } })
+  return weaveRequest(`/exams/${examId}/invigilators`, {
+    method: 'POST',
+    body: { teacher_ids: teacherIds },
+    successMessage: 'Invigilator assignments updated.',
+  })
 }
 
 export function removeExamInvigilators(examId, teacherIds) {
-  return weaveRequest(`/exams/${examId}/invigilators/remove`, { method: 'POST', body: { teacher_ids: teacherIds } })
+  return weaveRequest(`/exams/${examId}/invigilators/remove`, {
+    method: 'POST',
+    body: { teacher_ids: teacherIds },
+    successMessage: 'Invigilator assignments updated.',
+  })
 }
 
 export function listManualQuestions(examId, options = {}) {
@@ -83,6 +138,7 @@ export function addManualQuestions(examId, questionIds, expectedAuthoringVersion
       question_ids: questionIds,
       expected_authoring_version: expectedAuthoringVersion,
     },
+    successMessage: 'Questions added to the examination.',
   })
 }
 
@@ -93,6 +149,7 @@ export function removeManualQuestion(examId, questionId, expectedAuthoringVersio
       question_id: questionId,
       expected_authoring_version: expectedAuthoringVersion,
     },
+    successMessage: 'Question removed from the examination.',
   })
 }
 
@@ -103,5 +160,6 @@ export function reorderManualQuestions(examId, questionIds, expectedAuthoringVer
       question_ids: questionIds,
       expected_authoring_version: expectedAuthoringVersion,
     },
+    successMessage: 'Examination question order updated.',
   })
 }
