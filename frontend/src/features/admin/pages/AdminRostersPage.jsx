@@ -18,7 +18,7 @@ export function AdminRostersPage({ adminData, onNavigate }) {
 
   const levels = useMemo(() => buildAcademicLevels(adminData.subjects), [adminData.subjects])
   const levelSubjects = useMemo(
-    () => levelId === 'all' ? adminData.subjects : listSubjectsForLevel(adminData.subjects, levelId),
+    () => levelId === 'all' ? [] : listSubjectsForLevel(adminData.subjects, levelId),
     [adminData.subjects, levelId],
   )
 
@@ -27,13 +27,14 @@ export function AdminRostersPage({ adminData, onNavigate }) {
     [adminData.exams],
   )
 
+  const refreshExams = adminData.refreshExams
   useEffect(() => {
     if (!rosterExams.some((exam) => TRANSITIONAL_ROSTER_STATES.has(exam.rosterStatus))) return undefined
     const timer = window.setInterval(() => {
-      void adminData.refresh({ silent: true })
+      void refreshExams({ silent: true })
     }, 4000)
     return () => window.clearInterval(timer)
-  }, [adminData, rosterExams])
+  }, [refreshExams, rosterExams])
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -91,7 +92,13 @@ export function AdminRostersPage({ adminData, onNavigate }) {
           />
         </label>
         <SelectControl label="Roster level filter" value={levelId} options={levelOptions} onChange={changeLevel} />
-        <SelectControl label="Roster subject filter" value={subjectId} options={subjectOptions} onChange={(value) => { setSubjectId(value); setPage(1) }} />
+        <SelectControl
+          label="Roster subject filter"
+          value={subjectId}
+          options={subjectOptions}
+          onChange={(value) => { setSubjectId(value); setPage(1) }}
+          disabled={levelId === 'all'}
+        />
       </div>
 
       <section className="admin-roster-grid" aria-label="Examination rosters" aria-busy={adminData.loading}>
@@ -164,16 +171,17 @@ export function AdminRosterDetailPage({ state, adminData, gateway, onNavigate })
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [classId, exam, gateway, page, query, refreshToken, status])
+  }, [classId, exam?.id, gateway, page, query, refreshToken, status])
 
+  const refreshExams = adminData.refreshExams
   useEffect(() => {
     if (!exam || !TRANSITIONAL_ROSTER_STATES.has(exam.rosterStatus)) return undefined
     const timer = window.setInterval(async () => {
-      await adminData.refresh({ silent: true })
+      await refreshExams({ silent: true })
       setRefreshToken((value) => value + 1)
     }, 4000)
     return () => window.clearInterval(timer)
-  }, [adminData, exam])
+  }, [exam?.id, exam?.rosterStatus, refreshExams])
 
   if (!exam) {
     return (
