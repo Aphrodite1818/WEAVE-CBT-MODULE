@@ -56,6 +56,11 @@ class ExamCreate(InputBase):
     question_count: int = Field(gt=0)
     title: str = Field(min_length=1, max_length=255)
     instructions: str | None = None
+    folder_color: str | None = Field(
+        default=None,
+        pattern=r"^#[0-9A-Fa-f]{6}$",
+        description="Hex colour used by the examination folder card, for example #397fd6.",
+    )
     duration_minutes: int = Field(gt=0)
     shuffle_questions: bool = True
     shuffle_options: bool = True
@@ -98,6 +103,7 @@ class ExamUpdate(InputBase):
     assessment_component_id: UUID | None = None
     title: str | None = Field(default=None, min_length=1, max_length=255)
     instructions: str | None = None
+    folder_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
     duration_minutes: int | None = Field(default=None, gt=0)
     shuffle_questions: bool | None = None
     shuffle_options: bool | None = None
@@ -218,6 +224,7 @@ class ExamResponse(OutputBase):
     question_count: int
     title: str
     instructions: str | None
+    folder_color: str | None
     duration_minutes: int
     shuffle_questions: bool
     shuffle_options: bool
