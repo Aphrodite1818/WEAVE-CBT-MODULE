@@ -15,11 +15,13 @@ from app.domains.academics.authorization import AcademicAuthorizationService
 from app.domains.attempts.models import AttemptStatus, ExamAttempt
 from app.domains.attempts.repository import AttemptRepository
 from app.domains.auth.models import LocalActor
+from app.domains.candidates.models import ExamCandidate
 from app.domains.candidates.repository import CandidateRepository
 from app.domains.exams.exceptions import ExamNotFound
 from app.domains.exams.models import Exam
 from app.domains.exams.repository import ExamRepository
 from app.domains.results.models import ExamResult, ResultSyncStatus
+from app.domains.results.query_repository import ResultQueryRepository
 from app.domains.results.repository import ResultRepository
 
 
@@ -153,6 +155,13 @@ class ResultService:
                 "may view these results"
             ) from exc
 
+    @staticmethod
+    def _require_admin(actor: LocalActor) -> None:
+        if not actor.is_active:
+            raise AcademicAuthorizationError("Active local actor is required")
+        if actor.role != "admin":
+            raise AcademicAuthorizationError("Administrator access is required")
+
     @classmethod
     async def get_result(
         cls,
@@ -188,3 +197,45 @@ class ResultService:
         )
         total = await ResultRepository.count_results_for_exam(db, exam.id)
         return rows, total
+
+    @classmethod
+    async def list_exam_result_review_rows(
+        cls,
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        exam_id: UUID,
+        search: str | None = None,
+        sync_status: ResultSyncStatus | None = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> tuple[list[tuple[ExamResult, ExamCandidate]], int]:
+        exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id)
+        if exam is None:
+            raise ExamNotFound("Examination does not exist")
+        await cls._require_can_view_exam_results(db, actor=actor, exam_id=exam.id)
+        rows = await ResultQueryRepository.list_exam_result_rows(
+            db,
+            exam_id=exam.id,
+            search=search,
+            sync_status=sync_status,
+            offset=offset,
+            limit=limit,
+        )
+        total = await ResultQueryRepository.count_exam_result_rows(
+            db,
+            exam_id=exam.id,
+            search=search,
+            sync_status=sync_status,
+        )
+        return rows, total
+
+    @classmethod
+    async def list_result_review_sets(
+        cls,
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+    ) -> list[dict]:
+        cls._require_admin(actor)
+        return await ResultQueryRepository.list_review_sets(db)
