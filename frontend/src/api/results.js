@@ -20,6 +20,7 @@ export function approveExamResults(examId, options = {}) {
   return weaveRequest(`/exams/${examId}/results/approve`, {
     ...options,
     method: 'POST',
+    successMessage: options.successMessage || 'Examination results approved for Weave synchronization.',
   })
 }
 
@@ -28,6 +29,7 @@ export function voidExamResults(examId, reason, options = {}) {
     ...options,
     method: 'POST',
     body: { reason },
+    successMessage: options.successMessage || 'Examination result set voided.',
   })
 }
 
@@ -35,5 +37,6 @@ export function retryExamResultSync(examId, options = {}) {
   return weaveRequest(`/exams/${examId}/results/retry-sync`, {
     ...options,
     method: 'POST',
+    successMessage: options.successMessage || 'Failed result synchronization queued for retry.',
   })
 }
