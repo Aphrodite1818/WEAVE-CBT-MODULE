@@ -113,11 +113,17 @@ async def _recover_stale_result_batches(*, now: datetime) -> set[UUID]:
     return recovered_exam_ids
 
 
-async def _list_roster_exam_ids_needing_recovery() -> list[UUID]:
-    """Only PENDING rosters are retried automatically; FAILED needs operator review."""
+async def _list_roster_exam_ids_needing_recovery() -> tuple[list[UUID], list[UUID]]:
+    """Return durable preparation and reconciliation work for sealed rosters.
+
+    PENDING means the initial materialization still needs to run. STALE means
+    synchronized enrollment truth changed after a READY roster was prepared and
+    the existing candidate identities must be reconciled in place. FAILED is
+    intentionally left for operator review instead of being retried forever.
+    """
 
     async with async_session_factory() as db:
-        return list(
+        pending = list(
             (
                 await db.execute(
                     select(Exam.id)
@@ -130,6 +136,21 @@ async def _list_roster_exam_ids_needing_recovery() -> list[UUID]:
                 )
             ).scalars().all()
         )
+        stale = list(
+            (
+                await db.execute(
+                    select(Exam.id)
+                    .where(
+                        Exam.status == ExamStatus.SEALED,
+                        Exam.roster_status == ExamRosterStatus.STALE,
+                    )
+                    .order_by(Exam.updated_at.asc(), Exam.id.asc())
+                    .limit(MAINTENANCE_SCAN_LIMIT)
+                )
+            ).scalars().all()
+        )
+        await db.rollback()
+        return pending, stale
 
 
 async def _list_exam_execution_recovery_ids() -> tuple[list[UUID], list[UUID], list[UUID]]:
@@ -226,13 +247,15 @@ async def recover_background_work(ctx: dict[str, Any]) -> dict[str, int]:
     now = datetime.now(UTC)
 
     stale_result_exam_ids = await _recover_stale_result_batches(now=now)
-    roster_exam_ids = await _list_roster_exam_ids_needing_recovery()
+    pending_roster_ids, stale_roster_ids = await _list_roster_exam_ids_needing_recovery()
     closing_ids, cancelling_ids, active_ids = await _list_exam_execution_recovery_ids()
     result_exam_ids = set(await _list_result_exam_ids_needing_recovery(now=now))
     result_exam_ids.update(await _filter_approved_exam_ids(stale_result_exam_ids))
 
-    for exam_id in roster_exam_ids:
+    for exam_id in pending_roster_ids:
         await redis.enqueue_job("prepare_exam_roster", str(exam_id))
+    for exam_id in stale_roster_ids:
+        await redis.enqueue_job("reconcile_exam_roster", str(exam_id))
     for exam_id in closing_ids:
         await redis.enqueue_job("finalize_exam_close", str(exam_id))
     for exam_id in cancelling_ids:
@@ -243,7 +266,8 @@ async def recover_background_work(ctx: dict[str, Any]) -> dict[str, int]:
         await redis.enqueue_job("sync_exam_results", str(exam_id))
 
     total = (
-        len(roster_exam_ids)
+        len(pending_roster_ids)
+        + len(stale_roster_ids)
         + len(closing_ids)
         + len(cancelling_ids)
         + len(active_ids)
@@ -251,8 +275,10 @@ async def recover_background_work(ctx: dict[str, Any]) -> dict[str, int]:
     )
     if total:
         logger.info(
-            "Maintenance enqueued roster=%s closing=%s cancelling=%s completion=%s results=%s",
-            len(roster_exam_ids),
+            "Maintenance enqueued roster_prepare=%s roster_reconcile=%s closing=%s "
+            "cancelling=%s completion=%s results=%s",
+            len(pending_roster_ids),
+            len(stale_roster_ids),
             len(closing_ids),
             len(cancelling_ids),
             len(active_ids),
@@ -260,7 +286,8 @@ async def recover_background_work(ctx: dict[str, Any]) -> dict[str, int]:
         )
 
     return {
-        "roster_jobs_enqueued": len(roster_exam_ids),
+        "roster_jobs_enqueued": len(pending_roster_ids),
+        "roster_reconcile_jobs_enqueued": len(stale_roster_ids),
         "closing_jobs_enqueued": len(closing_ids),
         "cancelling_jobs_enqueued": len(cancelling_ids),
         "completion_jobs_enqueued": len(active_ids),
