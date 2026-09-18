@@ -52,6 +52,7 @@ class ResultReviewSetResponse(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
 
     exam_id: UUID
+    completed_at: datetime | None = None
     result_disposition: ExamResultDisposition | None = None
     results_decided_at: datetime | None = None
     results_decision_reason: str | None = None
