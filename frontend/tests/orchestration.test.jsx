@@ -198,7 +198,7 @@ describe('Weave setup and first sync orchestration', () => {
     await openStaff()
     expect(await screen.findByRole('heading', { name: /preparing your cbt server/i })).toBeInTheDocument()
     expect(fetchMock.mock.calls.some(([url]) => url === '/api/v1/sync/status')).toBe(true)
-    expect(screen.queryByRole('navigation', { name: /admin navigation/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: /administrator navigation/i })).not.toBeInTheDocument()
   })
 
   it('lets teachers enter their workspace without an admin sync request', async () => {
@@ -238,8 +238,8 @@ describe('Weave setup and first sync orchestration', () => {
     renderApp()
     await openStaff()
     expect(await screen.findByRole('heading', { name: /preparing your cbt server/i })).toBeInTheDocument()
-    expect(screen.queryByRole('navigation', { name: /admin navigation/i })).not.toBeInTheDocument()
-    expect(await screen.findByRole('navigation', { name: /admin navigation/i }, { timeout: 4000 })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: /administrator navigation/i })).not.toBeInTheDocument()
+    expect(await screen.findByRole('navigation', { name: /administrator navigation/i }, { timeout: 4000 })).toBeInTheDocument()
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/v1/sync/status').length).toBeGreaterThan(1)
   })
 })
