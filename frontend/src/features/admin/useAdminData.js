@@ -18,8 +18,8 @@ export function useAdminData(gateway) {
   const [error, setError] = useState('')
   const [warning, setWarning] = useState('')
 
-  const refresh = useCallback(async () => {
-    setLoading(true)
+  const refresh = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true)
     setError('')
     setWarning('')
     try {
@@ -28,9 +28,9 @@ export function useAdminData(gateway) {
       setWarning(loaded.warning)
     } catch (requestError) {
       setError(requestError.userMessage || 'Weave could not load the administrator workspace.')
-      setData(emptyAdminData)
+      if (!silent) setData(emptyAdminData)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [gateway])
 
@@ -219,6 +219,7 @@ function normalizeTerm(term) {
 
 function normalizeExam(exam, subjectByCurriculum, componentById) {
   const status = String(exam.status || 'draft').toLowerCase()
+  const rosterStatus = String(exam.roster_status || 'not_prepared').toLowerCase()
   const subject = subjectByCurriculum.get(exam.curriculum_subject_id)
   const component = componentById.get(exam.assessment_component_id)
   return {
@@ -228,6 +229,8 @@ function normalizeExam(exam, subjectByCurriculum, componentById) {
     title: exam.title,
     instructions: exam.instructions || '',
     folderColor: exam.folder_color || null,
+    academicLevelId: subject?.academicLevelId || null,
+    academicLevelName: subject?.academicLevelName || '',
     subjectName: subject?.name || 'Subject',
     subjectCode: subject?.code || '',
     curriculumSubjectId: exam.curriculum_subject_id,
@@ -244,8 +247,11 @@ function normalizeExam(exam, subjectByCurriculum, componentById) {
     statusLabel: status.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()),
     scheduledStartAt: exam.scheduled_start_at,
     latestNormalStartAt: exam.latest_normal_start_at,
-    rosterStatus: exam.roster_status,
-    rosterCandidateCount: exam.roster_candidate_count,
+    rosterStatus,
+    rosterVersion: Number(exam.roster_version || 0),
+    rosterCandidateCount: Number(exam.roster_candidate_count || 0),
+    rosterPreparedAt: exam.roster_prepared_at || null,
+    rosterError: exam.roster_error || '',
     authoringVersion: exam.authoring_version,
     revisionNumber: exam.revision_number,
     revisionOfExamId: exam.revision_of_exam_id,
