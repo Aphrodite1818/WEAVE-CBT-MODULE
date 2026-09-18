@@ -28,7 +28,7 @@ from app.integrations.weave.academics import weave_academics_gateway
 
 logger = logging.getLogger(__name__)
 
-SYNC_LEADER_LOCK_KEY = 873_421_945
+SYNC_LEADER_LOCK_KEY = 873_421_946
 LEADER_RETRY_SECONDS = 5
 LEADER_HEARTBEAT_SECONDS = 10
 RECONCILE_FALLBACK_SECONDS = 60
