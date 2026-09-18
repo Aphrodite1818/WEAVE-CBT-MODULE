@@ -42,6 +42,7 @@ const paths = {
   back: <path d="m15 18-6-6 6-6"/>,
   info: <><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></>,
   candidate: <><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></>,
+  roster: <><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><circle cx="9" cy="11" r="1"/><path d="M12 11h4"/><circle cx="9" cy="15" r="1"/><path d="M12 15h4"/><circle cx="9" cy="19" r="1"/><path d="M12 19h4"/></>,
   submission: <><path d="M5 3h14v18H5z"/><path d="m8 12 3 3 5-6"/></>,
   sync: <><path d="M20 7h-5V2M4 17h5v5"/><path d="M5.1 9A8 8 0 0 1 18 5l2 2M18.9 15A8 8 0 0 1 6 19l-2-2"/></>,
   plus: <path d="M12 5v14M5 12h14"/>,
