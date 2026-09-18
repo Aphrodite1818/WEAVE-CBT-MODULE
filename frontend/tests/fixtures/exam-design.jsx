@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 // Browser-only design fixture. Never imported by either production entrypoint.
 import { useState } from 'react'
 import { createRoot } from 'react-dom/client'
