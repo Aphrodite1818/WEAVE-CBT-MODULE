@@ -97,7 +97,7 @@ describe('Teacher exams', () => {
     expect(screen.getByRole('heading', { name: /examinations/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Mathematics CA 1' })).toBeInTheDocument()
     expect(screen.getByText(/30 questions/)).toHaveTextContent('45 min')
-    expect(screen.getByText('Draft')).toBeInTheDocument()
+    expect(screen.getByText('Draft', { selector: '.exam-status' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /^create exam$/i }))
     expect(dispatch).toHaveBeenCalledWith({
