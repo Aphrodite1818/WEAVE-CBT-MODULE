@@ -34,6 +34,27 @@ export function useAdminData(gateway) {
     }
   }, [gateway])
 
+  const refreshExams = useCallback(async ({ silent = true } = {}) => {
+    if (!silent) setLoading(true)
+    try {
+      const examPayload = await gateway.exams?.listExams?.({ limit: 200 })
+      const examRows = Array.isArray(examPayload) ? examPayload : examPayload?.exams || []
+      setData((current) => {
+        const subjectByCurriculum = new Map(current.subjects.map((subject) => [subject.id, subject]))
+        const componentById = new Map(current.assessmentComponents.map((component) => [component.id, component]))
+        return {
+          ...current,
+          exams: examRows.map((exam) => normalizeExam(exam, subjectByCurriculum, componentById)),
+        }
+      })
+      setError('')
+    } catch (requestError) {
+      setError(requestError.userMessage || 'Weave could not refresh examination state.')
+    } finally {
+      if (!silent) setLoading(false)
+    }
+  }, [gateway])
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -55,7 +76,7 @@ export function useAdminData(gateway) {
     return () => { cancelled = true }
   }, [gateway])
 
-  return { ...data, loading, error, warning, refresh }
+  return { ...data, loading, error, warning, refresh, refreshExams }
 }
 
 async function loadAdminData(gateway) {
