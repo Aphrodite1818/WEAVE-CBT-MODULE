@@ -18,6 +18,7 @@ from app.domains.exams.schemas import (
     ExamCreate,
     ExamInvigilatorAssignment,
     ExamInvigilatorResponse,
+    ExamLeadAssignment,
     ExamQuestionConfiguration,
     ExamQuestionSelectionResponse,
     ExamReasonPayload,
@@ -74,6 +75,30 @@ DOMAIN_ERRORS = (
 )
 
 
+@router.get(
+    "/lead-candidates",
+    response_model=list[AcademicTeacherResponse],
+)
+async def list_eligible_lead_teachers(
+    curriculum_subject_id: UUID,
+    term_id: UUID,
+    db: DbSession,
+    actor: CurrentLocalActor,
+) -> list[AcademicTeacherResponse]:
+    """Return teachers an administrator may appoint as lead for this paper scope."""
+
+    try:
+        teachers = await ExamService.list_eligible_lead_teachers(
+            db,
+            actor=actor,
+            curriculum_subject_id=curriculum_subject_id,
+            term_id=term_id,
+        )
+    except DOMAIN_ERRORS as exc:
+        raise _domain_http_error(exc) from exc
+    return [AcademicTeacherResponse.model_validate(teacher) for teacher in teachers]
+
+
 @router.post("", response_model=ExamResponse, status_code=status.HTTP_201_CREATED)
 async def create_exam(
     payload: ExamCreate,
@@ -100,6 +125,26 @@ async def update_exam(
             actor=actor,
             payload=payload,
             exam_id=exam_id,
+        )
+    except DOMAIN_ERRORS as exc:
+        raise _domain_http_error(exc) from exc
+    return ExamResponse.model_validate(exam)
+
+
+@router.put("/{exam_id}/lead", response_model=ExamResponse)
+async def assign_exam_lead(
+    exam_id: UUID,
+    payload: ExamLeadAssignment,
+    db: DbSession,
+    actor: CurrentLocalActor,
+) -> ExamResponse:
+    try:
+        exam = await ExamService.assign_lead_teacher(
+            db,
+            actor=actor,
+            exam_id=exam_id,
+            lead_teacher_id=payload.lead_teacher_id,
+            expected_authoring_version=payload.expected_authoring_version,
         )
     except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
