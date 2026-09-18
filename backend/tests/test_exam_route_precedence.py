@@ -1,26 +1,39 @@
-from collections.abc import Callable
+from starlette.routing import Match
 
-from app.domains.exams.read_router import get_exam
-from app.domains.exams.router import (
-    list_available_invigilators,
-    list_eligible_lead_teachers,
-)
 from app.main import app
 
 
-def _route_index(endpoint: Callable, method: str = "GET") -> int:
-    method = method.upper()
-    for index, route in enumerate(app.routes):
-        methods = getattr(route, "methods", set()) or set()
-        if getattr(route, "endpoint", None) is endpoint and method in methods:
-            return index
-    raise AssertionError(
-        f"Route {method} for endpoint {endpoint.__name__} was not registered"
-    )
+def _first_full_match_name(path: str, method: str = "GET") -> str:
+    scope = {
+        "type": "http",
+        "path": path,
+        "method": method.upper(),
+        "root_path": "",
+        "scheme": "http",
+        "server": ("testserver", 80),
+        "client": ("testclient", 50000),
+        "headers": [],
+        "query_string": b"",
+    }
+
+    for route in app.routes:
+        match, _ = route.matches(scope)
+        if match == Match.FULL:
+            endpoint = getattr(route, "endpoint", None)
+            endpoint_name = getattr(endpoint, "__name__", None)
+            if endpoint_name is not None:
+                return endpoint_name
+            return getattr(route, "name", "")
+
+    raise AssertionError(f"No route matched {method.upper()} {path}")
 
 
 def test_static_exam_routes_precede_generic_exam_detail_route() -> None:
-    detail_index = _route_index(get_exam)
-
-    assert _route_index(list_eligible_lead_teachers) < detail_index
-    assert _route_index(list_available_invigilators) < detail_index
+    assert (
+        _first_full_match_name("/api/v1/exams/lead-candidates")
+        == "list_eligible_lead_teachers"
+    )
+    assert (
+        _first_full_match_name("/api/v1/exams/invigilators/available")
+        == "list_available_invigilators"
+    )
