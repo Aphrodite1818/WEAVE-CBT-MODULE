@@ -89,8 +89,8 @@ describe('teacher question edit routing', () => {
   it('keeps edit-question as a valid teacher route and opens the editor', async () => {
     render(<BrowserRouter><App /></BrowserRouter>)
 
-    await screen.findByRole('heading', { name: /a smarter way to take exams/i })
-    fireEvent.click(screen.getByRole('button', { name: /login as staff/i }))
+    const staffLoginButton = await screen.findByRole('button', { name: /login as staff/i })
+    fireEvent.click(staffLoginButton)
     fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'teacher@brightfield.test' } })
     fireEvent.change(screen.getByPlaceholderText(/enter your password/i), { target: { value: 'secret' } })
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
