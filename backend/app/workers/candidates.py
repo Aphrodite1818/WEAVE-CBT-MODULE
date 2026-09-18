@@ -1,4 +1,4 @@
-"""ARQ jobs for examination candidate-roster preparation."""
+"""ARQ jobs for examination candidate-roster preparation and reconciliation."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ async def _mark_roster_failed(
         if exam.roster_status == ExamRosterStatus.READY:
             return
 
-        # Roster preparation only belongs to sealed examinations.
+        # Roster preparation/reconciliation only belongs to sealed examinations.
         if exam.status != ExamStatus.SEALED:
             return
 
@@ -114,6 +114,78 @@ async def prepare_exam_roster(
         )
         logger.exception(
             "Unexpected candidate roster preparation failure for exam %s",
+            parsed_exam_id,
+        )
+        raise
+
+
+async def reconcile_exam_roster(
+    _ctx: dict,
+    exam_id: str,
+) -> None:
+    """Reconcile one stale sealed roster against current Weave enrollment truth.
+
+    Delivery is intentionally idempotent. PostgreSQL owns the roster lifecycle;
+    duplicate or delayed ARQ jobs simply exit when another execution has already
+    completed the reconciliation or the exam has moved beyond SEALED.
+    """
+
+    try:
+        parsed_exam_id = UUID(exam_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("reconcile_exam_roster received an invalid exam ID") from exc
+
+    try:
+        async with async_session_factory() as db:
+            exam = await ExamRepository.get_exam_by_id(
+                db,
+                exam_id=parsed_exam_id,
+                lock=True,
+            )
+
+            if exam is None:
+                logger.warning(
+                    "Roster reconciliation ignored because exam %s no longer exists",
+                    parsed_exam_id,
+                )
+                return
+
+            if exam.status != ExamStatus.SEALED:
+                return
+
+            if exam.roster_status == ExamRosterStatus.READY:
+                return
+
+            if exam.roster_status not in {
+                ExamRosterStatus.STALE,
+                ExamRosterStatus.FAILED,
+            }:
+                return
+
+            await CandidateService.reconcile_roster(
+                db,
+                exam_id=parsed_exam_id,
+            )
+
+    except CandidateRosterError as exc:
+        await _mark_roster_failed(
+            exam_id=parsed_exam_id,
+            error_message=str(exc),
+        )
+        logger.warning(
+            "Candidate roster reconciliation failed for exam %s: %s",
+            parsed_exam_id,
+            exc,
+        )
+        raise
+
+    except Exception:
+        await _mark_roster_failed(
+            exam_id=parsed_exam_id,
+            error_message="Candidate roster reconciliation failed unexpectedly",
+        )
+        logger.exception(
+            "Unexpected candidate roster reconciliation failure for exam %s",
             parsed_exam_id,
         )
         raise
