@@ -224,6 +224,7 @@ class ExamService:
             question_count=payload.question_count,
             title=payload.title,
             instructions=_normalize_optional_text(payload.instructions),
+            folder_color=payload.folder_color,
             duration_minutes=payload.duration_minutes,
             shuffle_questions=payload.shuffle_questions,
             shuffle_options=payload.shuffle_options,
@@ -451,6 +452,8 @@ class ExamService:
             exam.title = next_title
         if "instructions" in fields:
             exam.instructions = _normalize_optional_text(payload.instructions)
+        if "folder_color" in fields:
+            exam.folder_color = payload.folder_color
         if "duration_minutes" in fields:
             exam.duration_minutes = next_duration_minutes
         if "shuffle_questions" in fields:
