@@ -30,7 +30,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
       ? editingExam?.leadTeacherId ? 'Assigned teacher' : 'Administrator'
       : actor?.display_name || 'You',
   )
-  const [folderColor, setFolderColor] = useState('#8190a5')
+  const [folderColor, setFolderColor] = useState(editingExam?.folderColor || '#8190a5')
   const [leadSaving, setLeadSaving] = useState(false)
   const [leadMessage, setLeadMessage] = useState('')
   const [title, setTitle] = useState(editingExam?.title || '')
@@ -115,6 +115,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
           assessment_component_id: componentId,
           title: title.trim(),
           instructions: instructions.trim() || null,
+          folder_color: folderColor,
           duration_minutes: Number(durationMinutes),
           shuffle_questions: shuffleQuestions,
           shuffle_options: shuffleOptions,
@@ -134,6 +135,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
           question_count: Number(questionCount),
           title: title.trim(),
           instructions: instructions.trim() || null,
+          folder_color: folderColor,
           duration_minutes: Number(durationMinutes),
           shuffle_questions: shuffleQuestions,
           shuffle_options: shuffleOptions,
@@ -310,8 +312,8 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
             </div>
           </ExamSection>
 
-          <ExamSection number="3" title="Exam appearance" description="Folder colour preview." kind="appearance">
-            <div className="exam-palette" role="group" aria-label="Folder colour preview">
+          <ExamSection number="3" title="Exam appearance" description="Choose the folder colour shown in examination lists." kind="appearance">
+            <div className="exam-palette" role="group" aria-label="Folder colour">
               {FOLDER_COLORS.map(([name, color]) => (
                 <button key={name} type="button" title={name} aria-label={`${name} folder`} aria-pressed={folderColor === color} style={{ '--swatch': color }} onClick={() => setFolderColor(color)}>
                   {folderColor === color && <RiCheckLine size={18} />}
@@ -320,7 +322,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
             </div>
             <div className="exam-folder-preview">
               <ExamFolder color={folderColor} size={52} />
-              <p><strong>Preview only</strong><small>Folder colours are not saved yet.</small></p>
+              <p><strong>Folder colour</strong><small>Saved with this examination.</small></p>
             </div>
           </ExamSection>
 
