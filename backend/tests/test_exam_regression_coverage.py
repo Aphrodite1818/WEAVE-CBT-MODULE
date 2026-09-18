@@ -18,6 +18,7 @@ os.environ["DEBUG"] = "false"
 
 from app.domains.academics.authorization import AcademicAuthorizationService  # noqa: E402
 from app.domains.exams.exceptions import ExamStateError  # noqa: E402
+from app.domains.exams.execution_service import ExamExecutionService  # noqa: E402
 from app.domains.exams.models import (  # noqa: E402
     ExamQuestionSelectionMode,
     ExamRosterStatus,
@@ -59,6 +60,7 @@ def exam(**overrides) -> SimpleNamespace:
         "question_count": 2,
         "title": "Shared Paper",
         "instructions": None,
+        "folder_color": None,
         "duration_minutes": 45,
         "shuffle_questions": True,
         "shuffle_options": True,
@@ -266,7 +268,6 @@ class ExamRegressionCoverageTests(unittest.IsolatedAsyncioTestCase):
         for lifecycle_status in (
             ExamStatus.ACTIVE,
             ExamStatus.SUSPENDED,
-            ExamStatus.CLOSED,
         ):
             with self.subTest(status=lifecycle_status):
                 db = AsyncMock()
@@ -292,6 +293,37 @@ class ExamRegressionCoverageTests(unittest.IsolatedAsyncioTestCase):
                             exam_id=current_exam.id,
                         )
                 db.commit.assert_not_awaited()
+
+    async def test_closed_revision_requires_voided_results(self) -> None:
+        db = AsyncMock()
+        admin = actor(role="admin")
+        current_exam = exam(status=ExamStatus.CLOSED)
+
+        with (
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=current_exam),
+            ),
+            patch.object(
+                ExamRepository,
+                "get_latest_child_revision",
+                new=AsyncMock(return_value=None),
+            ),
+            patch.object(
+                ExamExecutionService,
+                "results_are_voided",
+                new=AsyncMock(return_value=False),
+            ),
+        ):
+            with self.assertRaisesRegex(ExamStateError, "results are voided"):
+                await ExamService.create_revision(
+                    db,
+                    actor=admin,  # type: ignore[arg-type]
+                    exam_id=current_exam.id,
+                )
+
+        db.commit.assert_not_awaited()
 
     async def test_cancelled_leaf_can_create_next_shared_revision(self) -> None:
         db = AsyncMock()
