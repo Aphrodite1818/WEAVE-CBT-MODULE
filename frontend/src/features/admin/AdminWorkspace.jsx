@@ -9,6 +9,7 @@ import { AdminExamsPage } from './pages/AdminExamsPage'
 import { AdminOverview } from './pages/AdminOverview'
 import { AdminBankDetailPage, AdminQuestionBanksPage } from './pages/AdminQuestionBanks'
 import { AdminQuestionsPage } from './pages/AdminQuestionsPage'
+import { AdminRosterDetailPage, AdminRostersPage } from './pages/AdminRostersPage'
 import { useAdminData } from './useAdminData'
 import '../teacher/teacher-dashboard.css'
 import '../teacher/teacher-selects.css'
@@ -17,14 +18,15 @@ import './admin.css'
 
 const bankViews = new Set(['question-banks', 'create-bank', 'bank-detail', 'questions', 'create-question', 'edit-question', 'preview-question'])
 const examViews = new Set(['exams', 'create-exam'])
-const placeholderViews = new Set(['students', 'invigilators', 'results', 'reports'])
+const rosterViews = new Set(['roster', 'roster-detail'])
+const placeholderViews = new Set(['invigilators', 'results', 'reports'])
 
 const adminNav = [
   ['dashboard', 'home', 'Dashboard'],
   ['question-banks', 'bank', 'Question Banks'],
   ['questions', 'fileText', 'Questions'],
   ['exams', 'calendar', 'Exams'],
-  ['students', 'users', 'Students'],
+  ['roster', 'roster', 'Roster'],
   ['invigilators', 'shield', 'Invigilators'],
   ['results', 'results', 'Results'],
   ['reports', 'reports', 'Reports'],
@@ -57,9 +59,10 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
 
   useEffect(() => {
     const next = topLevelView(state.staff.section)
-    if (state.staff.section === 'dashboard' || placeholderViews.has(state.staff.section)) setWorkspaceView(next)
+    if (state.staff.section === 'dashboard' || state.staff.section === 'students' || placeholderViews.has(state.staff.section)) setWorkspaceView(next)
     if (state.staff.section === 'question-banks' && !bankViews.has(workspaceView)) setWorkspaceView('question-banks')
     if (state.staff.section === 'exams' && !examViews.has(workspaceView)) setWorkspaceView('exams')
+    if (state.staff.section === 'roster' && !rosterViews.has(workspaceView)) setWorkspaceView('roster')
   }, [state.staff.section, workspaceView])
 
   const navigate = useCallback((view, patch = {}) => {
@@ -67,7 +70,9 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
       ? 'question-banks'
       : examViews.has(view)
         ? 'exams'
-        : view
+        : rosterViews.has(view)
+          ? 'roster'
+          : view
     const previewPatch = view === 'preview-question'
       ? { questionPreviewOrigin: workspaceView === 'bank-detail' ? 'bank-detail' : 'questions' }
       : {}
@@ -88,6 +93,7 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
     if (section === 'question-banks') return workspaceView === 'question-banks' || workspaceView === 'create-bank' || workspaceView === 'bank-detail'
     if (section === 'questions') return workspaceView === 'questions' || workspaceView === 'create-question' || workspaceView === 'edit-question' || workspaceView === 'preview-question'
     if (section === 'exams') return examViews.has(workspaceView)
+    if (section === 'roster') return rosterViews.has(workspaceView)
     return workspaceView === section
   }
 
@@ -129,6 +135,8 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
           {workspaceView === 'edit-question' && <QuestionBuilder key={state.staff.selectedQuestionId || 'admin-question-editor'} mode="edit" state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
           {workspaceView === 'exams' && <AdminExamsPage state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
           {workspaceView === 'create-exam' && <ExamAuthoringPage state={state} dispatch={workspaceDispatch} teacherData={examFormData} gateway={gateway} />}
+          {workspaceView === 'roster' && <AdminRostersPage adminData={adminData} onNavigate={navigate} />}
+          {workspaceView === 'roster-detail' && <AdminRosterDetailPage state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
           {placeholderViews.has(workspaceView) && <AdminPlaceholderPage section={workspaceView} />}
         </div>
       </section>
@@ -138,7 +146,6 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
 
 function AdminPlaceholderPage({ section }) {
   const labels = {
-    students: ['Students', 'Student administration will be connected in a later workspace pass.'],
     invigilators: ['Invigilators', 'Invigilation assignment and monitoring will be connected in a later workspace pass.'],
     results: ['Results', 'Result review and synchronization controls will be connected in a later workspace pass.'],
     reports: ['Reports', 'Administrative reporting will be connected in a later workspace pass.'],
@@ -154,5 +161,6 @@ function AdminPlaceholderPage({ section }) {
 
 function topLevelView(section) {
   if (section === 'overview') return 'dashboard'
+  if (section === 'students') return 'roster'
   return section || 'dashboard'
 }
