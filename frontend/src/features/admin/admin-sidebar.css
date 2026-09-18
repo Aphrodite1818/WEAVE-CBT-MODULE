@@ -31,10 +31,16 @@
   opacity: 1;
 }
 
-.admin-sidebar-nav .admin-nav-group__trigger.active {
-  background: rgb(var(--color-on-primary) / .105);
+/*
+ * Keep domain parents quiet when one of their children is selected. The page
+ * itself gets the selection cue; the parent only stays legible as context.
+ * This mirrors the main Weave sidebar, where active navigation uses a light
+ * tint instead of a large filled pill.
+ */
+.admin-sidebar .admin-sidebar-nav .admin-nav-group__trigger.active {
+  background: rgb(var(--color-on-primary) / .035);
   color: rgb(var(--color-on-primary));
-  box-shadow: inset 3px 0 0 rgb(var(--color-on-primary) / .72);
+  box-shadow: none;
 }
 
 .admin-nav-group__children {
@@ -61,16 +67,18 @@
   box-shadow: none;
 }
 
-.admin-sidebar-nav .admin-nav-child:hover {
-  background: rgb(var(--color-on-primary) / .09);
+.admin-sidebar .admin-sidebar-nav .admin-nav-link:hover,
+.admin-sidebar .admin-sidebar-nav .admin-nav-group__trigger:hover,
+.admin-sidebar .admin-sidebar-nav .admin-nav-child:hover {
+  background: rgb(var(--color-on-primary) / .055);
   color: rgb(var(--color-on-primary));
   box-shadow: none;
 }
 
-.admin-sidebar-nav .admin-nav-child.active {
-  background: rgb(var(--color-on-primary) / .16);
+.admin-sidebar .admin-sidebar-nav .admin-nav-child.active {
+  background: rgb(var(--color-on-primary) / .07);
   color: rgb(var(--color-on-primary));
-  box-shadow: inset 0 0 0 1px rgb(var(--color-on-primary) / .08);
+  box-shadow: none;
 }
 
 .admin-nav-child__rail {
@@ -85,12 +93,30 @@
   width: 5px;
   height: 5px;
   flex-basis: 5px;
-  background: rgb(var(--color-on-primary));
-  box-shadow: 0 0 0 3px rgb(var(--color-on-primary) / .09);
+  background: rgb(var(--color-on-primary) / .8);
+  box-shadow: none;
 }
 
-.admin-sidebar-nav .admin-nav-link[aria-current='page'] {
-  box-shadow: inset 3px 0 0 rgb(var(--color-on-primary) / .72);
+/* Top-level destinations use Weave's restrained tint + trailing dot cue. */
+.admin-sidebar .admin-sidebar-nav .admin-nav-link.active,
+.admin-sidebar .admin-sidebar-nav .admin-nav-link[aria-current='page'] {
+  background: rgb(var(--color-on-primary) / .065);
+  color: rgb(var(--color-on-primary));
+  box-shadow: none;
+}
+
+.admin-sidebar-nav .admin-nav-link[aria-current='page']::after {
+  content: '';
+  width: 5px;
+  height: 5px;
+  flex: 0 0 5px;
+  margin-left: auto;
+  border-radius: 999px;
+  background: rgb(var(--color-on-primary) / .72);
+}
+
+.admin-shell--collapsed .admin-nav-link[aria-current='page']::after {
+  display: none;
 }
 
 .admin-shell--collapsed .admin-nav-group__children {
