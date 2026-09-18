@@ -51,6 +51,48 @@ class CandidateMakeupRevocationPayload(InputBase):
     )
 
 
+class CandidateResponse(OutputBase):
+    id: UUID
+
+    exam_id: UUID
+    enrollment_id: UUID
+    student_id: UUID
+    class_id: UUID
+    class_name: str | None = None
+
+    admission_number: str
+    display_name: str
+
+    status: CandidateStatus
+    status_reason: str | None
+
+    roster_version: int
+
+    created_at: datetime
+    updated_at: datetime
+
+
+class CandidateRosterClassResponse(OutputBase):
+    id: UUID
+    display_name: str
+
+
+class CandidateRosterResponse(OutputBase):
+    exam_id: UUID
+
+    roster_status: ExamRosterStatus
+    roster_version: int
+
+    roster_candidate_count: int
+
+    offset: int
+    limit: int
+    total: int
+
+    classes: list[CandidateRosterClassResponse] = Field(default_factory=list)
+    candidates: list[CandidateResponse]
+
+
 class CandidateMakeupAuthorizationResponse(OutputBase):
     id: UUID
     candidate_id: UUID
@@ -84,41 +126,6 @@ class MissedCandidateListResponse(OutputBase):
     total: int
 
     candidates: list[MissedCandidateResponse]
-
-
-class CandidateResponse(OutputBase):
-    id: UUID
-
-    exam_id: UUID
-    enrollment_id: UUID
-    student_id: UUID
-    class_id: UUID
-
-    admission_number: str
-    display_name: str
-
-    status: CandidateStatus
-    status_reason: str | None
-
-    roster_version: int
-
-    created_at: datetime
-    updated_at: datetime
-
-
-class CandidateRosterResponse(OutputBase):
-    exam_id: UUID
-
-    roster_status: ExamRosterStatus
-    roster_version: int
-
-    roster_candidate_count: int
-
-    offset: int
-    limit: int
-    total: int
-
-    candidates: list[CandidateResponse]
 
 
 class CandidateLateStartAuthorizationResponse(OutputBase):
