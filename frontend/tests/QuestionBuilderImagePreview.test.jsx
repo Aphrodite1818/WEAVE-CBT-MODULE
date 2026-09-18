@@ -6,6 +6,26 @@ import { QuestionBuilder } from '../src/features/teacher/QuestionBuilder'
 const originalCreateObjectURL = URL.createObjectURL
 const originalRevokeObjectURL = URL.revokeObjectURL
 
+const subject = {
+  id: 'subject-1',
+  academicLevelId: 'level-jss1',
+  academicLevelName: 'JSS1',
+  academicLevelCategory: 'junior_secondary',
+  academicLevelPosition: 1,
+  name: 'English Language',
+  code: 'ENG',
+}
+
+const bank = {
+  id: 'bank-1',
+  curriculumSubjectId: subject.id,
+  academicLevelId: subject.academicLevelId,
+  academicLevelName: subject.academicLevelName,
+  subjectName: subject.name,
+  name: 'JSS1 ENGLISH',
+  count: 0,
+}
+
 describe('QuestionBuilder local image feedback', () => {
   let createdUrls
   let revokedUrls
@@ -36,13 +56,16 @@ describe('QuestionBuilder local image feedback', () => {
     const { container } = render(
       <StrictMode>
         <QuestionBuilder
-          state={{ staff: { selectedBankId: 'bank-1', selectedQuestionId: null } }}
+          state={{ staff: { selectedBankId: bank.id, selectedQuestionId: null } }}
           dispatch={vi.fn()}
-          teacherData={{ banks: [{ id: 'bank-1', name: 'JSS1 ENGLISH', count: 0 }], refresh: vi.fn() }}
+          teacherData={{ subjects: [subject], banks: [bank], refresh: vi.fn() }}
           gateway={{ media: { uploadQuestionImage: vi.fn() }, questions: {} }}
         />
       </StrictMode>,
     )
+
+    expect(screen.getByRole('combobox', { name: /academic level/i })).toHaveTextContent('JSS1')
+    expect(screen.getByRole('combobox', { name: /^subject$/i })).toHaveTextContent('English Language')
 
     const [questionImageInput, optionImageInput] = container.querySelectorAll('input[type="file"]')
     const questionFile = new File(['question image bytes'], 'question.png', { type: 'image/png' })
