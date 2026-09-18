@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AcademicAuthorizationError
+from app.core.exceptions import AcademicAuthorizationError, AcademicScopeError
 from app.domains.academics.authorization import AcademicAuthorizationService
+from app.domains.academics.eligibility import AcademicEligibilityService
+from app.domains.academics.repository import AcademicRepository
 from app.domains.auth.models import LocalActor
 from app.domains.exams.authoring_service import ExamService as _AuthoringExamService
 from app.domains.exams.collaboration_service import ExamCollaborationLifecycleMixin
@@ -24,7 +26,7 @@ from app.domains.exams.models import (
     ExamStatus,
 )
 from app.domains.exams.repository import ExamRepository
-from app.domains.exams.schemas import ExamCreate, ExamUpdate
+from app.domains.exams.schemas import ExamCreate, ExamUpdate, ManualQuestionRemove
 from app.domains.exams.timetable_service import ExamTimetableService
 from app.workers.producer import arq_producer
 
@@ -35,6 +37,213 @@ class ExamService(
     _AuthoringExamService,
 ):
     """Combined authoring/lifecycle facade with collaboration and timetable guards."""
+
+    # ------------------------------------------------------------------
+    # Lead-author coordination
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _actor_teacher_id(actor: LocalActor) -> UUID | None:
+        if actor.role != "teacher":
+            return None
+        if actor.weave_membership_id is None:
+            raise ExamAuthorizationError(
+                "Teacher is missing a Weave membership identity"
+            )
+        try:
+            return UUID(actor.weave_membership_id)
+        except (TypeError, ValueError) as exc:
+            raise ExamAuthorizationError(
+                "Teacher has an invalid Weave membership identity"
+            ) from exc
+
+    @classmethod
+    async def _eligible_lead_teachers_for_scope(
+        cls,
+        db: AsyncSession,
+        *,
+        curriculum_subject_id: UUID,
+        term_id: UUID,
+    ) -> list:
+        eligible_classes = await AcademicEligibilityService.list_eligible_classes(
+            db,
+            curriculum_subject_id=curriculum_subject_id,
+            academic_term_id=term_id,
+        )
+        if not eligible_classes:
+            raise AcademicScopeError(
+                "Curriculum subject has no academically eligible classes "
+                "for the selected academic term"
+            )
+
+        eligible_class_ids = {classroom.id for classroom in eligible_classes}
+        assignments = await AcademicRepository.list_effective_teacher_assignments(db)
+        teacher_ids = {
+            assignment.teacher_membership_id
+            for assignment in assignments
+            if assignment.curriculum_subject_id == curriculum_subject_id
+            and assignment.class_id in eligible_class_ids
+        }
+        return await AcademicRepository.list_teachers_by_ids(
+            db,
+            list(teacher_ids),
+            active_only=True,
+        )
+
+    @classmethod
+    async def _validate_lead_teacher(
+        cls,
+        db: AsyncSession,
+        *,
+        teacher_id: UUID,
+        curriculum_subject_id: UUID,
+        term_id: UUID,
+    ) -> None:
+        teachers = await cls._eligible_lead_teachers_for_scope(
+            db,
+            curriculum_subject_id=curriculum_subject_id,
+            term_id=term_id,
+        )
+        if teacher_id not in {teacher.id for teacher in teachers}:
+            raise AcademicAuthorizationError(
+                "Selected lead teacher is not currently assigned to this "
+                "curriculum subject in an academically eligible class for the term"
+            )
+
+    @classmethod
+    async def list_eligible_lead_teachers(
+        cls,
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        curriculum_subject_id: UUID,
+        term_id: UUID,
+    ) -> list:
+        cls._require_admin(actor)
+        return await cls._eligible_lead_teachers_for_scope(
+            db,
+            curriculum_subject_id=curriculum_subject_id,
+            term_id=term_id,
+        )
+
+    @classmethod
+    async def _resolve_initial_lead_teacher_id(
+        cls,
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        payload: ExamCreate,
+    ) -> UUID | None:
+        requested = payload.lead_teacher_id
+        if actor.role == "admin":
+            if requested is not None:
+                await cls._validate_lead_teacher(
+                    db,
+                    teacher_id=requested,
+                    curriculum_subject_id=payload.curriculum_subject_id,
+                    term_id=payload.term_id,
+                )
+            return requested
+
+        if actor.role != "teacher":
+            raise ExamAuthorizationError(
+                "Only administrators and teachers can create examinations"
+            )
+
+        own_teacher_id = cls._actor_teacher_id(actor)
+        assert own_teacher_id is not None
+        if requested is not None and requested != own_teacher_id:
+            raise ExamAuthorizationError(
+                "Teacher-created examinations must use the creating teacher as lead author"
+            )
+        return own_teacher_id
+
+    @staticmethod
+    def _is_lead_or_admin(actor: LocalActor, exam: Exam) -> bool:
+        if not actor.is_active:
+            return False
+        if actor.role == "admin":
+            return True
+        if actor.role != "teacher":
+            return False
+
+        try:
+            teacher_id = UUID(actor.weave_membership_id) if actor.weave_membership_id else None
+        except (TypeError, ValueError):
+            return False
+
+        if exam.lead_teacher_id is not None:
+            return teacher_id == exam.lead_teacher_id
+
+        # Legacy/in-memory compatibility only. Migrated teacher-created rows are
+        # backfilled with lead_teacher_id. A new NULL lead means admin-led.
+        return actor.id == exam.created_by_actor_id
+
+    @staticmethod
+    def _require_lead_or_admin(actor: LocalActor, exam: Exam) -> None:
+        if not actor.is_active:
+            raise ExamAuthorizationError("Active local actor is required")
+        if ExamService._is_lead_or_admin(actor, exam):
+            return
+        raise ExamAuthorizationError(
+            "Only the lead author or a school administrator can perform "
+            "this shared-paper operation"
+        )
+
+    @classmethod
+    async def assign_lead_teacher(
+        cls,
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        exam_id: UUID,
+        lead_teacher_id: UUID | None,
+        expected_authoring_version: int,
+    ) -> Exam:
+        """Change draft leadership without rewriting creator provenance.
+
+        A NULL lead_teacher_id explicitly returns coordination to administration.
+        Lead changes are draft-only so submitted/sealed evidence never changes
+        ownership silently.
+        """
+
+        cls._require_admin(actor)
+        exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id, lock=True)
+        if exam is None:
+            raise ExamNotFound("Examination does not exist")
+        if exam.status != ExamStatus.DRAFT:
+            raise ExamStateError(
+                "Lead author can only be changed while the examination is in DRAFT state"
+            )
+        cls._require_expected_authoring_version(exam, expected_authoring_version)
+
+        if lead_teacher_id is not None:
+            await cls._validate_lead_teacher(
+                db,
+                teacher_id=lead_teacher_id,
+                curriculum_subject_id=exam.curriculum_subject_id,
+                term_id=exam.term_id,
+            )
+
+        if exam.lead_teacher_id == lead_teacher_id:
+            await db.commit()
+            return exam
+
+        exam.lead_teacher_id = lead_teacher_id
+        exam.lead_assigned_by_actor_id = actor.id
+        exam.lead_assigned_at = datetime.now(UTC)
+        cls._bump_authoring_version(exam)
+
+        try:
+            exam = await ExamRepository.save_exam(db, exam)
+            await db.commit()
+        except IntegrityError as exc:
+            await db.rollback()
+            raise ValueError(
+                "The examination lead could not be changed because the current "
+                "paper conflicts with existing examination data"
+            ) from exc
+        return exam
 
     @classmethod
     async def _before_create_exam_save(
@@ -89,7 +298,27 @@ class ExamService(
         actor: LocalActor,
         payload: ExamCreate,
     ) -> Exam:
-        return await super().create_exam(db, actor=actor, payload=payload)
+        lead_teacher_id = await cls._resolve_initial_lead_teacher_id(
+            db,
+            actor=actor,
+            payload=payload,
+        )
+        exam = await super().create_exam(db, actor=actor, payload=payload)
+
+        # Base authoring commits the new draft. Leadership is then attached to
+        # the returned row. The fields remain nullable at the schema level so a
+        # crash in this tiny post-create window degrades safely to admin-led
+        # rather than leaving an unusable examination.
+        exam.lead_teacher_id = lead_teacher_id
+        exam.lead_assigned_by_actor_id = actor.id
+        exam.lead_assigned_at = datetime.now(UTC)
+        try:
+            exam = await ExamRepository.save_exam(db, exam)
+            await db.commit()
+        except IntegrityError as exc:
+            await db.rollback()
+            raise ValueError("The examination lead could not be initialized") from exc
+        return exam
 
     @classmethod
     async def update_exam(
@@ -101,6 +330,72 @@ class ExamService(
         exam_id: UUID,
     ) -> Exam:
         return await super().update_exam(db, actor=actor, payload=payload, exam_id=exam_id)
+
+    @classmethod
+    async def remove_manual_question(
+        cls,
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        exam_id: UUID,
+        payload: ManualQuestionRemove,
+    ) -> Exam:
+        """Allow contributors to remove their own question; lead/admin may remove any."""
+
+        exam = await cls._require_manual_draft_exam(
+            db,
+            actor=actor,
+            exam_id=exam_id,
+            expected_authoring_version=payload.expected_authoring_version,
+        )
+        selection = await ExamRepository.get_question_selection(
+            db,
+            exam_id=exam.id,
+            question_id=payload.question_id,
+            lock=True,
+        )
+        if selection is None:
+            raise ValueError("Question is not selected for this examination")
+
+        if (
+            not cls._is_lead_or_admin(actor, exam)
+            and actor.id != selection.added_by_actor_id
+        ):
+            raise ExamAuthorizationError(
+                "A contributor may remove only questions they added; "
+                "the lead author or administrator may manage the full paper"
+            )
+
+        current_selections = await ExamRepository.list_question_selections(db, exam.id)
+        remaining = [
+            row for row in current_selections if row.question_id != payload.question_id
+        ]
+
+        try:
+            await ExamRepository.clear_question_selections(db, exam.id)
+            if remaining:
+                await ExamRepository.add_question_selections(
+                    db,
+                    [
+                        ExamQuestionSelection(
+                            exam_id=exam.id,
+                            question_id=row.question_id,
+                            added_by_actor_id=row.added_by_actor_id,
+                            position=position,
+                        )
+                        for position, row in enumerate(remaining, start=1)
+                    ],
+                )
+            cls._bump_authoring_version(exam)
+            await ExamRepository.save_exam(db, exam)
+            await db.commit()
+        except IntegrityError as exc:
+            await db.rollback()
+            raise ValueError(
+                "The manual question selection could not be updated because "
+                "it conflicts with existing examination data"
+            ) from exc
+        return exam
 
     @classmethod
     async def seal_exam(
@@ -259,6 +554,9 @@ class ExamService(
             revision_number=latest.revision_number + 1,
             revision_of_exam_id=latest.id,
             created_by_actor_id=actor.id,
+            lead_teacher_id=latest.lead_teacher_id,
+            lead_assigned_by_actor_id=actor.id,
+            lead_assigned_at=datetime.now(UTC),
             component_maximum_score=None,
         )
 
@@ -306,7 +604,17 @@ class ExamService(
             raise ExamNotFound("Examination does not exist")
         latest = await cls._latest_revision_in_lineage(db, exam)
         if latest.status != ExamStatus.CLOSED:
-            return await super().create_revision(db, actor=actor, exam_id=exam_id)
+            revision = await super().create_revision(db, actor=actor, exam_id=exam_id)
+            revision.lead_teacher_id = latest.lead_teacher_id
+            revision.lead_assigned_by_actor_id = actor.id
+            revision.lead_assigned_at = datetime.now(UTC)
+            try:
+                revision = await ExamRepository.save_exam(db, revision)
+                await db.commit()
+            except IntegrityError as exc:
+                await db.rollback()
+                raise ValueError("The examination revision lead could not be preserved") from exc
+            return revision
 
         if not await ExamExecutionService.results_are_voided(db, exam_id=latest.id):
             raise ExamStateError(
