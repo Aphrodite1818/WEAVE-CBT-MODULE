@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { TeacherExamsPage } from '../src/features/teacher/TeacherExamsPage'
 
@@ -95,9 +95,12 @@ describe('Teacher exams', () => {
     )
 
     expect(screen.getByRole('heading', { name: /examinations/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Mathematics CA 1' })).toBeInTheDocument()
-    expect(screen.getByText(/30 questions/)).toHaveTextContent('45 min')
-    expect(screen.getByText('Draft')).toBeInTheDocument()
+    const examHeading = screen.getByRole('heading', { name: 'Mathematics CA 1' })
+    expect(examHeading).toBeInTheDocument()
+    const examCard = examHeading.closest('article')
+    expect(examCard).not.toBeNull()
+    expect(within(examCard).getByText('Draft')).toBeInTheDocument()
+    expect(within(examCard).getByText(/30 questions/)).toHaveTextContent('45 min')
 
     fireEvent.click(screen.getByRole('button', { name: /^create exam$/i }))
     expect(dispatch).toHaveBeenCalledWith({
