@@ -12,7 +12,7 @@ export function QuestionBanksPage({ dispatch, teacherData }) {
   const banks = useMemo(() => {
     const needle = query.trim().toLowerCase()
     if (!needle) return teacherData.banks
-    return teacherData.banks.filter((bank) => `${bank.name} ${bank.description || ''}`.toLowerCase().includes(needle))
+    return teacherData.banks.filter((bank) => `${bank.name} ${bank.description || ''} ${bank.academicLevelName || ''} ${bank.subjectName || ''} ${bank.subjectCode || ''}`.toLowerCase().includes(needle))
   }, [query, teacherData.banks])
 
   useEffect(() => {
@@ -45,7 +45,7 @@ export function QuestionBanksPage({ dispatch, teacherData }) {
         </div>
         <label className="teacher-search-control">
           <RiSearchLine size={17} aria-hidden="true" />
-          <input aria-label="Search question banks" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search banks..." />
+          <input aria-label="Search question banks" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search banks, levels or subjects..." />
         </label>
       </div>
 
@@ -64,6 +64,11 @@ export function QuestionBanksPage({ dispatch, teacherData }) {
           <article key={bank.id} className="teacher-bank-card">
             <span className="teacher-bank-card__icon"><Icon name="bank" size={22} /></span>
             <div className="teacher-bank-card__body">
+              {(bank.academicLevelName || bank.subjectName) && (
+                <div className="admin-bank-card__subject">
+                  {bank.academicLevelName ? `${bank.academicLevelName} · ` : ''}{bank.subjectName || 'Subject'}{bank.subjectCode ? ` · ${bank.subjectCode}` : ''}
+                </div>
+              )}
               <h2>{bank.name}</h2>
               <p>{bank.description || 'Question bank available for your current teaching assignment.'}</p>
               <div className="teacher-bank-card__meta">
@@ -83,7 +88,7 @@ export function QuestionBanksPage({ dispatch, teacherData }) {
       </section>
 
       {!teacherData.loading && teacherData.banks.length > 0 && banks.length === 0 && (
-        <div className="teacher-reference-empty teacher-reference-empty--compact"><div><strong>No matching banks</strong><p>Try another bank name or clear the search.</p></div></div>
+        <div className="teacher-reference-empty teacher-reference-empty--compact"><div><strong>No matching banks</strong><p>Try another bank, level, or subject name or clear the search.</p></div></div>
       )}
 
       <aside ref={helpRef} className="teacher-bank-help">
@@ -141,6 +146,8 @@ export function BankDetailPage({ state, dispatch, teacherData }) {
     })
   }
 
+  const bankContext = [bank.academicLevelName, bank.subjectName].filter(Boolean).join(' · ')
+
   return (
     <div className="teacher-reference-page teacher-bank-detail">
       <div className="teacher-bank-detail__heading">
@@ -148,7 +155,7 @@ export function BankDetailPage({ state, dispatch, teacherData }) {
           <span className="teacher-page-title-icon"><Icon name="bank" size={27} /></span>
           <PageTitle
             title={bank.name}
-            subtitle={`${questions.length} ${questions.length === 1 ? 'question' : 'questions'} in this bank`}
+            subtitle={`${bankContext ? `${bankContext} · ` : ''}${questions.length} ${questions.length === 1 ? 'question' : 'questions'} in this bank`}
           />
         </div>
         <button className="teacher-bank-detail__back" onClick={() => dispatch({ type: 'staff', patch: { section: 'question-banks' } })}>
