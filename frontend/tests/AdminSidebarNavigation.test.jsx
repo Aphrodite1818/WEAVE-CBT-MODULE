@@ -42,6 +42,7 @@ describe('Admin grouped sidebar navigation', () => {
       />,
     )
 
+    expect(screen.getByRole('navigation', { name: /administrator navigation/i })).toBeInTheDocument()
     const questionsGroup = screen.getByRole('button', { name: /^Questions$/i })
     const examinationsGroup = screen.getByRole('button', { name: /^Examinations$/i })
 
