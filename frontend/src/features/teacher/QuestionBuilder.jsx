@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { RiAddLine, RiArrowLeftLine, RiBold, RiDeleteBin6Line, RiEyeLine, RiImageAddLine, RiImageLine, RiItalic, RiLink, RiListOrdered, RiListUnordered, RiSave3Line, RiSuperscript2, RiUnderline } from '@remixicon/react'
+import { buildAcademicLevels, findSubjectScope, humanizeAcademicCategory, listBanksForSubject, listSubjectsForLevel } from '../../shared/academics/authoringScope'
 import { Notice, SelectControl, StatusBadge } from '../../shared/ui'
 import { FormattedText } from '../../shared/ui/FormattedText'
 import '../student/student.css'
@@ -32,7 +33,11 @@ export function QuestionBuilder({ mode = 'create', state, dispatch, teacherData,
   const promptRef = useRef(null)
   const instructionRef = useRef(null)
   const instructionTriggerRef = useRef(null)
-  const [bankId, setBankId] = useState(state.staff.selectedBankId || teacherData.banks[0]?.id || '')
+  const initialBank = teacherData.banks.find((bank) => bank.id === state.staff.selectedBankId) || teacherData.banks[0] || null
+  const initialSubject = findSubjectScope(teacherData.subjects, initialBank?.curriculumSubjectId) || teacherData.subjects[0] || null
+  const [levelId, setLevelId] = useState(initialSubject?.academicLevelId || initialBank?.academicLevelId || '')
+  const [subjectId, setSubjectId] = useState(initialBank?.curriculumSubjectId || initialSubject?.id || '')
+  const [bankId, setBankId] = useState(initialBank?.id || '')
   const [questionType, setQuestionType] = useState('single_choice')
   const [prompt, setPrompt] = useState('')
   const [instruction, setInstruction] = useState('')
@@ -78,6 +83,10 @@ export function QuestionBuilder({ mode = 'create', state, dispatch, teacherData,
       .then((question) => {
         if (cancelled) return
         initializedQuestionRef.current = questionId
+        const nextBank = teacherData.banks.find((bank) => bank.id === question.bank_id)
+        const nextSubject = findSubjectScope(teacherData.subjects, nextBank?.curriculumSubjectId)
+        setLevelId(nextSubject?.academicLevelId || nextBank?.academicLevelId || '')
+        setSubjectId(nextBank?.curriculumSubjectId || nextSubject?.id || '')
         setBankId(question.bank_id)
         setQuestionType(question.question_type)
         setPrompt(question.prompt || '')
@@ -94,11 +103,31 @@ export function QuestionBuilder({ mode = 'create', state, dispatch, teacherData,
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [editing, gateway, questionId])
+  }, [editing, gateway, questionId, teacherData.banks, teacherData.subjects])
 
-  const resolvedBankId = bankId || teacherData.banks[0]?.id || ''
-  const selectedBank = teacherData.banks.find((bank) => bank.id === resolvedBankId)
-  const bankOptions = teacherData.banks.map((bank) => ({
+  const levels = useMemo(() => buildAcademicLevels(teacherData.subjects), [teacherData.subjects])
+  const subjectsForLevel = useMemo(
+    () => listSubjectsForLevel(teacherData.subjects, levelId),
+    [levelId, teacherData.subjects],
+  )
+  const subjectBanks = useMemo(
+    () => listBanksForSubject(teacherData.banks, subjectId),
+    [subjectId, teacherData.banks],
+  )
+  const resolvedBankId = bankId || subjectBanks[0]?.id || ''
+  const selectedSubject = findSubjectScope(teacherData.subjects, subjectId)
+  const selectedBank = subjectBanks.find((bank) => bank.id === resolvedBankId)
+  const levelOptions = levels.map((level) => ({
+    value: level.id,
+    label: level.name,
+    description: humanizeAcademicCategory(level.category) || undefined,
+  }))
+  const subjectOptions = subjectsForLevel.map((subject) => ({
+    value: subject.id,
+    label: subject.name,
+    description: subject.code || undefined,
+  }))
+  const bankOptions = subjectBanks.map((bank) => ({
     value: bank.id,
     label: bank.name,
     description: `${bank.count || 0} questions`,
@@ -106,6 +135,21 @@ export function QuestionBuilder({ mode = 'create', state, dispatch, teacherData,
   const correctCount = options.filter((option) => option.isCorrect).length
   const validation = useMemo(() => validateDraft({ prompt, questionType, options }), [options, prompt, questionType])
   const hasQuestionImage = Boolean(questionImageFile || (questionImageAssetId && !removeQuestionImage))
+
+  const changeLevel = (nextLevelId) => {
+    const firstSubject = listSubjectsForLevel(teacherData.subjects, nextLevelId)[0] || null
+    const firstBank = firstSubject ? listBanksForSubject(teacherData.banks, firstSubject.id)[0] || null : null
+    setLevelId(nextLevelId)
+    setSubjectId(firstSubject?.id || '')
+    setBankId(firstBank?.id || '')
+    setError('')
+  }
+
+  const changeSubject = (nextSubjectId) => {
+    setSubjectId(nextSubjectId)
+    setBankId(listBanksForSubject(teacherData.banks, nextSubjectId)[0]?.id || '')
+    setError('')
+  }
 
   const updateOption = (clientId, patch) => {
     setOptions((current) => current.map((option) => option.clientId === clientId ? { ...option, ...patch } : option))
@@ -186,7 +230,12 @@ export function QuestionBuilder({ mode = 'create', state, dispatch, teacherData,
   const save = async ({ createAnother = false } = {}) => {
     setError('')
     if (validation) return setError(validation)
-    if (!resolvedBankId) return setError('Choose a question bank before saving.')
+    if (!levelId || !selectedSubject || selectedSubject.academicLevelId !== levelId) {
+      return setError('Choose an academic level and a subject from that level before saving.')
+    }
+    if (!resolvedBankId || !selectedBank || selectedBank.curriculumSubjectId !== subjectId) {
+      return setError('Choose a question bank that belongs to the selected level and subject.')
+    }
 
     setSaving(true)
     try {
@@ -286,11 +335,20 @@ export function QuestionBuilder({ mode = 'create', state, dispatch, teacherData,
       {loading ? <div className="question-builder-loading">Loading question…</div> : (
         <div className="question-builder-grid">
           <section className="question-builder-card question-builder-content-card">
-            <div className="question-builder-card__heading"><div><span>01</span><h2>Question content</h2></div><p>Enter the question and any helpful details.</p></div>
+            <div className="question-builder-card__heading"><div><span>01</span><h2>Question content</h2></div><p>Choose the academic scope first, then enter the question and any helpful details.</p></div>
             <div className="question-builder-meta-fields">
               <div className="question-builder-field">
+                <span>Academic level</span>
+                <SelectControl label="Academic level" value={levelId} options={levelOptions} onChange={changeLevel} disabled={editing} placeholder="Choose level" />
+              </div>
+              <div className="question-builder-field">
+                <span>Subject</span>
+                <SelectControl label="Subject" value={subjectId} options={subjectOptions} onChange={changeSubject} disabled={editing || !levelId || !subjectOptions.length} placeholder={levelId ? 'Choose subject' : 'Choose a level first'} />
+              </div>
+              <div className="question-builder-field">
                 <span>Question bank</span>
-                <SelectControl label="Question bank" value={resolvedBankId} options={bankOptions} onChange={setBankId} disabled={editing} placeholder="Choose a bank" />
+                <SelectControl label="Question bank" value={resolvedBankId} options={bankOptions} onChange={(value) => { setBankId(value); setError('') }} disabled={editing || !subjectId || !bankOptions.length} placeholder={subjectId ? 'Choose a bank' : 'Choose a subject first'} />
+                {!editing && subjectId && <small>Only banks for this level and subject are shown.</small>}
               </div>
               <div className="question-builder-field question-instruction-field">
                 <span>Instruction <small>(optional)</small></span>
@@ -324,7 +382,7 @@ export function QuestionBuilder({ mode = 'create', state, dispatch, teacherData,
                   <button type="button" disabled={editing} className={questionType === 'multiple_choice' ? 'active' : ''} onClick={() => setQuestionType('multiple_choice')}>Multiple choice</button>
                 </div>
               </div>
-              {editing && <p className="question-type-note">Question type is fixed after creation.</p>}
+              {editing && <p className="question-type-note">Question type and academic scope are fixed after creation.</p>}
               <div className="question-option-stack">
                 {options.map((option, index) => {
                   const hasImage = option.imageFile || (option.imageAssetId && !option.removeExistingImage)
