@@ -1,0 +1,558 @@
+.teacher-main:has(.admin-rosters-page),
+.teacher-main:has(.admin-roster-detail) {
+  background: #f8fafc;
+}
+
+.admin-rosters-page,
+.admin-roster-detail {
+  --color-surface: 255 255 255;
+  --color-surface-muted: 248 250 252;
+  gap: 18px;
+  min-width: 0;
+}
+
+.admin-rosters-page h1,
+.admin-roster-detail h1 {
+  font-size: 30px;
+  line-height: 1.2;
+}
+
+.admin-rosters-heading p,
+.admin-roster-detail__heading p {
+  margin: 6px 0 0;
+  color: rgb(var(--color-text-muted));
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.admin-roster-filters,
+.admin-roster-detail__filters {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.7fr) minmax(170px, .8fr) minmax(180px, .9fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.admin-roster-filters .teacher-search-control,
+.admin-roster-filters .weave-select__trigger,
+.admin-roster-detail__filters .teacher-search-control,
+.admin-roster-detail__filters .weave-select__trigger {
+  min-height: 42px;
+  height: 42px;
+  font-size: 14px;
+}
+
+.admin-roster-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  min-width: 0;
+}
+
+.admin-roster-card {
+  min-width: 0;
+  min-height: 270px;
+  overflow: hidden;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 11px;
+  background: rgb(var(--color-surface));
+  box-shadow: 0 2px 6px rgb(15 23 42 / .025);
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.admin-roster-card:hover {
+  border-color: rgb(var(--color-primary) / .35);
+  box-shadow: 0 5px 16px rgb(15 23 42 / .065);
+  transform: translateY(-1px);
+}
+
+.admin-roster-card__open {
+  width: 100%;
+  min-height: 268px;
+  display: flex;
+  flex-direction: column;
+  border: 0;
+  background: transparent;
+  color: rgb(var(--color-text));
+  padding: 16px 16px 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-roster-card__open:focus-visible {
+  outline: 3px solid rgb(var(--color-primary));
+  outline-offset: -3px;
+  border-radius: 10px;
+}
+
+.admin-roster-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-roster-ledger {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid rgb(var(--color-primary) / .14);
+  border-radius: 12px;
+  background: rgb(var(--color-primary-soft));
+  color: rgb(var(--color-primary));
+}
+
+.admin-roster-card__scope {
+  margin-top: 15px;
+  color: rgb(var(--color-primary));
+  font-size: 10.5px;
+  font-weight: 780;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-roster-card h2 {
+  margin: 6px 0 4px;
+  color: rgb(var(--color-text));
+  font-size: 16px;
+  font-weight: 720;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-roster-card p {
+  margin: 0;
+  color: rgb(var(--color-text-muted));
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.admin-roster-card__status-copy {
+  margin-top: 12px;
+  color: rgb(var(--color-text-muted));
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.admin-roster-card__meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 13px;
+}
+
+.admin-roster-card__meta > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 8px;
+  background: rgb(var(--color-surface-muted));
+  padding: 8px 9px;
+}
+
+.admin-roster-card__meta span {
+  color: rgb(var(--color-text-muted));
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.admin-roster-card__meta strong {
+  color: rgb(var(--color-text));
+  font-size: 13px;
+  font-weight: 720;
+}
+
+.admin-roster-card__footer {
+  min-height: 43px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+  border-top: 1px solid rgb(var(--color-border));
+}
+
+.admin-roster-card__footer > span {
+  min-width: 0;
+  color: rgb(var(--color-text-muted));
+  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-roster-card__footer strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  color: rgb(var(--color-text));
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.admin-roster-card:hover .admin-roster-card__footer strong {
+  color: rgb(var(--color-primary));
+}
+
+.admin-roster-state,
+.admin-candidate-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.admin-roster-state::before,
+.admin-candidate-state::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.admin-roster-state--ready,
+.admin-candidate-state--eligible {
+  color: #11713e;
+  background: #e0f6e9;
+}
+
+.admin-roster-state--pending,
+.admin-roster-state--building {
+  color: #0865b1;
+  background: #e0f1ff;
+}
+
+.admin-roster-state--stale {
+  color: #955807;
+  background: #fff0d5;
+}
+
+.admin-roster-state--failed,
+.admin-candidate-state--withdrawn {
+  color: #b42323;
+  background: #fee5e5;
+}
+
+.admin-candidate-state--blocked {
+  color: #7142aa;
+  background: #f0e8fa;
+}
+
+.admin-roster-state--not_prepared {
+  color: #475569;
+  background: #edf0f4;
+}
+
+.admin-roster-empty,
+.admin-roster-pagination {
+  grid-column: 1 / -1;
+}
+
+.admin-roster-empty {
+  min-height: 210px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: 1px dashed rgb(var(--color-border));
+  border-radius: 10px;
+  background: rgb(var(--color-surface));
+  color: rgb(var(--color-text-muted));
+  padding: 28px;
+  text-align: center;
+}
+
+.admin-roster-empty > span {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgb(var(--color-primary-soft));
+  color: rgb(var(--color-primary));
+}
+
+.admin-roster-empty > div {
+  display: grid;
+  gap: 5px;
+}
+
+.admin-roster-empty strong {
+  color: rgb(var(--color-text));
+  font-size: 14px;
+}
+
+.admin-roster-empty p {
+  max-width: 430px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.admin-roster-pagination,
+.admin-roster-table-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: rgb(var(--color-text-muted));
+  font-size: 12.5px;
+}
+
+.admin-roster-pagination > div,
+.admin-roster-table-footer > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-roster-pagination button,
+.admin-roster-table-footer button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 8px;
+  background: rgb(var(--color-surface));
+  color: rgb(var(--color-text));
+  font: inherit;
+  cursor: pointer;
+}
+
+.admin-roster-pagination button:hover:not(:disabled),
+.admin-roster-table-footer button:hover:not(:disabled) {
+  border-color: rgb(var(--color-primary) / .3);
+  color: rgb(var(--color-primary));
+  background: rgb(var(--color-primary-soft));
+}
+
+.admin-roster-pagination button:disabled,
+.admin-roster-table-footer button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.admin-roster-back {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  color: rgb(var(--color-text-muted));
+  padding: 0;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 620;
+  cursor: pointer;
+}
+
+.admin-roster-back:hover {
+  color: rgb(var(--color-primary));
+}
+
+.admin-roster-detail__heading {
+  align-items: center;
+}
+
+.admin-roster-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-roster-summary__item {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 10px;
+  background: rgb(var(--color-surface));
+  padding: 14px 15px;
+}
+
+.admin-roster-summary__item > span {
+  color: rgb(var(--color-text-muted));
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .025em;
+  text-transform: uppercase;
+}
+
+.admin-roster-summary__item strong {
+  color: rgb(var(--color-text));
+  font-size: 18px;
+  font-weight: 740;
+  letter-spacing: -.01em;
+}
+
+.admin-roster-summary__item small {
+  color: rgb(var(--color-text-muted));
+  font-size: 11px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-roster-table-shell {
+  overflow: hidden;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 11px;
+  background: rgb(var(--color-surface));
+  box-shadow: 0 2px 6px rgb(15 23 42 / .025);
+}
+
+.admin-roster-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.admin-roster-table thead {
+  background: rgb(var(--color-surface-muted));
+}
+
+.admin-roster-table th {
+  color: rgb(var(--color-text-muted));
+  padding: 11px 14px;
+  border-bottom: 1px solid rgb(var(--color-border));
+  font-size: 10.5px;
+  font-weight: 760;
+  letter-spacing: .025em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.admin-roster-table th:nth-child(1) { width: 27%; }
+.admin-roster-table th:nth-child(2) { width: 18%; }
+.admin-roster-table th:nth-child(3) { width: 16%; }
+.admin-roster-table th:nth-child(4) { width: 15%; }
+.admin-roster-table th:nth-child(5) { width: 24%; }
+
+.admin-roster-table td {
+  height: 58px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgb(var(--color-border));
+  color: rgb(var(--color-text));
+  font-size: 12.5px;
+  vertical-align: middle;
+}
+
+.admin-roster-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.admin-roster-table tbody tr:hover {
+  background: rgb(var(--color-surface-muted) / .7);
+}
+
+.admin-roster-candidate {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-roster-candidate > span {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background: rgb(var(--color-primary-soft));
+  color: rgb(var(--color-primary));
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
+.admin-roster-candidate strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 680;
+}
+
+.admin-roster-admission {
+  font-variant-numeric: tabular-nums;
+  font-weight: 620;
+}
+
+.admin-roster-reason {
+  color: rgb(var(--color-text-muted)) !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-roster-table-state {
+  min-height: 150px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 5px;
+  color: rgb(var(--color-text-muted));
+  text-align: center;
+}
+
+.admin-roster-table-state strong {
+  color: rgb(var(--color-text));
+  font-size: 13px;
+}
+
+.admin-roster-table-state span {
+  font-size: 11.5px;
+}
+
+.admin-roster-table-footer {
+  min-height: 52px;
+  border-top: 1px solid rgb(var(--color-border));
+  padding: 8px 14px;
+}
+
+@media (max-width: 1280px) {
+  .admin-roster-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1040px) {
+  .admin-roster-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-roster-filters,
+  .admin-roster-detail__filters { grid-template-columns: minmax(220px, 1fr) minmax(160px, .65fr); }
+  .admin-roster-filters > :first-child,
+  .admin-roster-detail__filters > :first-child { grid-column: 1 / -1; }
+}
+
+@media (max-width: 760px) {
+  .admin-roster-grid,
+  .admin-roster-summary,
+  .admin-roster-filters,
+  .admin-roster-detail__filters { grid-template-columns: 1fr; }
+  .admin-roster-filters > :first-child,
+  .admin-roster-detail__filters > :first-child { grid-column: auto; }
+  .admin-roster-table-shell { overflow-x: auto; }
+  .admin-roster-table { min-width: 820px; }
+  .admin-roster-pagination,
+  .admin-roster-table-footer { align-items: flex-start; flex-direction: column; }
+}
