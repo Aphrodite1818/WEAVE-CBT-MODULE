@@ -1,11 +1,34 @@
 import { weaveRequest, queryString } from './client'
 
+export function listResultReviewSets(options = {}) {
+  return weaveRequest('/results/review-sets', options)
+}
+
 export function listExamResults(examId, params = {}, options = {}) {
   return weaveRequest(`/exams/${examId}/results${queryString(params)}`, options)
 }
 
 export function getResult(resultId, options = {}) {
   return weaveRequest(`/results/${resultId}`, options)
+}
+
+export function getExamResultControl(examId, options = {}) {
+  return weaveRequest(`/exams/${examId}/execution-control`, options)
+}
+
+export function approveExamResults(examId, options = {}) {
+  return weaveRequest(`/exams/${examId}/results/approve`, {
+    ...options,
+    method: 'POST',
+  })
+}
+
+export function voidExamResults(examId, reason, options = {}) {
+  return weaveRequest(`/exams/${examId}/results/void`, {
+    ...options,
+    method: 'POST',
+    body: { reason },
+  })
 }
 
 export function retryExamResultSync(examId, options = {}) {
