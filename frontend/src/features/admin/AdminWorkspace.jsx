@@ -25,21 +25,47 @@ const operationViews = new Set(['operations', 'operation-detail'])
 const resultViews = new Set(['results', 'result-detail'])
 const placeholderViews = new Set(['invigilators', 'reports'])
 
+const questionGroupViews = new Set([...bankViews])
+const examinationGroupViews = new Set([
+  ...examViews,
+  ...rosterViews,
+  ...operationViews,
+  ...resultViews,
+  'invigilators',
+])
+
 const adminNav = [
-  ['dashboard', 'home', 'Dashboard'],
-  ['question-banks', 'bank', 'Question Banks'],
-  ['questions', 'fileText', 'Questions'],
-  ['exams', 'calendar', 'Exams'],
-  ['roster', 'roster', 'Roster'],
-  ['operations', 'operations', 'Exam Operations'],
-  ['invigilators', 'shield', 'Invigilators'],
-  ['results', 'results', 'Results'],
-  ['reports', 'reports', 'Reports'],
+  { type: 'link', section: 'dashboard', icon: 'home', label: 'Dashboard' },
+  {
+    type: 'group',
+    id: 'questions',
+    icon: 'questions',
+    label: 'Questions',
+    items: [
+      ['question-banks', 'bank', 'Question Banks'],
+      ['questions', 'fileText', 'Question Library'],
+    ],
+  },
+  {
+    type: 'group',
+    id: 'examinations',
+    icon: 'exam',
+    label: 'Examinations',
+    items: [
+      ['exams', 'calendar', 'Exams'],
+      ['roster', 'roster', 'Roster'],
+      ['operations', 'operations', 'Exam Operations'],
+      ['invigilators', 'shield', 'Invigilators'],
+      ['results', 'results', 'Results'],
+    ],
+  },
+  { type: 'link', section: 'reports', icon: 'reports', label: 'Reports' },
 ]
 
 export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [workspaceView, setWorkspaceView] = useState(() => topLevelView(state.staff.section))
+  const [openGroup, setOpenGroup] = useState(() => groupForView(topLevelView(state.staff.section)))
   const adminData = useAdminData(gateway)
   const activeAuthoringData = useMemo(() => ({
     ...adminData,
@@ -71,6 +97,12 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
     if (state.staff.section === 'operations' && !operationViews.has(workspaceView)) setWorkspaceView('operations')
     if (state.staff.section === 'results' && !resultViews.has(workspaceView)) setWorkspaceView('results')
   }, [state.staff.section, workspaceView])
+
+  useEffect(() => {
+    const activeGroup = groupForView(workspaceView)
+    if (activeGroup) setOpenGroup(activeGroup)
+    else setOpenGroup(null)
+  }, [workspaceView])
 
   const navigate = useCallback((view, patch = {}) => {
     const parentSection = bankViews.has(view)
@@ -110,6 +142,21 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
     return workspaceView === section
   }
 
+  const groupActive = (groupId) => {
+    if (groupId === 'questions') return questionGroupViews.has(workspaceView)
+    if (groupId === 'examinations') return examinationGroupViews.has(workspaceView)
+    return false
+  }
+
+  const toggleGroup = (groupId) => {
+    if (!sidebarOpen) {
+      setSidebarOpen(true)
+      setOpenGroup(groupId)
+      return
+    }
+    setOpenGroup((current) => current === groupId ? null : groupId)
+  }
+
   return (
     <main className={`teacher-shell admin-shell${sidebarOpen ? '' : ' teacher-shell--collapsed admin-shell--collapsed'}`}>
       <aside className="teacher-sidebar admin-sidebar">
@@ -122,12 +169,58 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
             <Icon name={sidebarOpen ? 'back' : 'menu'} size={18} />
           </button>
         </div>
-        <nav aria-label="Administrator navigation">
-          {adminNav.map(([section, icon, label]) => (
-            <button key={section} type="button" className={navActive(section) ? 'active' : ''} onClick={() => navigate(section)} title={sidebarOpen ? undefined : label}>
-              <Icon name={icon} size={17} /><span>{label}</span>
-            </button>
-          ))}
+        <nav className="admin-sidebar-nav" aria-label="Administrator navigation">
+          {adminNav.map((item) => {
+            if (item.type === 'link') {
+              return (
+                <button
+                  key={item.section}
+                  type="button"
+                  className={`admin-nav-link${navActive(item.section) ? ' active' : ''}`}
+                  onClick={() => navigate(item.section)}
+                  title={sidebarOpen ? undefined : item.label}
+                  aria-current={navActive(item.section) ? 'page' : undefined}
+                >
+                  <Icon name={item.icon} size={17} /><span>{item.label}</span>
+                </button>
+              )
+            }
+
+            const expanded = openGroup === item.id
+            const active = groupActive(item.id)
+            const groupId = `admin-nav-group-${item.id}`
+            return (
+              <div key={item.id} className={`admin-nav-group${expanded ? ' is-open' : ''}${active ? ' is-active' : ''}`}>
+                <button
+                  type="button"
+                  className={`admin-nav-group__trigger${active ? ' active' : ''}`}
+                  onClick={() => toggleGroup(item.id)}
+                  aria-expanded={expanded}
+                  aria-controls={groupId}
+                  title={sidebarOpen ? undefined : item.label}
+                >
+                  <Icon name={item.icon} size={17} />
+                  <span className="admin-nav-group__label">{item.label}</span>
+                  <Icon name="chevronDown" size={15} />
+                </button>
+                <div id={groupId} className="admin-nav-group__children" hidden={!expanded}>
+                  {item.items.map(([section, icon, label]) => (
+                    <button
+                      key={section}
+                      type="button"
+                      className={`admin-nav-child${navActive(section) ? ' active' : ''}`}
+                      onClick={() => navigate(section)}
+                      aria-current={navActive(section) ? 'page' : undefined}
+                    >
+                      <span className="admin-nav-child__rail" aria-hidden="true" />
+                      <Icon name={icon} size={16} />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
         </nav>
       </aside>
 
@@ -173,6 +266,12 @@ function AdminPlaceholderPage({ section }) {
       <div className="teacher-reference-empty teacher-reference-empty--large"><div><strong>{title} placeholder</strong><p>No fake data or controls are shown until the required backend workflow is implemented.</p></div></div>
     </div>
   )
+}
+
+function groupForView(view) {
+  if (questionGroupViews.has(view)) return 'questions'
+  if (examinationGroupViews.has(view)) return 'examinations'
+  return null
 }
 
 function topLevelView(section) {
