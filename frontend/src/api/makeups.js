@@ -8,6 +8,7 @@ export function approveMakeup(candidateId, reason) {
   return weaveRequest(`/candidates/${candidateId}/makeup-authorizations`, {
     method: 'POST',
     body: { reason },
+    successMessage: 'Make-up examination authorization granted.',
   })
 }
 
@@ -19,5 +20,6 @@ export function revokeMakeup(authorizationId, reason) {
   return weaveRequest(`/makeup-authorizations/${authorizationId}/revoke`, {
     method: 'POST',
     body: { reason },
+    successMessage: 'Make-up examination authorization revoked.',
   })
 }
