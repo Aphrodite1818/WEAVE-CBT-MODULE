@@ -17,6 +17,7 @@ import '../teacher/teacher-dashboard.css'
 import '../teacher/teacher-selects.css'
 import '../teacher/teacher-exams.css'
 import './admin.css'
+import './admin-sidebar.css'
 
 const bankViews = new Set(['question-banks', 'create-bank', 'bank-detail', 'questions', 'create-question', 'edit-question', 'preview-question'])
 const examViews = new Set(['exams', 'create-exam'])
