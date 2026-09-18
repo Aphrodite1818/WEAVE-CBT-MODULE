@@ -149,6 +149,7 @@ function AdminQuickActions({ banks, onNavigate }) {
           <button type="button" role="menuitem" onClick={() => go('create-bank')}><Icon name="bank" size={19} /><span><strong>Create Question Bank</strong><small>Add a bank for a curriculum subject</small></span></button>
           <button type="button" role="menuitem" disabled={!firstActiveBank} onClick={() => go('create-question', { selectedBankId: firstActiveBank?.id })}><RiAddLine size={19} /><span><strong>Create Question</strong><small>Add a question to any active bank</small></span></button>
           <button type="button" role="menuitem" onClick={() => go('create-exam')}><RiFileAddLine size={19} /><span><strong>Create Exam</strong><small>Start a new draft examination</small></span></button>
+          <button type="button" role="menuitem" onClick={() => go('operations')}><Icon name="operations" size={19} /><span><strong>Exam Operations</strong><small>Open the day-of examination command centre</small></span></button>
         </div>
       )}
     </div>
