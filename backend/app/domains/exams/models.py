@@ -249,12 +249,34 @@ class Exam(Base):
         index=True,
     )
 
-    # The creator is the coordinating/lead author for this revision. It is
-    # provenance plus coordination authority, not the academic audience.
+    # Immutable provenance: who originally created this revision. Authoring
+    # leadership is stored separately so an administrator-created paper can be
+    # coordinated by an eligible teacher without rewriting its provenance.
     created_by_actor_id: Mapped[UUID] = mapped_column(
         ForeignKey("local_actors.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
+    )
+
+    # NULL means the paper is administrator-led. A teacher ID means that
+    # synchronized academic teacher is the current coordinating lead. Using the
+    # academic projection ID (rather than a LocalActor ID) allows an admin to
+    # assign a teacher before that teacher has logged into this CBT server.
+    lead_teacher_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("academic_teachers.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+
+    lead_assigned_by_actor_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("local_actors.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+
+    lead_assigned_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )
 
     submitted_by_actor_id: Mapped[UUID | None] = mapped_column(
@@ -382,6 +404,10 @@ class Exam(Base):
         CheckConstraint(
             "component_maximum_score IS NULL OR component_maximum_score > 0",
             name="ck_exams_component_maximum_positive",
+        ),
+        CheckConstraint(
+            "lead_assigned_at IS NULL OR lead_assigned_by_actor_id IS NOT NULL",
+            name="ck_exams_lead_assignment_actor_required",
         ),
         CheckConstraint(
             "submitted_at IS NULL OR submitted_by_actor_id IS NOT NULL",
