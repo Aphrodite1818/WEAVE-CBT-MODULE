@@ -86,8 +86,8 @@ describe('Teacher questions', () => {
     const image = new File(['image-bytes'], 'diagram.png', { type: 'image/png' })
     fireEvent.change(screen.getByLabelText(/choose image/i), { target: { files: [image] } })
     fireEvent.change(screen.getByLabelText(/question prompt/i), { target: { value: 'What does the diagram show?' } })
-    fireEvent.change(screen.getByLabelText(/option a/i), { target: { value: 'A cell' } })
-    fireEvent.change(screen.getByLabelText(/option b/i), { target: { value: 'A planet' } })
+    fireEvent.change(screen.getByLabelText(/^option a$/i), { target: { value: 'A cell' } })
+    fireEvent.change(screen.getByLabelText(/^option b$/i), { target: { value: 'A planet' } })
     fireEvent.click(screen.getByRole('button', { name: /save question/i }))
 
     await waitFor(() => expect(uploadQuestionImage).toHaveBeenCalledWith(image))
