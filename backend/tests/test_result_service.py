@@ -10,7 +10,9 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
+from app.core.exceptions import AcademicAuthorizationError  # noqa: E402
 from app.domains.attempts.models import AttemptStatus  # noqa: E402
+from app.domains.results.models import ResultSyncStatus  # noqa: E402
 from app.domains.results.service import ResultService  # noqa: E402
 
 
@@ -92,6 +94,77 @@ class ResultScoringTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.percentage, Decimal("50.00"))
         self.assertEqual(result.component_score, Decimal("5.00"))
         self.assertEqual(result.component_maximum_score, Decimal("10.00"))
+
+    async def test_result_review_rows_delegate_server_search_and_sync_filter(self):
+        exam_id = uuid4()
+        exam = SimpleNamespace(id=exam_id)
+        result = SimpleNamespace(id=uuid4())
+        candidate = SimpleNamespace(
+            id=uuid4(),
+            display_name="David Obi",
+            admission_number="JSS2/014",
+        )
+        actor = SimpleNamespace(is_active=True, role="admin", weave_membership_id=None)
+        db = AsyncMock()
+
+        with (
+            patch(
+                "app.domains.results.service.ExamRepository.get_exam_by_id",
+                AsyncMock(return_value=exam),
+            ),
+            patch(
+                "app.domains.results.service.ResultQueryRepository.list_exam_result_rows",
+                AsyncMock(return_value=[(result, candidate)]),
+            ) as list_rows,
+            patch(
+                "app.domains.results.service.ResultQueryRepository.count_exam_result_rows",
+                AsyncMock(return_value=1),
+            ) as count_rows,
+        ):
+            rows, total = await ResultService.list_exam_result_review_rows(
+                db,
+                actor=actor,
+                exam_id=exam_id,
+                search="JSS2/014",
+                sync_status=ResultSyncStatus.FAILED,
+                offset=50,
+                limit=50,
+            )
+
+        self.assertEqual(rows, [(result, candidate)])
+        self.assertEqual(total, 1)
+        list_rows.assert_awaited_once_with(
+            db,
+            exam_id=exam_id,
+            search="JSS2/014",
+            sync_status=ResultSyncStatus.FAILED,
+            offset=50,
+            limit=50,
+        )
+        count_rows.assert_awaited_once_with(
+            db,
+            exam_id=exam_id,
+            search="JSS2/014",
+            sync_status=ResultSyncStatus.FAILED,
+        )
+
+    async def test_review_set_feed_is_admin_only(self):
+        db = AsyncMock()
+        admin = SimpleNamespace(is_active=True, role="admin")
+        teacher = SimpleNamespace(is_active=True, role="teacher")
+        expected = [{"exam_id": uuid4(), "result_count": 12}]
+
+        with patch(
+            "app.domains.results.service.ResultQueryRepository.list_review_sets",
+            AsyncMock(return_value=expected),
+        ) as list_reviews:
+            rows = await ResultService.list_result_review_sets(db, actor=admin)
+
+        self.assertEqual(rows, expected)
+        list_reviews.assert_awaited_once_with(db)
+
+        with self.assertRaises(AcademicAuthorizationError):
+            await ResultService.list_result_review_sets(db, actor=teacher)
 
 
 if __name__ == "__main__":
