@@ -100,7 +100,10 @@ class QuestionValidationTests(unittest.TestCase):
             ],
             question_type=QuestionType.MULTIPLE_CHOICE,
         )
-        self.assertEqual(normalized, [("A", True), ("B", True), ("C", False)])
+        self.assertEqual(
+            normalized,
+            [("A", None, True), ("B", None, True), ("C", None, False)],
+        )
 
     def test_duplicate_option_text_is_case_insensitive(self) -> None:
         with self.assertRaisesRegex(ValueError, "must be unique"):
