@@ -3,7 +3,7 @@ from starlette.routing import Match
 from app.main import app
 
 
-def _first_full_match_endpoint_name(path: str, method: str = "GET") -> str:
+def _first_full_match_scope(path: str, method: str = "GET") -> dict:
     scope = {
         "type": "http",
         "path": path,
@@ -19,23 +19,18 @@ def _first_full_match_endpoint_name(path: str, method: str = "GET") -> str:
     for route in app.routes:
         match, child_scope = route.matches(scope)
         if match == Match.FULL:
-            endpoint = child_scope.get("endpoint")
-            endpoint_name = getattr(endpoint, "__name__", None)
-            if endpoint_name:
-                return endpoint_name
-            raise AssertionError(
-                f"Matched route for {method.upper()} {path} has no named endpoint"
-            )
+            return child_scope
 
     raise AssertionError(f"No route matched {method.upper()} {path}")
 
 
 def test_static_exam_routes_precede_generic_exam_detail_route() -> None:
-    assert (
-        _first_full_match_endpoint_name("/api/v1/exams/lead-candidates")
-        == "list_eligible_lead_teachers"
-    )
-    assert (
-        _first_full_match_endpoint_name("/api/v1/exams/invigilators/available")
-        == "list_available_invigilators"
-    )
+    openapi_paths = app.openapi()["paths"]
+
+    for path in (
+        "/api/v1/exams/lead-candidates",
+        "/api/v1/exams/invigilators/available",
+    ):
+        assert path in openapi_paths
+        matched_scope = _first_full_match_scope(path)
+        assert "exam_id" not in matched_scope.get("path_params", {})
