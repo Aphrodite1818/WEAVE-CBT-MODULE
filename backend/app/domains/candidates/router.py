@@ -78,6 +78,7 @@ async def list_exam_roster(
     actor: CurrentLocalActor,
     candidate_status: CandidateStatus | None = Query(default=None, alias="status"),
     class_id: UUID | None = Query(default=None),
+    search: str | None = Query(default=None, max_length=128),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=100),
 ) -> CandidateRosterResponse:
@@ -88,6 +89,7 @@ async def list_exam_roster(
             exam_id=exam_id,
             status=candidate_status,
             class_id=class_id,
+            search=search,
             offset=offset,
             limit=limit,
         )
