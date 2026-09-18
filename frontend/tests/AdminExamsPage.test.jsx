@@ -6,6 +6,7 @@ function makeExam(overrides = {}) {
   return {
     id: 'exam-1',
     title: 'English CA 1',
+    academicLevelName: 'JSS1',
     subjectName: 'English Language',
     assessmentName: 'CA 1',
     curriculumSubjectId: 'subject-1',
@@ -53,14 +54,14 @@ function makeGateway() {
   }
 }
 
-describe('Admin examination workspace', () => {
+describe('Admin examination preparation workspace', () => {
   it('exposes submitted-paper review actions and executes sealing through the real gateway', async () => {
     const data = makeAdminData([makeExam()])
     const gateway = makeGateway()
 
     render(<AdminExamsPage adminData={data} gateway={gateway} onNavigate={vi.fn()} />)
 
-    fireEvent.click(screen.getByRole('button', { name: /lifecycle actions for english ca 1/i }))
+    fireEvent.click(screen.getByRole('button', { name: /paper actions for english ca 1/i }))
     expect(screen.getByRole('button', { name: /return to draft/i })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /seal examination/i }))
 
@@ -71,38 +72,39 @@ describe('Admin examination workspace', () => {
     expect(data.refresh).toHaveBeenCalled()
   })
 
-  it('prevents activation in the UI until the candidate roster is ready', () => {
+  it('hands sealed execution control to Exam Operations instead of exposing activation on the paper page', () => {
+    const onNavigate = vi.fn()
     const data = makeAdminData([
-      makeExam({ id: 'exam-2', title: 'English Final', status: 'sealed', statusLabel: 'Sealed', rosterStatus: 'pending' }),
+      makeExam({ id: 'exam-2', title: 'English Final', status: 'sealed', statusLabel: 'Sealed', rosterStatus: 'ready' }),
     ])
 
-    render(<AdminExamsPage adminData={data} gateway={makeGateway()} onNavigate={vi.fn()} />)
+    render(<AdminExamsPage adminData={data} gateway={makeGateway()} onNavigate={onNavigate} />)
 
-    fireEvent.click(screen.getByRole('button', { name: /lifecycle actions for english final/i }))
-    const activate = screen.getByRole('button', { name: /activate examination/i })
-    expect(activate).toBeDisabled()
-    expect(activate).toHaveTextContent(/candidate roster must be ready/i)
+    fireEvent.click(screen.getByRole('button', { name: /paper actions for english final/i }))
+
+    expect(screen.queryByRole('button', { name: /activate examination/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /suspend examination/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /close examination/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /cancel sitting/i })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /create revision/i })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: /open exam operations/i }))
+    expect(onNavigate).toHaveBeenCalledWith('operation-detail', { selectedExamId: 'exam-2' })
   })
 
-  it('requires an audit reason before suspending an active examination', async () => {
+  it('keeps live examinations read-only in preparation and routes administrators to operations', () => {
+    const onNavigate = vi.fn()
     const data = makeAdminData([
       makeExam({ id: 'exam-3', title: 'English Mock', status: 'active', statusLabel: 'Active', rosterStatus: 'ready' }),
     ])
-    const gateway = makeGateway()
 
-    render(<AdminExamsPage adminData={data} gateway={gateway} onNavigate={vi.fn()} />)
+    render(<AdminExamsPage adminData={data} gateway={makeGateway()} onNavigate={onNavigate} />)
 
-    fireEvent.click(screen.getByRole('button', { name: /lifecycle actions for english mock/i }))
-    fireEvent.click(screen.getByRole('button', { name: /suspend examination/i }))
-    fireEvent.click(screen.getByRole('button', { name: /^suspend exam$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /paper actions for english mock/i }))
+    expect(screen.queryByRole('button', { name: /suspend examination/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /close examination/i })).not.toBeInTheDocument()
 
-    expect(screen.getByText(/enter a reason before continuing/i)).toBeInTheDocument()
-    expect(gateway.exams.suspendExam).not.toHaveBeenCalled()
-
-    fireEvent.change(screen.getByRole('textbox', { name: /reason/i }), { target: { value: 'Network maintenance' } })
-    fireEvent.click(screen.getByRole('button', { name: /^suspend exam$/i }))
-
-    await waitFor(() => expect(gateway.exams.suspendExam).toHaveBeenCalledWith('exam-3', 'Network maintenance'))
+    fireEvent.click(screen.getByRole('button', { name: /open exam operations/i }))
+    expect(onNavigate).toHaveBeenCalledWith('operation-detail', { selectedExamId: 'exam-3' })
   })
 })
