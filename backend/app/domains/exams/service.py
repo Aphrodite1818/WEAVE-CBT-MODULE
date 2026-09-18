@@ -559,7 +559,7 @@ class ExamService(
             revision_number=latest.revision_number + 1,
             revision_of_exam_id=latest.id,
             created_by_actor_id=actor.id,
-            lead_teacher_id=latest.lead_teacher_id,
+            lead_teacher_id=getattr(latest, "lead_teacher_id", None),
             lead_assigned_by_actor_id=actor.id,
             lead_assigned_at=datetime.now(UTC),
             component_maximum_score=None,
@@ -610,7 +610,7 @@ class ExamService(
         latest = await cls._latest_revision_in_lineage(db, exam)
         if latest.status != ExamStatus.CLOSED:
             revision = await super().create_revision(db, actor=actor, exam_id=exam_id)
-            revision.lead_teacher_id = latest.lead_teacher_id
+            revision.lead_teacher_id = getattr(latest, "lead_teacher_id", None)
             revision.lead_assigned_by_actor_id = actor.id
             revision.lead_assigned_at = datetime.now(UTC)
             try:
