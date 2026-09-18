@@ -1,0 +1,3 @@
+# Phase 1A baseline Dockerfile.
+# Purpose: run the current Python backend normally inside Linux Docker before Nuitka is introduced.
+# Implementation intentionally deferred until the Docker baseline is designed line by line.
