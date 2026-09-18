@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { RiCheckLine, RiCheckboxCircleFill, RiCheckboxBlankCircleLine, RiInformationLine } from '@remixicon/react'
+import { buildAcademicLevels, findSubjectScope, humanizeAcademicCategory, listBanksForSubject, listSubjectsForLevel } from '../academics/authoringScope'
 import { Icon } from '../icons/Icon'
 import { Notice, SelectControl, StatusBadge } from '../ui'
 import { ExamFolder } from './ExamCard'
@@ -23,6 +24,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
   const actor = state.session?.actor
   const isAdmin = actor?.role === 'admin'
   const readOnly = editing && !canManageExam(editingExam, actor, teacherData.assignments)
+  const initialSubject = findSubjectScope(teacherData.subjects, editingExam?.curriculumSubjectId) || teacherData.subjects[0] || null
 
   const [leadTeacherId, setLeadTeacherId] = useState(editingExam?.leadTeacherId || '')
   const [leadTeacherName, setLeadTeacherName] = useState(
@@ -34,10 +36,11 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
   const [leadSaving, setLeadSaving] = useState(false)
   const [leadMessage, setLeadMessage] = useState('')
   const [title, setTitle] = useState(editingExam?.title || '')
-  const [subjectId, setSubjectId] = useState(editingExam?.curriculumSubjectId || teacherData.subjects[0]?.id || '')
+  const [levelId, setLevelId] = useState(initialSubject?.academicLevelId || '')
+  const [subjectId, setSubjectId] = useState(initialSubject?.id || '')
   const [schemeId, setSchemeId] = useState(editingExam?.assessmentSchemeId || teacherData.assessmentSchemes[0]?.id || '')
   const [componentId, setComponentId] = useState(editingExam?.assessmentComponentId || teacherData.assessmentComponents.find((item) => item.schemeId === schemeId)?.id || '')
-  const [bankId, setBankId] = useState(editingExam?.questionBankId || teacherData.banks.find((item) => item.curriculumSubjectId === subjectId)?.id || '')
+  const [bankId, setBankId] = useState(editingExam?.questionBankId || teacherData.banks.find((item) => item.curriculumSubjectId === initialSubject?.id)?.id || '')
   const [selectionMode, setSelectionMode] = useState(editingExam?.selectionMode || 'random')
   const [questionCount, setQuestionCount] = useState(editingExam?.questionCount || 20)
   const [durationMinutes, setDurationMinutes] = useState(editingExam?.durationMinutes || 45)
@@ -49,8 +52,13 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  const levels = useMemo(() => buildAcademicLevels(teacherData.subjects), [teacherData.subjects])
+  const subjectsForLevel = useMemo(
+    () => listSubjectsForLevel(teacherData.subjects, levelId),
+    [levelId, teacherData.subjects],
+  )
   const subjectBanks = useMemo(
-    () => teacherData.banks.filter((bank) => !subjectId || bank.curriculumSubjectId === subjectId),
+    () => listBanksForSubject(teacherData.banks, subjectId),
     [subjectId, teacherData.banks],
   )
   const components = useMemo(
@@ -58,7 +66,8 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
     [schemeId, teacherData.assessmentComponents],
   )
 
-  const selectedSubject = teacherData.subjects.find((subject) => subject.id === subjectId)
+  const selectedLevel = levels.find((level) => level.id === levelId)
+  const selectedSubject = findSubjectScope(teacherData.subjects, subjectId)
   const selectedBank = subjectBanks.find((bank) => bank.id === bankId)
   const selectedComponent = components.find((component) => component.id === componentId)
 
@@ -70,6 +79,27 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
     Number(questionCount) > activeBankQuestions
       ? `This bank currently has only ${activeBankQuestions} active questions.`
       : ''
+
+  const resetLead = () => {
+    setLeadTeacherId('')
+    setLeadTeacherName('Administrator')
+  }
+
+  const changeLevel = (nextLevelId) => {
+    const firstSubject = listSubjectsForLevel(teacherData.subjects, nextLevelId)[0] || null
+    setLevelId(nextLevelId)
+    setSubjectId(firstSubject?.id || '')
+    setBankId(firstSubject ? listBanksForSubject(teacherData.banks, firstSubject.id)[0]?.id || '' : '')
+    resetLead()
+    setError('')
+  }
+
+  const changeSubject = (nextSubjectId) => {
+    setSubjectId(nextSubjectId)
+    setBankId(listBanksForSubject(teacherData.banks, nextSubjectId)[0]?.id || '')
+    resetLead()
+    setError('')
+  }
 
   const leaveForm = () => dispatch({
     type: 'staff',
@@ -85,8 +115,16 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
       setError('The current academic session and term are not available on this CBT server.')
       return
     }
+    if (!levelId || !selectedSubject || selectedSubject.academicLevelId !== levelId) {
+      setError('Choose an academic level and a subject from that level before saving the draft.')
+      return
+    }
     if (!title.trim() || !subjectId || !schemeId || !componentId || !bankId) {
       setError('Complete the required exam fields before saving the draft.')
+      return
+    }
+    if (!selectedBank || selectedBank.curriculumSubjectId !== subjectId) {
+      setError('Choose a question bank that belongs to the selected level and subject.')
       return
     }
     if (!Number.isInteger(Number(questionCount)) || !Number.isInteger(Number(durationMinutes)) || Number(questionCount) < 1 || Number(durationMinutes) < 1) {
@@ -156,9 +194,10 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
   const canSave = Boolean(
     teacherData.session?.id &&
       teacherData.term?.id &&
-      teacherData.subjects.length &&
+      levelId &&
+      selectedSubject?.academicLevelId === levelId &&
       teacherData.assessmentSchemes.length &&
-      subjectBanks.length &&
+      selectedBank?.curriculumSubjectId === subjectId &&
       components.length,
   )
 
@@ -180,7 +219,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
   const leadName = isAdmin ? leadTeacherName : actor?.display_name || 'You'
   const readiness = [
     ['Exam title added', Boolean(title.trim())],
-    ['Academic context', Boolean(subjectId && schemeId && componentId && teacherData.session?.id && teacherData.term?.id)],
+    ['Academic context', Boolean(levelId && subjectId && schemeId && componentId && teacherData.session?.id && teacherData.term?.id)],
     ['Question source', Boolean(bankId && Number(questionCount) > 0 && !capacityIssue)],
     ['Settings configured', Number(durationMinutes) > 0],
   ]
@@ -228,30 +267,35 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
       {teacherData.error && <Notice tone="danger">{teacherData.error}</Notice>}
       {teacherData.warning && <Notice tone="warning">{teacherData.warning}</Notice>}
       {!canSave && !teacherData.loading && !readOnly && (
-        <Notice tone="warning">A current session, term, subject, assessment component and matching question bank are required to create an exam.</Notice>
+        <Notice tone="warning">A current session, term, academic level, subject, assessment component and matching question bank are required to create an exam.</Notice>
       )}
       {readOnly && <Notice>This paper is {editingExam.statusLabel.toLowerCase()}. Draft metadata can only be edited by its lead author or an administrator.</Notice>}
 
       <form id="exam-authoring-form" className="teacher-exam-builder" onSubmit={saveExam}>
         <fieldset className="teacher-exam-builder__main" disabled={readOnly || saving || leadSaving}>
-          <ExamSection number="1" title="Paper details" description="Define the academic context." kind="paper">
+          <ExamSection number="1" title="Paper details" description="Choose the academic level first, then the subject available in that level." kind="paper">
             <label className="teacher-exam-field">
               <span>Exam title <em>*</em></span>
               <input aria-label="Exam title" required value={title} maxLength={255} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Computer Studies CA2" />
             </label>
+            <FieldSelect label="Academic level *" helper={!editing && levelId ? 'Only subjects in this level are shown next.' : undefined}>
+              <SelectControl
+                label="Academic level"
+                value={levelId}
+                options={levels.map((level) => ({ value: level.id, label: level.name, description: humanizeAcademicCategory(level.category) || undefined }))}
+                onChange={changeLevel}
+                disabled={editing || readOnly}
+                placeholder="Choose level"
+              />
+            </FieldSelect>
             <FieldSelect label="Subject *">
               <SelectControl
                 label="Subject"
                 value={subjectId}
-                options={teacherData.subjects.map((subject) => ({ value: subject.id, label: subject.name }))}
-                onChange={(value) => {
-                  setSubjectId(value)
-                  setLeadTeacherId('')
-                  setLeadTeacherName('Administrator')
-                  setBankId(teacherData.banks.find((bank) => bank.curriculumSubjectId === value)?.id || '')
-                }}
-                disabled={editing || readOnly}
-                placeholder="Choose subject"
+                options={subjectsForLevel.map((subject) => ({ value: subject.id, label: subject.name, description: subject.code || undefined }))}
+                onChange={changeSubject}
+                disabled={editing || readOnly || !levelId || !subjectsForLevel.length}
+                placeholder={levelId ? 'Choose subject' : 'Choose a level first'}
               />
             </FieldSelect>
             <FieldSelect label="Assessment scheme *">
@@ -327,8 +371,8 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
           </ExamSection>
 
           <ExamSection number="4" title="Questions" description="Choose the source and selection method." kind="questions">
-            <FieldSelect label="Question bank *">
-              <SelectControl label="Question bank" value={bankId} options={subjectBanks.map((bank) => ({ value: bank.id, label: bank.name }))} onChange={setBankId} disabled={editing || !subjectBanks.length || readOnly} placeholder="Choose bank" />
+            <FieldSelect label="Question bank *" helper={subjectId ? 'Only banks in the selected level and subject are available.' : undefined}>
+              <SelectControl label="Question bank" value={bankId} options={subjectBanks.map((bank) => ({ value: bank.id, label: bank.name, description: `${bank.activeQuestionCount ?? bank.count ?? 0} active questions` }))} onChange={setBankId} disabled={editing || !subjectBanks.length || readOnly} placeholder={subjectId ? 'Choose bank' : 'Choose a subject first'} />
             </FieldSelect>
             <label className="teacher-exam-field">
               <span>Number of questions <em>*</em></span>
@@ -344,7 +388,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
               </div>
             </fieldset>
             {selectionMode === 'manual' && <p className="exam-section-note">Save the draft before adding specific questions. A manual paper cannot be submitted until its questions are selected.</p>}
-            {editing && <p className="exam-section-note">The question source is fixed here to preserve existing selections.</p>}
+            {editing && <p className="exam-section-note">The academic scope and question source are fixed here to preserve existing selections.</p>}
           </ExamSection>
 
           <ExamSection number="5" title="Exam settings" description="Configure delivery for students." kind="settings">
@@ -379,7 +423,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
           <header><Icon name="exam" size={19} /><div><h2>Exam summary</h2><p>Live preview of your examination.</p></div></header>
           <div className="exam-summary__preview"><ExamFolder color={folderColor} size={78} /><span className={`exam-status exam-status--${editingExam?.status || 'draft'}`}>{editingExam?.statusLabel || 'Draft'}</span></div>
           <h3>{title.trim() || 'Untitled examination'}</h3>
-          <p className="exam-summary__context">{selectedSubject?.name || 'Choose subject'} &middot; {selectedComponent?.name || 'Choose component'}</p>
+          <p className="exam-summary__context">{selectedLevel?.name || 'Choose level'} &middot; {selectedSubject?.name || 'Choose subject'} &middot; {selectedComponent?.name || 'Choose component'}</p>
           <SummaryRow label="Lead author" value={leadName} />
           <SummaryRow label="Questions" value={`${questionCount || 0} questions`} helper={selectedBank?.name} />
           <SummaryRow label="Duration" value={`${durationMinutes || 0} minutes`} />
