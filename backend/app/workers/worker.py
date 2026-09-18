@@ -9,7 +9,7 @@ from arq import cron
 from app.core.database import engine
 from app.integrations.weave.client import weave_client
 from app.workers.broker import arq_redis_settings
-from app.workers.candidates import prepare_exam_roster
+from app.workers.candidates import prepare_exam_roster, reconcile_exam_roster
 from app.workers.exams import (
     evaluate_exam_completion,
     finalize_exam_cancellation,
@@ -39,6 +39,7 @@ class WorkerSettings:
 
     functions = [
         prepare_exam_roster,
+        reconcile_exam_roster,
         evaluate_exam_completion,
         finalize_exam_close,
         finalize_exam_cancellation,
