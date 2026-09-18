@@ -1,3 +1,0 @@
-# Phase 1 production backend Dockerfile.
-# Purpose: compile the API and worker with Nuitka in a builder stage, then package only compiled runtime artifacts.
-# Implementation intentionally deferred until the source-based Docker baseline and Nuitka builds are verified.
