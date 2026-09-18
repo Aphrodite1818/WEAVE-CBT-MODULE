@@ -28,6 +28,7 @@ from app.domains.exams.models import (
 from app.domains.exams.repository import ExamRepository
 from app.domains.exams.schemas import ExamCreate, ExamUpdate, ManualQuestionRemove
 from app.domains.exams.timetable_service import ExamTimetableService
+from app.domains.questions.repository import QuestionRepository
 from app.workers.producer import arq_producer
 
 
@@ -287,6 +288,14 @@ class ExamService(
             duration_minutes=duration_minutes,
             exclude_exam_id=exam.id,
         )
+        lead_teacher_id = getattr(exam, "lead_teacher_id", None)
+        if lead_teacher_id is not None:
+            await cls._validate_lead_teacher(
+                db,
+                teacher_id=lead_teacher_id,
+                curriculum_subject_id=exam.curriculum_subject_id,
+                term_id=term_id,
+            )
 
     @classmethod
     async def _before_activate_exam_save(cls, db: AsyncSession, *, exam: Exam) -> None:
@@ -304,25 +313,143 @@ class ExamService(
         actor: LocalActor,
         payload: ExamCreate,
     ) -> Exam:
+        """Create the shared draft and its lead decision in one transaction."""
+
+        session = await AcademicRepository.get_session_by_id(
+            db,
+            session_id=payload.session_id,
+        )
+        if session is None:
+            raise AcademicScopeError(
+                "Academic session does not exist or is no longer available"
+            )
+
+        term = await AcademicRepository.get_term_by_id(db, term_id=payload.term_id)
+        if term is None:
+            raise AcademicScopeError(
+                "Academic term does not exist or is no longer available"
+            )
+        if term.academic_session_id != session.id:
+            raise AcademicScopeError(
+                "Academic term does not belong to the selected academic session"
+            )
+
+        await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+            db,
+            actor=actor,
+            curriculum_subject_id=payload.curriculum_subject_id,
+            academic_term_id=term.id,
+        )
+
+        assessment_scheme = await AcademicRepository.get_assessment_scheme_by_id(
+            db,
+            scheme_id=payload.assessment_scheme_id,
+        )
+        if assessment_scheme is None:
+            raise AcademicScopeError(
+                "Assessment scheme does not exist or is no longer available"
+            )
+
+        assessment_component = await AcademicRepository.get_component_by_id(
+            db,
+            component_id=payload.assessment_component_id,
+        )
+        if assessment_component is None:
+            raise AcademicScopeError(
+                "Assessment component does not exist or is no longer available"
+            )
+        if assessment_component.assessment_scheme_id != assessment_scheme.id:
+            raise AcademicScopeError(
+                "Assessment component does not belong to the selected assessment scheme"
+            )
+
+        question_bank = await QuestionRepository.get_bank_by_id(
+            db,
+            bank_id=payload.question_bank_id,
+        )
+        if question_bank is None:
+            raise ValueError("Question bank does not exist")
+        if not question_bank.is_active:
+            raise ValueError("Question bank is inactive")
+        if question_bank.curriculum_subject_id != payload.curriculum_subject_id:
+            raise ValueError(
+                "Question bank does not belong to the selected curriculum subject"
+            )
+
+        question_selection_mode = ExamQuestionSelectionMode(
+            payload.question_selection_mode
+        )
+        if question_selection_mode == ExamQuestionSelectionMode.RANDOM:
+            await cls._validate_random_question_capacity(
+                db,
+                question_bank_id=question_bank.id,
+                question_count=payload.question_count,
+            )
+
+        existing_exam = await ExamRepository.get_exam_revision(
+            db,
+            term_id=payload.term_id,
+            curriculum_subject_id=payload.curriculum_subject_id,
+            assessment_component_id=payload.assessment_component_id,
+            title=payload.title,
+            revision_number=1,
+        )
+        if existing_exam is not None:
+            raise ValueError(
+                "An examination already exists for the selected term, "
+                "curriculum subject and assessment component"
+            )
+
         lead_teacher_id = await cls._resolve_initial_lead_teacher_id(
             db,
             actor=actor,
             payload=payload,
         )
-        exam = await super().create_exam(db, actor=actor, payload=payload)
+        await cls._before_create_exam_save(db, payload=payload)
 
-        # Base authoring creates the shared draft; this facade then attaches its
-        # explicit coordination identity. NULL is a valid, deliberate admin-led
-        # state rather than an absent creator identity.
-        exam.lead_teacher_id = lead_teacher_id
-        exam.lead_assigned_by_actor_id = actor.id
-        exam.lead_assigned_at = datetime.now(UTC)
+        normalized_instructions = None
+        if payload.instructions is not None:
+            normalized_instructions = payload.instructions.strip() or None
+        now = datetime.now(UTC)
+        exam = Exam(
+            session_id=session.id,
+            term_id=term.id,
+            curriculum_subject_id=payload.curriculum_subject_id,
+            assessment_scheme_id=assessment_scheme.id,
+            assessment_component_id=assessment_component.id,
+            question_bank_id=question_bank.id,
+            question_selection_mode=question_selection_mode,
+            question_count=payload.question_count,
+            title=payload.title,
+            instructions=normalized_instructions,
+            duration_minutes=payload.duration_minutes,
+            shuffle_questions=payload.shuffle_questions,
+            shuffle_options=payload.shuffle_options,
+            scheduled_start_at=payload.scheduled_start_at,
+            latest_normal_start_at=payload.latest_normal_start_at,
+            status=ExamStatus.DRAFT,
+            roster_status=ExamRosterStatus.NOT_PREPARED,
+            roster_version=0,
+            roster_candidate_count=0,
+            authoring_version=1,
+            revision_number=1,
+            revision_of_exam_id=None,
+            created_by_actor_id=actor.id,
+            lead_teacher_id=lead_teacher_id,
+            lead_assigned_by_actor_id=actor.id,
+            lead_assigned_at=now,
+            component_maximum_score=None,
+        )
+
         try:
-            exam = await ExamRepository.save_exam(db, exam)
+            exam = await ExamRepository.add_exam(db, exam)
             await db.commit()
         except IntegrityError as exc:
             await db.rollback()
-            raise ValueError("The examination lead could not be initialized") from exc
+            raise ValueError(
+                "The examination could not be created because its "
+                "configuration conflicts with an existing shared paper"
+            ) from exc
         return exam
 
     @classmethod
