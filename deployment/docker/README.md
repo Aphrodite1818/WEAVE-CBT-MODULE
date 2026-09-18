@@ -1,12 +1,15 @@
 # Phase 1 Docker Architecture
 
-This directory contains the deployment scaffolding for containerizing WEAVE CBT.
+Phase 1 builds one WEAVE-owned application image, not separate backend and frontend images.
 
-Phase 1 is intentionally split into two production tracks:
+The application image will contain:
 
-- `backend/` — compile the FastAPI API and ARQ worker with Nuitka, then package only compiled runtime artifacts in the backend image. Source correctness is handled by CI; there is no separate source-based backend image.
-- `frontend/` — build the staff and student Vite applications and package only their static production output for container runtime.
+- the Nuitka-compiled API executable,
+- the Nuitka-compiled ARQ worker executable,
+- the built staff frontend assets,
+- the built student frontend assets,
+- required runtime libraries.
 
-After both images are implemented, focused smoke tests will validate the actual production containers before release.
+Docker may start the same image with different commands to create an API container and a worker container. The API container will also serve the built frontend assets, so there is no separate frontend process to start.
 
-PostgreSQL, Redis, Compose orchestration, LAN networking, DNS, TLS, Windows appliance management, backups, installers, and updating are outside this phase and will be added in later deployment phases.
+PostgreSQL and Redis remain separate official images and will be introduced with Compose in a later phase.
