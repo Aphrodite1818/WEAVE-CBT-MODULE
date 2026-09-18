@@ -72,14 +72,36 @@ export function removeExamInvigilators(examId, teacherIds) {
   return weaveRequest(`/exams/${examId}/invigilators/remove`, { method: 'POST', body: { teacher_ids: teacherIds } })
 }
 
-export function addManualQuestions(examId, questionIds) {
-  return weaveRequest(`/exams/${examId}/manual-questions`, { method: 'POST', body: { question_ids: questionIds } })
+export function listManualQuestions(examId, options = {}) {
+  return weaveRequest(`/exams/${examId}/manual-questions`, options)
 }
 
-export function removeManualQuestion(examId, questionId) {
-  return weaveRequest(`/exams/${examId}/manual-questions/remove`, { method: 'POST', body: { question_id: questionId } })
+export function addManualQuestions(examId, questionIds, expectedAuthoringVersion = 1) {
+  return weaveRequest(`/exams/${examId}/manual-questions`, {
+    method: 'POST',
+    body: {
+      question_ids: questionIds,
+      expected_authoring_version: expectedAuthoringVersion,
+    },
+  })
 }
 
-export function reorderManualQuestions(examId, questionIds) {
-  return weaveRequest(`/exams/${examId}/manual-questions/reorder`, { method: 'POST', body: { question_ids: questionIds } })
+export function removeManualQuestion(examId, questionId, expectedAuthoringVersion = 1) {
+  return weaveRequest(`/exams/${examId}/manual-questions/remove`, {
+    method: 'POST',
+    body: {
+      question_id: questionId,
+      expected_authoring_version: expectedAuthoringVersion,
+    },
+  })
+}
+
+export function reorderManualQuestions(examId, questionIds, expectedAuthoringVersion = 1) {
+  return weaveRequest(`/exams/${examId}/manual-questions/reorder`, {
+    method: 'POST',
+    body: {
+      question_ids: questionIds,
+      expected_authoring_version: expectedAuthoringVersion,
+    },
+  })
 }
