@@ -10,10 +10,14 @@ from app.core.database import DbSession
 from app.core.exceptions import AcademicAuthorizationError, AcademicScopeError
 from app.domains.auth.dependencies import CurrentLocalActor
 from app.domains.exams.exceptions import ExamNotFound, ExamStateError
+from app.domains.results.models import ResultSyncStatus
 from app.domains.results.retry_service import ResultRetryService
 from app.domains.results.schemas import (
     ResultListResponse,
     ResultResponse,
+    ResultReviewRowResponse,
+    ResultReviewSetListResponse,
+    ResultReviewSetResponse,
     ResultSyncRetryResponse,
 )
 from app.domains.results.service import ResultService
@@ -31,6 +35,22 @@ def _http_error(exc: Exception) -> HTTPException:
     if isinstance(exc, (AcademicScopeError, ExamStateError)):
         return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+
+@router.get("/results/review-sets", response_model=ResultReviewSetListResponse)
+async def list_result_review_sets(
+    db: DbSession,
+    actor: CurrentLocalActor,
+) -> ResultReviewSetListResponse:
+    """List terminal examination result sets for administrator review."""
+
+    try:
+        rows = await ResultService.list_result_review_sets(db, actor=actor)
+    except (AcademicAuthorizationError, ValueError) as exc:
+        raise _http_error(exc) from exc
+    return ResultReviewSetListResponse(
+        reviews=[ResultReviewSetResponse.model_validate(row) for row in rows]
+    )
 
 
 @router.get("/results/{result_id}", response_model=ResultResponse)
@@ -56,14 +76,18 @@ async def list_exam_results(
     exam_id: UUID,
     db: DbSession,
     actor: CurrentLocalActor,
+    search: str | None = Query(default=None, max_length=255),
+    sync_status: ResultSyncStatus | None = Query(default=None),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=200),
 ) -> ResultListResponse:
     try:
-        rows, total = await ResultService.list_exam_results(
+        rows, total = await ResultService.list_exam_result_review_rows(
             db,
             actor=actor,
             exam_id=exam_id,
+            search=search,
+            sync_status=sync_status,
             offset=offset,
             limit=limit,
         )
@@ -74,12 +98,24 @@ async def list_exam_results(
         ValueError,
     ) as exc:
         raise _http_error(exc) from exc
+
+    results = []
+    for result, candidate in rows:
+        base = ResultResponse.model_validate(result).model_dump()
+        results.append(
+            ResultReviewRowResponse(
+                **base,
+                candidate_display_name=candidate.display_name,
+                admission_number=candidate.admission_number,
+                class_id=candidate.class_id,
+            )
+        )
     return ResultListResponse(
         exam_id=exam_id,
         offset=offset,
         limit=limit,
         total=total,
-        results=[ResultResponse.model_validate(row) for row in rows],
+        results=results,
     )
 
 
