@@ -7,9 +7,9 @@ services:
     image: postgres:16-alpine
 
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
 
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -18,7 +18,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"
+          "pg_isready -U ${POSTGRES_USER:?POSTGRES_USER is required} -d ${POSTGRES_DB:?POSTGRES_DB is required}"
         ]
       interval: 5s
       timeout: 5s
@@ -45,20 +45,17 @@ services:
 
   # ==========================================================
   # Database migrations
-  #
-  # Uses the SAME WEAVE CBT image as the API and worker.
-  # Runs once, upgrades PostgreSQL, then exits.
+  # Runs once before the API and worker are allowed to start.
   # ==========================================================
   migrate:
-    image: ${WEAVE_IMAGE}
+    image: ${WEAVE_IMAGE:?WEAVE_IMAGE is required}
 
     command:
       - /app/migrate/weave-cbt-migrate
 
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}
       REDIS_URL: redis://redis:6379/0
-
       ENVIRONMENT: prod
       DEBUG: "false"
 
@@ -71,13 +68,10 @@ services:
 
   # ==========================================================
   # WEAVE CBT API
-  #
-  # Three containers are created from the same WEAVE image.
-  # They all use the same PostgreSQL, Redis and persistent
-  # WEAVE runtime storage.
+  # Three replicas share PostgreSQL, Redis and weave_data.
   # ==========================================================
   api:
-    image: ${WEAVE_IMAGE}
+    image: ${WEAVE_IMAGE:?WEAVE_IMAGE is required}
 
     command:
       - /app/api/weave-cbt-api
@@ -85,9 +79,8 @@ services:
     scale: 3
 
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}
       REDIS_URL: redis://redis:6379/0
-
       ENVIRONMENT: prod
       DEBUG: "false"
 
@@ -100,31 +93,27 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-
       redis:
         condition: service_healthy
-
       migrate:
         condition: service_completed_successfully
 
     restart: unless-stopped
+    stop_grace_period: 30s
 
 
   # ==========================================================
   # ARQ Worker
-  #
-  # Runs background jobs using the same application image.
   # ==========================================================
   worker:
-    image: ${WEAVE_IMAGE}
+    image: ${WEAVE_IMAGE:?WEAVE_IMAGE is required}
 
     command:
       - /app/worker/weave-cbt-worker
 
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}
       REDIS_URL: redis://redis:6379/0
-
       ENVIRONMENT: prod
       DEBUG: "false"
 
@@ -134,21 +123,18 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-
       redis:
         condition: service_healthy
-
       migrate:
         condition: service_completed_successfully
 
     restart: unless-stopped
+    stop_grace_period: 30s
 
 
   # ==========================================================
   # Nginx
-  #
-  # Public entrance to WEAVE CBT.
-  # Requests are load-balanced across the API replicas.
+  # Only host-facing service. Load-balances the API replicas.
   # ==========================================================
   nginx:
     image: nginx:stable-alpine
@@ -160,7 +146,8 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
 
     depends_on:
-      - api
+      api:
+        condition: service_started
 
     restart: unless-stopped
 
@@ -169,9 +156,5 @@ services:
 # Persistent storage
 # ============================================================
 volumes:
-  # PostgreSQL database survives container replacement.
   postgres_data:
-
-  # WEAVE installation identity, media and branding survive
-  # API/worker container replacement.
   weave_data:
