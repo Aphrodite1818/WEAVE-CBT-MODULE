@@ -1,3 +1,5 @@
+import { toastBus } from '../shared/ui/useToast'
+
 const DEFAULT_API_BASE_URL = '/api/v1'
 const STAFF_TOKEN_KEY = 'weave.staffAccessToken'
 
@@ -58,6 +60,7 @@ export async function weaveRequest(path, options = {}) {
     signal,
     staffAuth = true,
     formData = false,
+    successMessage,
   } = options
 
   const requestHeaders = requestHeadersFor({ headers, staffAuth })
@@ -71,11 +74,15 @@ export async function weaveRequest(path, options = {}) {
     body: body === undefined ? undefined : formData ? body : JSON.stringify(body),
   })
 
-  if (response.status === 204) return null
+  if (response.status === 204) {
+    showSuccessMessage(successMessage, null)
+    return null
+  }
 
   const payload = await parsePayload(response)
   if (!response.ok) throwApiError(response, payload)
 
+  showSuccessMessage(successMessage, payload)
   return payload
 }
 
@@ -103,6 +110,12 @@ export function queryString(params) {
   })
   const value = search.toString()
   return value ? `?${value}` : ''
+}
+
+function showSuccessMessage(successMessage, payload) {
+  if (!successMessage) return
+  const message = typeof successMessage === 'function' ? successMessage(payload) : successMessage
+  if (message) toastBus.success(message)
 }
 
 async function parsePayload(response) {
