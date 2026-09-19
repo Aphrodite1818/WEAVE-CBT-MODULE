@@ -180,8 +180,10 @@ class WindowsWSLRuntime(RuntimeProvider):
         lowered_output = output.casefold()
 
         reboot_markers = (
-            "restart",
-            "reboot",
+            "restart your machine",
+            "restart your computer",
+            "reboot your machine",
+            "reboot your computer",
             "changes will not be effective until the system is rebooted",
         )
         reboot_required = (
