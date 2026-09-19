@@ -7,7 +7,11 @@ import subprocess
 from pathlib import Path
 from typing import Sequence
 
-from ..base import RuntimeCommandResult, RuntimeProvider
+from ..base import (
+    RuntimeCommandResult,
+    RuntimePreparationResult,
+    RuntimeProvider,
+)
 
 
 WEAVE_DISTRO_NAME = "WeaveCBT"
@@ -35,10 +39,7 @@ class WindowsWSLRuntime(RuntimeProvider):
         return "Windows WSL2"
 
     def _wsl_executable(self) -> Path | None:
-        executable = shutil.which("wsl.exe")
-
-        if executable is None:
-            executable = shutil.which("wsl")
+        executable = shutil.which("wsl.exe") or shutil.which("wsl")
 
         if executable is None:
             return None
@@ -69,12 +70,7 @@ class WindowsWSLRuntime(RuntimeProvider):
 
     @staticmethod
     def _normalize_wsl_output(value: str) -> str:
-        """
-        Normalize output returned by wsl.exe.
-
-        Some Windows/WSL combinations may include null characters in
-        redirected command output.
-        """
+        """Normalize redirected output returned by wsl.exe."""
 
         return value.replace("\x00", "").strip()
 
@@ -121,9 +117,7 @@ class WindowsWSLRuntime(RuntimeProvider):
         return result.returncode == 0
 
     def is_installed(self) -> bool:
-        """
-        Return whether the dedicated WEAVE CBT WSL distro exists.
-        """
+        """Return whether the dedicated WEAVE CBT WSL distro exists."""
 
         if not self.is_available():
             return False
@@ -139,9 +133,7 @@ class WindowsWSLRuntime(RuntimeProvider):
         }
 
     def is_running(self) -> bool:
-        """
-        Return whether the WEAVE CBT WSL distro is currently running.
-        """
+        """Return whether the WEAVE CBT WSL distro is currently running."""
 
         if not self.is_installed():
             return False
@@ -156,14 +148,67 @@ class WindowsWSLRuntime(RuntimeProvider):
             for distro in running_distros
         }
 
+    def prepare(self) -> RuntimePreparationResult:
+        """
+        Enable/install the WSL capability required by this provider.
+
+        The Manager is expected to be running elevated when this operation is
+        necessary. The dedicated WEAVE distro itself is created by install().
+        """
+
+        if self.is_available():
+            return RuntimePreparationResult(reboot_required=False)
+
+        wsl = self._wsl_executable()
+
+        if wsl is None:
+            raise RuntimeError(
+                "wsl.exe is not available on this Windows installation."
+            )
+
+        try:
+            result = self._run_wsl(
+                ["--install", "--no-distribution"],
+                timeout=600,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                "Timed out while preparing WSL2."
+            ) from exc
+
+        output = self._normalize_wsl_output(
+            f"{result.stdout}\n{result.stderr}"
+        )
+        lowered_output = output.casefold()
+
+        reboot_markers = (
+            "restart",
+            "reboot",
+            "changes will not be effective until the system is rebooted",
+        )
+        reboot_required = (
+            result.returncode == 3010
+            or any(marker in lowered_output for marker in reboot_markers)
+        )
+
+        if result.returncode not in (0, 3010):
+            raise RuntimeError(
+                "Unable to prepare WSL2"
+                + (f": {output}" if output else ".")
+            )
+
+        if reboot_required:
+            return RuntimePreparationResult(reboot_required=True)
+
+        if not self.is_available():
+            # Windows feature activation can succeed but remain unavailable
+            # until after a reboot.
+            return RuntimePreparationResult(reboot_required=True)
+
+        return RuntimePreparationResult(reboot_required=False)
+
     def install(self) -> None:
-        """
-        Import the dedicated WEAVE CBT Linux runtime into WSL2.
-
-        This assumes WSL itself has already been enabled on Windows.
-
-        The rootfs archive is supplied by the higher-level installer layer.
-        """
+        """Import the dedicated WEAVE CBT Linux runtime into WSL2."""
 
         if not self.is_available():
             raise RuntimeError(
@@ -176,7 +221,7 @@ class WindowsWSLRuntime(RuntimeProvider):
 
         if not self.rootfs_archive.is_file():
             raise FileNotFoundError(
-                f"WEAVE CBT root filesystem not found: "
+                "WEAVE CBT root filesystem not found: "
                 f"{self.rootfs_archive}"
             )
 
@@ -199,17 +244,13 @@ class WindowsWSLRuntime(RuntimeProvider):
 
         if result.returncode != 0:
             stderr = self._normalize_wsl_output(result.stderr)
-
             raise RuntimeError(
-                f"Unable to create WEAVE CBT WSL runtime: {stderr}"
+                "Unable to create WEAVE CBT WSL runtime"
+                + (f": {stderr}" if stderr else ".")
             )
 
     def start(self) -> None:
-        """
-        Start the dedicated WEAVE CBT distro.
-
-        Running a minimal command inside a WSL distro causes WSL to start it.
-        """
+        """Start the dedicated WEAVE CBT distro."""
 
         if not self.is_installed():
             raise RuntimeError(
@@ -230,18 +271,15 @@ class WindowsWSLRuntime(RuntimeProvider):
 
         if result.returncode != 0:
             stderr = self._normalize_wsl_output(result.stderr)
-
             raise RuntimeError(
-                f"Unable to start WEAVE CBT runtime: {stderr}"
+                "Unable to start WEAVE CBT runtime"
+                + (f": {stderr}" if stderr else ".")
             )
 
     def stop(self) -> None:
         """Terminate the dedicated WEAVE CBT WSL distro."""
 
-        if not self.is_installed():
-            return
-
-        if not self.is_running():
+        if not self.is_installed() or not self.is_running():
             return
 
         result = self._run_wsl(
@@ -253,9 +291,9 @@ class WindowsWSLRuntime(RuntimeProvider):
 
         if result.returncode != 0:
             stderr = self._normalize_wsl_output(result.stderr)
-
             raise RuntimeError(
-                f"Unable to stop WEAVE CBT runtime: {stderr}"
+                "Unable to stop WEAVE CBT runtime"
+                + (f": {stderr}" if stderr else ".")
             )
 
     def execute(
@@ -264,9 +302,7 @@ class WindowsWSLRuntime(RuntimeProvider):
         *,
         timeout: float | None = None,
     ) -> RuntimeCommandResult:
-        """
-        Execute a command inside the dedicated WEAVE CBT WSL distro.
-        """
+        """Execute a command inside the dedicated WEAVE CBT WSL distro."""
 
         if not command:
             raise ValueError("Runtime command cannot be empty.")
