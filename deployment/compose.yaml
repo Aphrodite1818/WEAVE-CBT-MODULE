@@ -51,7 +51,8 @@ services:
     image: ${WEAVE_IMAGE:?WEAVE_IMAGE is required}
 
     command:
-      - /app/migrate/weave-cbt-migrate
+      - /app/weave-cbt/weave-cbt
+      - migrate
 
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}
@@ -74,7 +75,8 @@ services:
     image: ${WEAVE_IMAGE:?WEAVE_IMAGE is required}
 
     command:
-      - /app/api/weave-cbt-api
+      - /app/weave-cbt/weave-cbt
+      - api
 
     scale: 3
 
@@ -109,7 +111,8 @@ services:
     image: ${WEAVE_IMAGE:?WEAVE_IMAGE is required}
 
     command:
-      - /app/worker/weave-cbt-worker
+      - /app/weave-cbt/weave-cbt
+      - worker
 
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}
