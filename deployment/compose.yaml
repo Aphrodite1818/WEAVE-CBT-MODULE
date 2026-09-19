@@ -85,6 +85,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       ENVIRONMENT: prod
       DEBUG: "false"
+      WEAVE_API_BASE_URL: ${WEAVE_API_BASE_URL:-https://api.weavecloudspace.com}
 
     volumes:
       - weave_data:/var/lib/weave-cbt
@@ -119,6 +120,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       ENVIRONMENT: prod
       DEBUG: "false"
+      WEAVE_API_BASE_URL: ${WEAVE_API_BASE_URL:-https://api.weavecloudspace.com}
 
     volumes:
       - weave_data:/var/lib/weave-cbt
