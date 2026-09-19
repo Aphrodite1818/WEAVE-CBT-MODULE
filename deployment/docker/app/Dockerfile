@@ -23,8 +23,6 @@ FROM python:3.11-slim-bookworm AS python-build-base
 
 WORKDIR /workspace
 
-# Nuitka needs a C compiler and patchelf. ccache reduces repeated C compilation
-# within BuildKit builds when API/worker/migration share generated objects.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
@@ -32,13 +30,10 @@ RUN apt-get update \
         patchelf \
     && rm -rf /var/lib/apt/lists/*
 
-# Install application dependencies before source code so dependency layers remain
-# reusable across normal application changes.
 COPY backend/requirements.txt /workspace/backend/requirements.txt
 RUN python -m pip install --no-cache-dir \
     -r /workspace/backend/requirements.txt
 
-# Nuitka is a build-only dependency and never reaches the runtime image.
 COPY deployment/docker/app/nuitka/requirements-build.txt \
     /workspace/deployment/docker/app/nuitka/requirements-build.txt
 RUN python -m pip install --no-cache-dir \
@@ -50,59 +45,23 @@ ENV CCACHE_DIR=/root/.cache/ccache \
     CCACHE_MAXSIZE=2G
 
 
-# ==========================================================
-# Compile API, worker and migrations in independent stages.
-#
-# Keeping these stages independent is intentional: a change to migration-only
-# build code must not invalidate the expensive API or worker compilation layers.
-# BuildKit may also execute independent stages concurrently when all are needed.
-# ==========================================================
+# =======================================================
+# Compile the backend once for API, worker and migrations
+# =======================================================
 
-FROM python-build-base AS api-builder
+FROM python-build-base AS backend-builder
 
 COPY backend/ /workspace/backend/
-COPY deployment/docker/app/entrypoints/api.py \
-    /workspace/deployment/docker/app/entrypoints/api.py
+COPY deployment/docker/app/entrypoints/runtime.py \
+    /workspace/deployment/docker/app/entrypoints/runtime.py
 COPY deployment/docker/app/nuitka/common-options.txt \
     /workspace/deployment/docker/app/nuitka/common-options.txt
-COPY deployment/docker/app/nuitka/build-api.sh \
-    /workspace/deployment/docker/app/nuitka/build-api.sh
+COPY deployment/docker/app/nuitka/build-runtime.sh \
+    /workspace/deployment/docker/app/nuitka/build-runtime.sh
 
-RUN chmod +x /workspace/deployment/docker/app/nuitka/build-api.sh
+RUN chmod +x /workspace/deployment/docker/app/nuitka/build-runtime.sh
 RUN --mount=type=cache,id=weave-nuitka-ccache,target=/root/.cache/ccache \
-    /workspace/deployment/docker/app/nuitka/build-api.sh \
-    && ccache --show-stats
-
-
-FROM python-build-base AS worker-builder
-
-COPY backend/ /workspace/backend/
-COPY deployment/docker/app/entrypoints/worker.py \
-    /workspace/deployment/docker/app/entrypoints/worker.py
-COPY deployment/docker/app/nuitka/common-options.txt \
-    /workspace/deployment/docker/app/nuitka/common-options.txt
-COPY deployment/docker/app/nuitka/build-worker.sh \
-    /workspace/deployment/docker/app/nuitka/build-worker.sh
-
-RUN chmod +x /workspace/deployment/docker/app/nuitka/build-worker.sh
-RUN --mount=type=cache,id=weave-nuitka-ccache,target=/root/.cache/ccache \
-    /workspace/deployment/docker/app/nuitka/build-worker.sh \
-    && ccache --show-stats
-
-
-FROM python-build-base AS migrate-builder
-
-COPY backend/ /workspace/backend/
-COPY deployment/docker/app/entrypoints/migrate.py \
-    /workspace/deployment/docker/app/entrypoints/migrate.py
-COPY deployment/docker/app/nuitka/common-options.txt \
-    /workspace/deployment/docker/app/nuitka/common-options.txt
-COPY deployment/docker/app/nuitka/build-migrate.sh \
-    /workspace/deployment/docker/app/nuitka/build-migrate.sh
-
-RUN chmod +x /workspace/deployment/docker/app/nuitka/build-migrate.sh
-RUN --mount=type=cache,id=weave-nuitka-ccache,target=/root/.cache/ccache \
-    /workspace/deployment/docker/app/nuitka/build-migrate.sh \
+    /workspace/deployment/docker/app/nuitka/build-runtime.sh \
     && ccache --show-stats
 
 
@@ -114,8 +73,6 @@ FROM python:3.11-slim-bookworm AS runtime-base
 
 WORKDIR /app
 
-# Certificates are required for HTTPS calls to Weave Cloud. libstdc++ is needed
-# by the compiled Nuitka executables.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -133,13 +90,13 @@ RUN apt-get update \
 
 FROM runtime-base AS migration-runtime
 
-COPY --from=migrate-builder \
-    /workspace/deployment/docker/app/build/nuitka/migrate/migrate.dist \
-    /app/migrate
+COPY --from=backend-builder \
+    /workspace/deployment/docker/app/build/nuitka/runtime/weave-cbt.dist \
+    /app/weave-cbt
 
-ENV WEAVE_ALEMBIC_CONFIG=/app/migrate/migrations/alembic.ini
+ENV WEAVE_ALEMBIC_CONFIG=/app/weave-cbt/migrations/alembic.ini
 
-CMD ["/app/migrate/weave-cbt-migrate"]
+CMD ["/app/weave-cbt/weave-cbt", "migrate"]
 
 
 # ===============================
@@ -148,23 +105,17 @@ CMD ["/app/migrate/weave-cbt-migrate"]
 
 FROM runtime-base AS runtime
 
-# Copy each independently compiled artifact into the final runtime image.
-COPY --from=api-builder \
-    /workspace/deployment/docker/app/build/nuitka/api/api.dist \
-    /app/api
-COPY --from=worker-builder \
-    /workspace/deployment/docker/app/build/nuitka/worker/worker.dist \
-    /app/worker
-COPY --from=migrate-builder \
-    /workspace/deployment/docker/app/build/nuitka/migrate/migrate.dist \
-    /app/migrate
+COPY --from=backend-builder \
+    /workspace/deployment/docker/app/build/nuitka/runtime/weave-cbt.dist \
+    /app/weave-cbt
 
-# Only built frontend assets are copied; React source and node_modules stay out.
+# Frontend remains a separate artifact. Frontend-only changes do not invalidate
+# the Nuitka backend compilation stage.
 COPY --from=frontend-builder /workspace/frontend/dist /app/web
 
-ENV WEAVE_ALEMBIC_CONFIG=/app/migrate/migrations/alembic.ini
+ENV WEAVE_ALEMBIC_CONFIG=/app/weave-cbt/migrations/alembic.ini
 
 EXPOSE 8000
 
-# API is the default process. Compose overrides this command for worker/migrate.
-CMD ["/app/api/weave-cbt-api"]
+# API is the default process. Compose selects worker/migrate modes explicitly.
+CMD ["/app/weave-cbt/weave-cbt", "api"]
