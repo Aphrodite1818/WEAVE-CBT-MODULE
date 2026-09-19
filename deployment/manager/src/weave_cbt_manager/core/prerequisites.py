@@ -66,10 +66,7 @@ class PrerequisiteReport:
 
     @property
     def action_required(self) -> bool:
-        return any(
-            check.action_required
-            for check in self.checks
-        )
+        return any(check.action_required for check in self.checks)
 
     @property
     def ready(self) -> bool:
@@ -80,8 +77,8 @@ class PrerequisiteReport:
         """
         Return whether installation may continue.
 
-        ACTION_REQUIRED items can be resolved by the installer.
-        BLOCKED items prevent installation entirely.
+        ACTION_REQUIRED items can be resolved during installation. BLOCKED
+        items prevent installation entirely.
         """
 
         return not self.blocked
@@ -91,16 +88,8 @@ class PrerequisiteService:
     """
     Inspect whether the host can run WEAVE CBT.
 
-    This service is read-only.
-
-    It does not:
-
-    - enable WSL
-    - install the runtime
-    - start the runtime
-    - start Docker
-    - modify Windows features
-    - deploy WEAVE CBT
+    This service is read-only. It does not enable WSL, install or start the
+    runtime, start Docker, modify Windows features, or deploy WEAVE CBT.
     """
 
     def __init__(
@@ -162,12 +151,7 @@ class PrerequisiteService:
         )
 
     def check_admin(self) -> PrerequisiteCheck:
-        """
-        Check whether the Manager currently has administrative privileges.
-
-        Lack of elevation does not mean the machine is incompatible.
-        The installer can request elevation later.
-        """
+        """Check whether the Manager currently has administrator privileges."""
 
         if self.platform.is_admin():
             return PrerequisiteCheck(
@@ -197,9 +181,7 @@ class PrerequisiteService:
                 key="memory",
                 label="System memory",
                 state=PrerequisiteState.PASS,
-                message=(
-                    f"{memory.total_gb:.1f} GB RAM available on the host."
-                ),
+                message=f"{memory.total_gb:.1f} GB RAM installed on the host.",
             )
 
         return PrerequisiteCheck(
@@ -223,9 +205,7 @@ class PrerequisiteService:
                 key="disk",
                 label="Disk space",
                 state=PrerequisiteState.PASS,
-                message=(
-                    f"{disk.free_gb:.1f} GB free disk space available."
-                ),
+                message=f"{disk.free_gb:.1f} GB free disk space available.",
             )
 
         return PrerequisiteCheck(
@@ -240,20 +220,14 @@ class PrerequisiteService:
         )
 
     def check_runtime_available(self) -> PrerequisiteCheck:
-        """
-        Check whether the underlying runtime capability is available.
-
-        On Windows this currently means WSL2.
-        """
+        """Check whether the underlying runtime capability is available."""
 
         if self.runtime.is_available():
             return PrerequisiteCheck(
                 key="runtime_available",
                 label="Runtime capability",
                 state=PrerequisiteState.PASS,
-                message=(
-                    f"{self.runtime.name} is available."
-                ),
+                message=f"{self.runtime.name} is available.",
             )
 
         return PrerequisiteCheck(
@@ -292,9 +266,7 @@ class PrerequisiteService:
             key="runtime_installed",
             label="WEAVE runtime",
             state=PrerequisiteState.ACTION_REQUIRED,
-            message=(
-                "WEAVE CBT runtime has not been provisioned yet."
-            ),
+            message="WEAVE CBT runtime has not been provisioned yet.",
         )
 
     def check_runtime_running(self) -> PrerequisiteCheck:
@@ -332,18 +304,16 @@ class PrerequisiteService:
             key="runtime_running",
             label="Runtime state",
             state=PrerequisiteState.ACTION_REQUIRED,
-            message=(
-                "WEAVE CBT runtime is installed but not currently running."
-            ),
+            message="WEAVE CBT runtime is installed but not currently running.",
         )
 
     def check_docker(self) -> PrerequisiteCheck:
         """
         Check Docker readiness inside the runtime.
 
-        Docker is only inspected when the runtime is already running.
-        This avoids starting WSL or another runtime merely to perform a
-        prerequisite check.
+        Docker is only inspected when the runtime is already running. This
+        avoids starting WSL or another runtime merely to perform a prerequisite
+        check.
         """
 
         if not self.runtime.is_available():
@@ -352,8 +322,8 @@ class PrerequisiteService:
                 label="Docker Engine",
                 state=PrerequisiteState.ACTION_REQUIRED,
                 message=(
-                    "Docker cannot be checked until the runtime "
-                    "capability is available."
+                    "Docker cannot be checked until the runtime capability "
+                    "is available."
                 ),
             )
 
@@ -363,8 +333,8 @@ class PrerequisiteService:
                 label="Docker Engine",
                 state=PrerequisiteState.ACTION_REQUIRED,
                 message=(
-                    "Docker will be available after the WEAVE CBT "
-                    "runtime is provisioned."
+                    "Docker will be available after the WEAVE CBT runtime "
+                    "is provisioned."
                 ),
             )
 
@@ -373,9 +343,7 @@ class PrerequisiteService:
                 key="docker",
                 label="Docker Engine",
                 state=PrerequisiteState.ACTION_REQUIRED,
-                message=(
-                    "Runtime must be started before Docker can be checked."
-                ),
+                message="Runtime must be started before Docker can be checked.",
             )
 
         status = self.docker.status()
@@ -407,9 +375,7 @@ class PrerequisiteService:
                 key="docker",
                 label="Docker Engine",
                 state=PrerequisiteState.ACTION_REQUIRED,
-                message=(
-                    "Docker Engine is installed but not currently running."
-                ),
+                message="Docker Engine is installed but not currently running.",
             )
 
         return PrerequisiteCheck(
