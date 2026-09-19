@@ -21,7 +21,7 @@ __pycache__/
 .coverage.*
 coverage.xml
 htmlcov/
-build_metadata.py
+
 # Python virtual environments and build output
 .venv/
 venv/
@@ -92,6 +92,5 @@ $RECYCLE.BIN/
 *.orig
 *~
 
-
-#ignored files
-src/weave_cbt_manager/generated_build.py
+# Manager build metadata generated locally or by CI
+deployment/manager/src/weave_cbt_manager/generated_build.py
