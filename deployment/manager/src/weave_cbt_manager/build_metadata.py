@@ -25,7 +25,7 @@ class BuildEnvironment(str, Enum):
     """Supported WEAVE environments for a Manager build."""
 
     DEV = "dev"
-    STAGING = "staging"
+    STAGING = "stg"
     PROD = "prod"
 
 
