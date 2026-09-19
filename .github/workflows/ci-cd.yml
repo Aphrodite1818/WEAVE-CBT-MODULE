@@ -138,15 +138,19 @@ jobs:
           nginx -t
 
 
-  migration-runtime-check:
-    name: Compiled migration smoke test
+  publish-image:
+    name: Build and publish WEAVE CBT image
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' &&
       (github.ref == 'refs/heads/deployment-implementation' ||
       startsWith(github.ref, 'refs/tags/v')))
-    needs: [backend-test, deployment-check]
+    needs: [backend-test, frontend-check, deployment-check]
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
 
     services:
       postgres:
@@ -180,7 +184,17 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build migration runtime only
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Compile the unified backend once and exercise its migration mode before
+      # building/pushing the final image. The same BuildKit builder is reused by
+      # the final image step, so the expensive backend stage stays locally cached.
+      - name: Build unified backend migration smoke image
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -188,11 +202,8 @@ jobs:
           target: migration-runtime
           platforms: linux/amd64
           load: true
-          tags: weave-cbt-migrate-smoke:${{ github.sha }}
-          cache-from: |
-            type=gha,scope=weave-cbt-migrate
-            type=gha
-          cache-to: type=gha,mode=max,scope=weave-cbt-migrate
+          tags: weave-cbt-runtime-smoke:${{ github.sha }}
+          cache-from: type=gha
 
       - name: Run compiled migration against PostgreSQL
         run: >-
@@ -202,7 +213,7 @@ jobs:
           -e REDIS_URL=redis://127.0.0.1:6379/15
           -e ENVIRONMENT=prod
           -e DEBUG=false
-          weave-cbt-migrate-smoke:${{ github.sha }}
+          weave-cbt-runtime-smoke:${{ github.sha }}
 
       - name: Verify compiled migration is idempotent
         run: >-
@@ -212,40 +223,7 @@ jobs:
           -e REDIS_URL=redis://127.0.0.1:6379/15
           -e ENVIRONMENT=prod
           -e DEBUG=false
-          weave-cbt-migrate-smoke:${{ github.sha }}
-
-
-  publish-image:
-    name: Build and publish WEAVE CBT image
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' &&
-      (github.ref == 'refs/heads/deployment-implementation' ||
-      startsWith(github.ref, 'refs/tags/v')))
-    needs:
-      - backend-test
-      - frontend-check
-      - deployment-check
-      - migration-runtime-check
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          weave-cbt-runtime-smoke:${{ github.sha }}
 
       - name: Generate image metadata
         id: meta
@@ -268,7 +246,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: |
-            type=gha
-            type=gha,scope=weave-cbt-migrate
+          cache-from: type=gha
           cache-to: type=gha,mode=max
