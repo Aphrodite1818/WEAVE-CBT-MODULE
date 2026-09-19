@@ -159,9 +159,7 @@ class WindowsWSLRuntime(RuntimeProvider):
         if self.is_available():
             return RuntimePreparationResult(reboot_required=False)
 
-        wsl = self._wsl_executable()
-
-        if wsl is None:
+        if self._wsl_executable() is None:
             raise RuntimeError(
                 "wsl.exe is not available on this Windows installation."
             )
@@ -264,6 +262,8 @@ class WindowsWSLRuntime(RuntimeProvider):
             [
                 "--distribution",
                 WEAVE_DISTRO_NAME,
+                "--user",
+                "root",
                 "--",
                 "true",
             ]
@@ -316,6 +316,8 @@ class WindowsWSLRuntime(RuntimeProvider):
             [
                 "--distribution",
                 WEAVE_DISTRO_NAME,
+                "--user",
+                "root",
                 "--",
                 *command,
             ],
