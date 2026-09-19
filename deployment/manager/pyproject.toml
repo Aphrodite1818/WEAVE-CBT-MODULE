@@ -5,33 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "weave-cbt-manager"
 version = "0.1.0"
-description = "Desktop and CLI deployment manager for WEAVE CBT"
+description = "WEAVE CBT deployment manager"
 requires-python = ">=3.11"
-dependencies = [
-    "PySide6>=6.8,<7",
-    "httpx>=0.28,<1",
-    "psutil>=6,<8",
-    "typer>=0.15,<1",
-    "rich>=13,<15",
-]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=8,<9",
-    "pytest-asyncio>=0.25,<1",
-    "nuitka>=2.7,<3",
-]
-
-[project.scripts]
-weave-cbt-manager = "weave_cbt_manager.__main__:main"
-weave-cbt = "weave_cbt_manager.cli:app"
-
-[tool.setuptools]
-package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["src"]
+# Planned runtime tools for implementation phase:
+# - PySide6: desktop GUI
+# - Typer + Rich: CLI
+# - httpx: HTTP/update/health interactions
+# - psutil: host prerequisite checks
+# - Nuitka: compiled distribution
