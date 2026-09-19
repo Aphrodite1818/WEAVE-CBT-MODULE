@@ -10,6 +10,7 @@ BACKEND_ROOT="${REPO_ROOT}/backend"
 ENTRYPOINT="${APP_DIR}/entrypoints/runtime.py"
 OPTIONS_FILE="${SCRIPT_DIR}/common-options.txt"
 OUTPUT_DIR="${APP_DIR}/build/nuitka/runtime"
+CANONICAL_DIST_DIR="${OUTPUT_DIR}/weave-cbt.dist"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 
 export PYTHONPATH="${BACKEND_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
@@ -46,6 +47,14 @@ if [[ -z "${DIST_DIR}" ]]; then
     exit 1
 fi
 
+# Give Docker a stable artifact path regardless of Nuitka's entrypoint-derived
+# .dist directory name.
+if [[ "${DIST_DIR}" != "${CANONICAL_DIST_DIR}" ]]; then
+    rm -rf "${CANONICAL_DIST_DIR}"
+    mv "${DIST_DIR}" "${CANONICAL_DIST_DIR}"
+    DIST_DIR="${CANONICAL_DIST_DIR}"
+fi
+
 MIGRATION_DIR="${DIST_DIR}/migrations"
 mkdir -p "${MIGRATION_DIR}"
 
@@ -72,6 +81,8 @@ find "${MIGRATION_DIR}/alembic" \
     -type f \
     -name "*.py" \
     -delete
+
+test -x "${DIST_DIR}/weave-cbt"
 
 echo "Unified WEAVE CBT runtime build created at:"
 echo "${DIST_DIR}"
