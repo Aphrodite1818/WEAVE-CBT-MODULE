@@ -1,30 +1,28 @@
-"""Windows platform implementation of the primary Platform Adapter."""
+"""Windows implementation of the host PlatformAdapter."""
 
 from __future__ import annotations
 
 import ctypes
+import ipaddress
 import os
 import platform
 import shutil
-import subprocess
-import winreg
+import socket
 from pathlib import Path
 
 import psutil
 
-from manager.src.weave_cbt_manager.platforms.base import (
-    DiskSpace,
-    PlatformAdapter,
-    SystemMemory,
-)
+from .base import DiskSpace, PlatformAdapter, SystemMemory
 
 
 class WindowsPlatform(PlatformAdapter):
     """
-    Windows-specific platform adapter.
+    Read-only Windows host adapter.
 
-    This implementation is intentionally read-only during the prerequisite
-    phase. It only inspects host state and does not modify the machine.
+    This class inspects Windows itself. It deliberately does not manage Docker,
+    WSL, or containers; those responsibilities belong to the runtime-provider
+    layer so they can run in the background without exposing container-runtime
+    management to normal WEAVE CBT users.
     """
 
     @property
@@ -51,7 +49,6 @@ class WindowsPlatform(PlatformAdapter):
         if program_data:
             return Path(program_data) / "WeaveCBT"
 
-        # Safe fallback for unusual Windows environments.
         return Path("C:/ProgramData/WeaveCBT")
 
     def is_supported(self) -> bool:
@@ -81,198 +78,61 @@ class WindowsPlatform(PlatformAdapter):
             free_bytes=usage.free,
         )
 
-    def docker_desktop_install_path(self) -> Path | None:
+    def lan_ip(self) -> str | None:
         """
-        Attempt to discover Docker Desktop's installation directory.
+        Return the preferred physical/LAN IPv4 address for the Windows host.
 
-        Registry detection is preferred so custom Docker Desktop installation
-        locations can be discovered. Conventional locations are used as
-        fallbacks.
+        Virtual adapters such as WSL, Hyper-V, Docker, VMware, and VirtualBox
+        are deprioritized so the Manager is less likely to display an internal
+        virtual-network address to students or staff.
         """
 
-        registry_locations = (
-            (
-                winreg.HKEY_LOCAL_MACHINE,
-                r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
-            ),
-            (
-                winreg.HKEY_LOCAL_MACHINE,
-                r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
-            ),
-            (
-                winreg.HKEY_CURRENT_USER,
-                r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
-            ),
+        interface_stats = psutil.net_if_stats()
+        preferred: list[str] = []
+        fallback: list[str] = []
+
+        virtual_interface_markers = (
+            "loopback",
+            "vethernet",
+            "wsl",
+            "docker",
+            "hyper-v",
+            "vmware",
+            "virtualbox",
         )
 
-        for hive, uninstall_path in registry_locations:
-            try:
-                with winreg.OpenKey(hive, uninstall_path) as uninstall_key:
-                    subkey_count = winreg.QueryInfoKey(uninstall_key)[0]
+        for interface_name, addresses in psutil.net_if_addrs().items():
+            stats = interface_stats.get(interface_name)
 
-                    for index in range(subkey_count):
-                        try:
-                            subkey_name = winreg.EnumKey(uninstall_key, index)
-
-                            with winreg.OpenKey(
-                                uninstall_key,
-                                subkey_name,
-                            ) as application_key:
-                                try:
-                                    display_name, _ = winreg.QueryValueEx(
-                                        application_key,
-                                        "DisplayName",
-                                    )
-                                except FileNotFoundError:
-                                    continue
-
-                                if str(display_name).strip().lower() != "docker desktop":
-                                    continue
-
-                                try:
-                                    install_location, _ = winreg.QueryValueEx(
-                                        application_key,
-                                        "InstallLocation",
-                                    )
-
-                                    install_path = Path(
-                                        str(install_location).strip().strip('"')
-                                    )
-
-                                    if install_path.exists():
-                                        return install_path
-
-                                except FileNotFoundError:
-                                    pass
-
-                                try:
-                                    display_icon, _ = winreg.QueryValueEx(
-                                        application_key,
-                                        "DisplayIcon",
-                                    )
-
-                                    icon_value = str(display_icon).strip().strip('"')
-
-                                    # DisplayIcon can sometimes look like:
-                                    # C:\...\Docker Desktop.exe,0
-                                    icon_path = Path(
-                                        icon_value.rsplit(",", 1)[0].strip('"')
-                                    )
-
-                                    if icon_path.is_file():
-                                        return icon_path.parent
-
-                                except FileNotFoundError:
-                                    pass
-
-                        except OSError:
-                            continue
-
-            except (FileNotFoundError, PermissionError, OSError):
+            if stats is not None and not stats.isup:
                 continue
 
-        # Fallback to conventional Docker Desktop locations.
-        fallback_locations = [
-            Path(os.getenv("PROGRAMFILES", "C:/Program Files"))
-            / "Docker"
-            / "Docker",
-            Path(os.getenv("LOCALAPPDATA", ""))
-            / "Docker",
-        ]
+            interface_is_virtual = any(
+                marker in interface_name.lower()
+                for marker in virtual_interface_markers
+            )
 
-        for path in fallback_locations:
-            if (path / "Docker Desktop.exe").is_file():
-                return path
+            for address in addresses:
+                if address.family != socket.AF_INET:
+                    continue
+
+                try:
+                    ip = ipaddress.ip_address(address.address)
+                except ValueError:
+                    continue
+
+                if ip.is_loopback or ip.is_link_local or ip.is_unspecified:
+                    continue
+
+                if ip.is_private and not interface_is_virtual:
+                    preferred.append(address.address)
+                else:
+                    fallback.append(address.address)
+
+        if preferred:
+            return preferred[0]
+
+        if fallback:
+            return fallback[0]
 
         return None
-
-    def docker_desktop_installed(self) -> bool:
-        return self.docker_desktop_install_path() is not None
-
-    def docker_executable(self) -> Path | None:
-        """
-        Locate the Docker CLI executable.
-
-        PATH lookup is preferred because it works regardless of where Docker
-        was installed, provided Docker was correctly added to PATH.
-
-        If Docker is not present in PATH, the Docker Desktop installation
-        directory and conventional Docker locations are checked.
-        """
-
-        executable = shutil.which("docker")
-
-        if executable:
-            return Path(executable)
-
-        docker_install_path = self.docker_desktop_install_path()
-
-        if docker_install_path:
-            candidates = [
-                docker_install_path / "resources" / "bin" / "docker.exe",
-                docker_install_path / "docker.exe",
-            ]
-
-            for candidate in candidates:
-                if candidate.is_file():
-                    return candidate
-
-        # Final fallback for conventional Docker Desktop installations.
-        program_files = Path(
-            os.getenv("PROGRAMFILES", "C:/Program Files")
-        )
-
-        fallback_candidates = [
-            program_files
-            / "Docker"
-            / "Docker"
-            / "resources"
-            / "bin"
-            / "docker.exe",
-        ]
-
-        for candidate in fallback_candidates:
-            if candidate.is_file():
-                return candidate
-
-        return None
-
-    def docker_engine_running(self) -> bool:
-        docker = self.docker_executable()
-
-        if docker is None:
-            return False
-
-        try:
-            result = subprocess.run(
-                [str(docker), "info"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=10,
-                check=False,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            return False
-
-        return result.returncode == 0
-
-    def docker_compose_available(self) -> bool:
-        docker = self.docker_executable()
-
-        if docker is None:
-            return False
-
-        try:
-            result = subprocess.run(
-                [str(docker), "compose", "version"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=10,
-                check=False,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            return False
-
-        return result.returncode == 0
