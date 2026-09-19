@@ -7,10 +7,12 @@ name = "weave-cbt-manager"
 version = "0.1.0"
 description = "WEAVE CBT deployment manager"
 requires-python = ">=3.11"
+dependencies = [
+    "psutil>=5.9",
+]
 
-# Planned runtime tools for implementation phase:
+# Planned runtime tools for later implementation phases:
 # - PySide6: desktop GUI
 # - Typer + Rich: CLI
 # - httpx: HTTP/update/health interactions
-# - psutil: host prerequisite checks
 # - Nuitka: compiled distribution
