@@ -192,7 +192,7 @@ class Settings(BaseSettings):
     #
     # Schools should not manually configure this during installation.
     # Development and staging environments may override it.
-    WEAVE_API_BASE_URL: AnyHttpUrl = "https://api.weavecloudspace.com"
+    WEAVE_API_BASE_URL: AnyHttpUrl
 
     WEAVE_REQUEST_TIMEOUT_SECONDS: float = Field(
         default=10.0,
