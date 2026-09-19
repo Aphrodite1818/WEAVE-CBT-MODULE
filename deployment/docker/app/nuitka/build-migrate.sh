@@ -37,8 +37,12 @@ mkdir -p "${OUTPUT_DIR}"
 
 
 # Compile the migration runner.
+# Alembic loads migrations/alembic/env.py dynamically at runtime, so Nuitka
+# cannot discover all of that file's imports through normal static analysis.
+# Include logging.config explicitly because env.py imports fileConfig from it.
 "${PYTHON_BIN}" -m nuitka \
     "${NUITKA_OPTIONS[@]}" \
+    --include-module=logging.config \
     --output-dir="${OUTPUT_DIR}" \
     --output-filename="weave-cbt-migrate" \
     "${ENTRYPOINT}"
