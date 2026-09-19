@@ -16,7 +16,8 @@ PYTHON_BIN="${PYTHON_BIN:-python}"
 export PYTHONPATH="${BACKEND_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
 NUITKA_OPTIONS=()
-while IFS= read -r option; do
+# Process the final option even when common-options.txt has no trailing newline.
+while IFS= read -r option || [[ -n "${option}" ]]; do
     [[ -z "${option}" ]] && continue
     [[ "${option}" =~ ^[[:space:]]*# ]] && continue
     NUITKA_OPTIONS+=("${option}")
