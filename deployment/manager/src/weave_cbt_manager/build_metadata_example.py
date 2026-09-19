@@ -1,7 +1,0 @@
-# generated_build.py.example
-#
-# Copy this file to generated_build.py for local development.
-# CI generates generated_build.py automatically for packaged builds.
-
-ENVIRONMENT = "dev"
-WEAVE_API_BASE_URL = "http://localhost:8000"
