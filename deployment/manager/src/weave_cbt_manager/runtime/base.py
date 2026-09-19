@@ -1,1 +1,0 @@
-"""Runtime provider abstraction scaffold."""
