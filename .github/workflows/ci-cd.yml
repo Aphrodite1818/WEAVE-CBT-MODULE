@@ -10,12 +10,6 @@ on:
       - '.github/workflows/ci-cd.yml'
   workflow_dispatch:
     inputs:
-      channel:
-        description: Installer channel
-        required: true
-        type: choice
-        options: [staging, production]
-        default: staging
       version:
         description: Manager installer version
         required: true
@@ -24,19 +18,15 @@ on:
         description: CBT application version represented by the pinned image
         required: true
         default: '0.1.0'
-      api_base_url:
-        description: WEAVE API base URL. Leave blank for production default or staging repository variable.
-        required: false
-        default: ''
       weave_image:
         description: Existing stable GHCR image. This workflow does not rebuild the backend image.
         required: true
         default: 'ghcr.io/aphrodite1818/weave-cbt-module:sha-7604735'
       publish:
-        description: Publish installer to GitHub Releases after a successful build
+        description: Publish/update the production and staging channel releases
         required: true
         type: boolean
-        default: false
+        default: true
       release_notes:
         description: Short release notes
         required: false
@@ -97,11 +87,23 @@ jobs:
           retention-days: 7
 
   windows-installer:
-    name: Build unsigned Windows installer
+    name: Build ${{ matrix.channel }} Windows installer
     runs-on: windows-latest
     needs: [manager-tests, runtime-rootfs]
     permissions:
       contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - channel: production
+            build_env: prod
+            api_url: https://api.weavecloudspace.com
+            release_tag: manager-production-latest
+          - channel: staging
+            build_env: stg
+            api_url: https://weave-container-staging.up.railway.app
+            release_tag: manager-staging-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -116,26 +118,10 @@ jobs:
         id: identity
         shell: pwsh
         env:
-          INPUT_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'production' }}
           INPUT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '0.1.0' }}
           INPUT_CBT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.cbt_version || '0.1.0' }}
-          INPUT_API_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.api_base_url || '' }}
-          STAGING_API_URL: ${{ vars.WEAVE_STAGING_API_BASE_URL }}
           INPUT_IMAGE: ${{ github.event_name == 'workflow_dispatch' && inputs.weave_image || 'ghcr.io/aphrodite1818/weave-cbt-module:sha-7604735' }}
         run: |
-          $channel = $env:INPUT_CHANNEL
-          $api = $env:INPUT_API_URL.Trim()
-          if (-not $api) {
-            if ($channel -eq 'production') { $api = 'https://api.weavecloudspace.com' }
-            else {
-              $api = $env:STAGING_API_URL.Trim()
-              if (-not $api) { throw 'Set repository variable WEAVE_STAGING_API_BASE_URL or provide api_base_url when building the staging installer.' }
-            }
-          }
-          $buildEnv = if ($channel -eq 'staging') { 'stg' } else { 'prod' }
-          "channel=$channel" >> $env:GITHUB_OUTPUT
-          "build_env=$buildEnv" >> $env:GITHUB_OUTPUT
-          "api_url=$api" >> $env:GITHUB_OUTPUT
           "version=$env:INPUT_VERSION" >> $env:GITHUB_OUTPUT
           "cbt_version=$env:INPUT_CBT_VERSION" >> $env:GITHUB_OUTPUT
           "image=$env:INPUT_IMAGE" >> $env:GITHUB_OUTPUT
@@ -143,7 +129,7 @@ jobs:
         id: manager
         shell: pwsh
         run: |
-          $dist = & deployment/manager/build/build-manager.ps1 -Environment '${{ steps.identity.outputs.build_env }}' -ApiBaseUrl '${{ steps.identity.outputs.api_url }}' -WeaveImage '${{ steps.identity.outputs.image }}' -CbtVersion '${{ steps.identity.outputs.cbt_version }}' -OutputDirectory '${{ github.workspace }}\deployment\manager\build-output' | Select-Object -Last 1
+          $dist = & deployment/manager/build/build-manager.ps1 -Environment '${{ matrix.build_env }}' -ApiBaseUrl '${{ matrix.api_url }}' -WeaveImage '${{ steps.identity.outputs.image }}' -CbtVersion '${{ steps.identity.outputs.cbt_version }}' -OutputDirectory '${{ github.workspace }}\deployment\manager\build-output-${{ matrix.channel }}' | Select-Object -Last 1
           if (-not (Test-Path $dist)) { throw "Manager distribution not found: $dist" }
           "dist=$dist" >> $env:GITHUB_OUTPUT
       - name: Install Inno Setup
@@ -152,47 +138,71 @@ jobs:
       - name: Compile installer
         shell: pwsh
         run: |
-          $output = '${{ github.workspace }}\deployment\manager\installer-output'
+          $output = '${{ github.workspace }}\deployment\manager\installer-output-${{ matrix.channel }}'
           New-Item -ItemType Directory -Force $output | Out-Null
-          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' "/DAppVersion=${{ steps.identity.outputs.version }}" "/DBuildChannel=${{ steps.identity.outputs.channel }}" "/DManagerDist=${{ steps.manager.outputs.dist }}" "/DRuntimeRootfs=${{ github.workspace }}\deployment\manager\runtime\distro\weave-runtime-rootfs.tar" "/DOutputDir=$output" 'deployment\manager\installer\WeaveCBT.iss'
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' "/DAppVersion=${{ steps.identity.outputs.version }}" "/DBuildChannel=${{ matrix.channel }}" "/DManagerDist=${{ steps.manager.outputs.dist }}" "/DRuntimeRootfs=${{ github.workspace }}\deployment\manager\runtime\distro\weave-runtime-rootfs.tar" "/DOutputDir=$output" 'deployment\manager\installer\WeaveCBT.iss'
           if ($LASTEXITCODE -ne 0) { throw 'Inno Setup failed.' }
       - name: Generate release metadata and SHA-256
         id: release
         shell: pwsh
         env:
-          RELEASE_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'CI validation build.' }}
+          RELEASE_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'Environment-specific WEAVE CBT Windows installer.' }}
         run: |
-          $output = '${{ github.workspace }}\deployment\manager\installer-output'
+          $output = '${{ github.workspace }}\deployment\manager\installer-output-${{ matrix.channel }}'
           $installer = Get-ChildItem $output -Filter '*.exe' | Select-Object -First 1
           if (-not $installer) { throw 'Installer EXE was not produced.' }
           $sha = (Get-FileHash -Algorithm SHA256 $installer.FullName).Hash.ToLowerInvariant()
           "$sha  $($installer.Name)" | Set-Content (Join-Path $output 'SHA256SUMS.txt') -Encoding ASCII
-          $manifest = [ordered]@{ schema_version=1; channel='${{ steps.identity.outputs.channel }}'; manager_version='${{ steps.identity.outputs.version }}'; cbt_version='${{ steps.identity.outputs.cbt_version }}'; minimum_supported_version='0.1.0'; image='${{ steps.identity.outputs.image }}'; installer_asset=$installer.Name; installer_sha256=$sha; release_notes=$env:RELEASE_NOTES; source_commit='${{ github.sha }}' }
+          $installerUrl = 'https://github.com/${{ github.repository }}/releases/download/${{ matrix.release_tag }}/' + $installer.Name
+          $manifest = [ordered]@{
+            schema_version=1
+            channel='${{ matrix.channel }}'
+            manager_version='${{ steps.identity.outputs.version }}'
+            cbt_version='${{ steps.identity.outputs.cbt_version }}'
+            minimum_supported_version='0.1.0'
+            image='${{ steps.identity.outputs.image }}'
+            installer_asset=$installer.Name
+            installer_url=$installerUrl
+            installer_sha256=$sha
+            release_notes=$env:RELEASE_NOTES
+            source_commit='${{ github.sha }}'
+          }
           $manifest | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $output 'release.json') -Encoding UTF8
           "installer_name=$($installer.Name)" >> $env:GITHUB_OUTPUT
       - uses: actions/upload-artifact@v6
         with:
-          name: weave-cbt-windows-${{ steps.identity.outputs.channel }}
+          name: weave-cbt-windows-${{ matrix.channel }}
           path: |
-            deployment/manager/installer-output/*.exe
-            deployment/manager/installer-output/SHA256SUMS.txt
-            deployment/manager/installer-output/release.json
+            deployment/manager/installer-output-${{ matrix.channel }}/*.exe
+            deployment/manager/installer-output-${{ matrix.channel }}/SHA256SUMS.txt
+            deployment/manager/installer-output-${{ matrix.channel }}/release.json
           if-no-files-found: error
           retention-days: 14
-      - name: Publish release
-        if: github.event_name == 'workflow_dispatch' && inputs.publish
+      - name: Publish channel release
+        if: github.event_name == 'push' || inputs.publish
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $channel='${{ steps.identity.outputs.channel }}'; $version='${{ steps.identity.outputs.version }}'; $output='${{ github.workspace }}\deployment\manager\installer-output'
-          if ($channel -eq 'staging') {
-            $tag='manager-staging-latest'; gh release delete $tag --cleanup-tag -y 2>$null
-            gh release create $tag "$output\${{ steps.release.outputs.installer_name }}" "$output\SHA256SUMS.txt" "$output\release.json" --title "WEAVE CBT Staging $version" --notes '${{ inputs.release_notes }}' --prerelease --target '${{ github.sha }}'
-          } else {
-            $tag="manager-v$version"
-            gh release create $tag "$output\${{ steps.release.outputs.installer_name }}" "$output\SHA256SUMS.txt" "$output\release.json" --title "WEAVE CBT $version" --notes '${{ inputs.release_notes }}' --target '${{ github.sha }}'
+          $tag='${{ matrix.release_tag }}'
+          $output='${{ github.workspace }}\deployment\manager\installer-output-${{ matrix.channel }}'
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release delete $tag --cleanup-tag --yes
+            if ($LASTEXITCODE -ne 0) { throw "Unable to replace existing release $tag." }
           }
+          $args = @(
+            'release', 'create', $tag,
+            "$output\${{ steps.release.outputs.installer_name }}",
+            "$output\SHA256SUMS.txt",
+            "$output\release.json",
+            '--title', "WEAVE CBT ${{ matrix.channel }} ${{ steps.identity.outputs.version }}",
+            '--notes', '${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'Environment-specific WEAVE CBT Windows installer.' }}',
+            '--target', '${{ github.sha }}'
+          )
+          if ('${{ matrix.channel }}' -eq 'staging') { $args += '--prerelease' }
+          gh @args
+          if ($LASTEXITCODE -ne 0) { throw "Unable to publish release $tag." }
 
   # Backend image publishing is intentionally disabled for this installer pass.
   # The existing compiled CBT image is pinned through WEAVE_IMAGE and is not rebuilt here.
