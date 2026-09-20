@@ -9,6 +9,7 @@ param(
 $ErrorActionPreference = "Stop"
 $ManagerRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $GeneratedBuild = Join-Path $ManagerRoot "src\weave_cbt_manager\generated_build.py"
+$BootstrapEntry = Join-Path $ManagerRoot "build\manager_entry.py"
 $OutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory)
 
 @"
@@ -24,16 +25,26 @@ python -m pip install -e "$ManagerRoot" nuitka ordered-set zstandard
 if (Test-Path $OutputDirectory) { Remove-Item $OutputDirectory -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 
+# Compile a normal bootstrap script which imports weave_cbt_manager by its
+# package name. Compiling package/__main__.py directly can lose package context
+# and make relative imports fail before the GUI can appear.
 python -m nuitka `
   --standalone `
   --assume-yes-for-downloads `
   --enable-plugin=pyside6 `
+  --include-package=weave_cbt_manager `
   --windows-console-mode=disable `
   --windows-uac-admin `
   --output-filename=WeaveCBT-Manager.exe `
   --output-dir="$OutputDirectory" `
-  "$ManagerRoot\src\weave_cbt_manager\__main__.py"
+  "$BootstrapEntry"
+
+if ($LASTEXITCODE -ne 0) { throw "Nuitka Manager build failed." }
 
 $Dist = Get-ChildItem -Path $OutputDirectory -Directory -Filter "*.dist" | Select-Object -First 1
 if (-not $Dist) { throw "Nuitka standalone output directory was not created." }
+
+$ManagerExe = Join-Path $Dist.FullName "WeaveCBT-Manager.exe"
+if (-not (Test-Path $ManagerExe)) { throw "Compiled Manager executable was not created: $ManagerExe" }
+
 Write-Output $Dist.FullName
