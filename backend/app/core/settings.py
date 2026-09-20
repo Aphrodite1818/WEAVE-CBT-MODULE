@@ -191,7 +191,7 @@ class Settings(BaseSettings):
     # The official Weave endpoint is part of the packaged product.
     #
     # Schools should not manually configure this during installation.
-    # Development and staging environments may override it.
+    # Development environment may override it 
     WEAVE_API_BASE_URL: AnyHttpUrl
 
     WEAVE_REQUEST_TIMEOUT_SECONDS: float = Field(
