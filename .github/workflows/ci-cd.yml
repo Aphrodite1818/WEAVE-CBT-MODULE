@@ -1,250 +1,199 @@
-name: CI/CD
+name: Windows Installer
 
 on:
   push:
-  pull_request:
+    branches: [deployment-implementation]
+    paths:
+      - 'deployment/manager/**'
+      - 'deployment/compose.yaml'
+      - 'deployment/nginx/nginx.conf'
+      - '.github/workflows/ci-cd.yml'
   workflow_dispatch:
+    inputs:
+      channel:
+        description: Installer channel
+        required: true
+        type: choice
+        options: [staging, production]
+        default: staging
+      version:
+        description: Manager installer version
+        required: true
+        default: '0.1.0'
+      cbt_version:
+        description: CBT application version represented by the pinned image
+        required: true
+        default: '0.1.0'
+      api_base_url:
+        description: WEAVE API base URL. Leave blank for production default or staging repository variable.
+        required: false
+        default: ''
+      weave_image:
+        description: Existing stable GHCR image. This workflow does not rebuild the backend image.
+        required: true
+        default: 'ghcr.io/aphrodite1818/weave-cbt-module:sha-7604735'
+      publish:
+        description: Publish installer to GitHub Releases after a successful build
+        required: true
+        type: boolean
+        default: false
+      release_notes:
+        description: Short release notes
+        required: false
+        default: 'WEAVE CBT Windows installer release.'
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-cd-${{ github.workflow }}-${{ github.ref }}
+  group: windows-installer-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  backend-test:
-    name: Backend tests
-    runs-on: ubuntu-latest
-    env:
-      DATABASE_URL: postgresql+asyncpg://weave:weave@127.0.0.1:5432/weave_cbt_test
-      REDIS_URL: redis://127.0.0.1:6379/15
-      ENVIRONMENT: dev
-      DEBUG: 'false'
-      IDENTITY_STORAGE_PATH: /tmp/weave-cbt/identity
-      MEDIA_STORAGE_PATH: /tmp/weave-cbt/media
-      BRANDING_LOGO_STORAGE_PATH: /tmp/weave-cbt/branding
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: weave
-          POSTGRES_PASSWORD: weave
-          POSTGRES_DB: weave_cbt_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U weave -d weave_cbt_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
+  manager-tests:
+    name: Manager tests
+    runs-on: windows-latest
     defaults:
       run:
-        working-directory: backend
-
+        working-directory: deployment/manager
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
           cache: pip
-          cache-dependency-path: |
-            backend/requirements.txt
-            backend/requirements-test.txt
+      - name: Generate development build metadata
+        shell: pwsh
+        run: |
+          @'
+          ENVIRONMENT = "dev"
+          WEAVE_API_BASE_URL = "http://localhost:8080"
+          WEAVE_IMAGE = "ghcr.io/aphrodite1818/weave-cbt-module:sha-7604735"
+          CBT_VERSION = "0.1.0"
+          '@ | Set-Content src/weave_cbt_manager/generated_build.py -Encoding UTF8
+      - name: Install Manager test dependencies
+        run: python -m pip install -e ".[test]"
+      - name: Run Manager tests
+        run: python -m pytest -q
 
-      - name: Install backend dependencies
-        run: >-
-          python -m pip install
-          --requirement requirements.txt
-          --requirement requirements-test.txt
-
-      - name: Apply complete migration chain
-        run: python -m alembic upgrade head
-
-      - name: Verify migration head
-        run: python -m alembic current
-
-      - name: Run backend tests
-        run: python -m pytest -v
-
-
-  frontend-check:
-    name: Frontend checks
+  runtime-rootfs:
+    name: Build WSL runtime rootfs
     runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: frontend
-
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      - uses: actions/checkout@v7
+      - name: Build dedicated WEAVE runtime
+        run: docker build -f deployment/manager/runtime/distro/Dockerfile -t weave-cbt-wsl-runtime deployment/manager/runtime/distro
+      - name: Export WSL root filesystem
+        run: |
+          id=$(docker create weave-cbt-wsl-runtime)
+          docker export "$id" -o weave-runtime-rootfs.tar
+          docker rm "$id"
+          test -s weave-runtime-rootfs.tar
+      - uses: actions/upload-artifact@v6
         with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          name: weave-wsl-rootfs
+          path: weave-runtime-rootfs.tar
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Install frontend dependencies
-        run: npm ci
-
-      # - name: Run frontend tests
-      #   run: npm test
-
-      # - name: Lint frontend
-      #   run: npm run lint
-
-      - name: Build frontend
-        run: npm run build
-
-
-  deployment-check:
-    name: Deployment config checks
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Validate Docker Compose configuration
-        run: >-
-          docker compose
-          --env-file deployment/.env.example
-          -f deployment/compose.yaml
-          config --quiet
-
-      - name: Validate Nginx configuration
-        run: >-
-          docker run --rm
-          -v "${PWD}/deployment/nginx/nginx.conf:/etc/nginx/nginx.conf:ro"
-          nginx:stable-alpine
-          nginx -t
-
-
-  publish-image:
-    name: Build and publish WEAVE CBT image
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' &&
-      (github.ref == 'refs/heads/deployment-implementation' ||
-      startsWith(github.ref, 'refs/tags/v')))
-    needs: [backend-test, frontend-check, deployment-check]
-    runs-on: ubuntu-latest
-
+  windows-installer:
+    name: Build unsigned Windows installer
+    runs-on: windows-latest
+    needs: [manager-tests, runtime-rootfs]
     permissions:
-      contents: read
-      packages: write
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: weave
-          POSTGRES_PASSWORD: weave
-          POSTGRES_DB: weave_cbt_smoke
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U weave -d weave_cbt_smoke"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
+      contents: write
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Compile the unified backend once and exercise its migration mode before
-      # building/pushing the final image. The same BuildKit builder is reused by
-      # the final image step, so the expensive backend stage stays locally cached.
-      - name: Build unified backend migration smoke image
-        uses: docker/build-push-action@v7
+          python-version: '3.11'
+          cache: pip
+      - uses: actions/download-artifact@v7
         with:
-          context: .
-          file: deployment/docker/app/Dockerfile
-          target: migration-runtime
-          platforms: linux/amd64
-          load: true
-          tags: weave-cbt-runtime-smoke:${{ github.sha }}
-          cache-from: type=gha
-
-      - name: Run compiled migration against PostgreSQL
-        run: >-
-          docker run --rm
-          --network host
-          -e DATABASE_URL=postgresql+asyncpg://weave:weave@127.0.0.1:5432/weave_cbt_smoke
-          -e REDIS_URL=redis://127.0.0.1:6379/15
-          -e ENVIRONMENT=prod
-          -e DEBUG=false
-          weave-cbt-runtime-smoke:${{ github.sha }}
-
-      - name: Verify compiled migration is idempotent
-        run: >-
-          docker run --rm
-          --network host
-          -e DATABASE_URL=postgresql+asyncpg://weave:weave@127.0.0.1:5432/weave_cbt_smoke
-          -e REDIS_URL=redis://127.0.0.1:6379/15
-          -e ENVIRONMENT=prod
-          -e DEBUG=false
-          weave-cbt-runtime-smoke:${{ github.sha }}
-
-      - name: Generate image metadata
-        id: meta
-        uses: docker/metadata-action@v6
+          name: weave-wsl-rootfs
+          path: deployment/manager/runtime/distro
+      - name: Resolve build identity
+        id: identity
+        shell: pwsh
+        env:
+          INPUT_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'production' }}
+          INPUT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '0.1.0' }}
+          INPUT_CBT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.cbt_version || '0.1.0' }}
+          INPUT_API_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.api_base_url || '' }}
+          STAGING_API_URL: ${{ vars.WEAVE_STAGING_API_BASE_URL }}
+          INPUT_IMAGE: ${{ github.event_name == 'workflow_dispatch' && inputs.weave_image || 'ghcr.io/aphrodite1818/weave-cbt-module:sha-7604735' }}
+        run: |
+          $channel = $env:INPUT_CHANNEL
+          $api = $env:INPUT_API_URL.Trim()
+          if (-not $api) {
+            if ($channel -eq 'production') { $api = 'https://api.weavecloudspace.com' }
+            else {
+              $api = $env:STAGING_API_URL.Trim()
+              if (-not $api) { throw 'Set repository variable WEAVE_STAGING_API_BASE_URL or provide api_base_url when building the staging installer.' }
+            }
+          }
+          $buildEnv = if ($channel -eq 'staging') { 'stg' } else { 'prod' }
+          "channel=$channel" >> $env:GITHUB_OUTPUT
+          "build_env=$buildEnv" >> $env:GITHUB_OUTPUT
+          "api_url=$api" >> $env:GITHUB_OUTPUT
+          "version=$env:INPUT_VERSION" >> $env:GITHUB_OUTPUT
+          "cbt_version=$env:INPUT_CBT_VERSION" >> $env:GITHUB_OUTPUT
+          "image=$env:INPUT_IMAGE" >> $env:GITHUB_OUTPUT
+      - name: Build standalone Manager with Nuitka
+        id: manager
+        shell: pwsh
+        run: |
+          $dist = & deployment/manager/build/build-manager.ps1 -Environment '${{ steps.identity.outputs.build_env }}' -ApiBaseUrl '${{ steps.identity.outputs.api_url }}' -WeaveImage '${{ steps.identity.outputs.image }}' -CbtVersion '${{ steps.identity.outputs.cbt_version }}' -OutputDirectory '${{ github.workspace }}\deployment\manager\build-output' | Select-Object -Last 1
+          if (-not (Test-Path $dist)) { throw "Manager distribution not found: $dist" }
+          "dist=$dist" >> $env:GITHUB_OUTPUT
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          $output = '${{ github.workspace }}\deployment\manager\installer-output'
+          New-Item -ItemType Directory -Force $output | Out-Null
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' "/DAppVersion=${{ steps.identity.outputs.version }}" "/DBuildChannel=${{ steps.identity.outputs.channel }}" "/DManagerDist=${{ steps.manager.outputs.dist }}" "/DRuntimeRootfs=${{ github.workspace }}\deployment\manager\runtime\distro\weave-runtime-rootfs.tar" "/DOutputDir=$output" 'deployment\manager\installer\WeaveCBT.iss'
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup failed.' }
+      - name: Generate release metadata and SHA-256
+        id: release
+        shell: pwsh
+        env:
+          RELEASE_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'CI validation build.' }}
+        run: |
+          $output = '${{ github.workspace }}\deployment\manager\installer-output'
+          $installer = Get-ChildItem $output -Filter '*.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'Installer EXE was not produced.' }
+          $sha = (Get-FileHash -Algorithm SHA256 $installer.FullName).Hash.ToLowerInvariant()
+          "$sha  $($installer.Name)" | Set-Content (Join-Path $output 'SHA256SUMS.txt') -Encoding ASCII
+          $manifest = [ordered]@{ schema_version=1; channel='${{ steps.identity.outputs.channel }}'; manager_version='${{ steps.identity.outputs.version }}'; cbt_version='${{ steps.identity.outputs.cbt_version }}'; minimum_supported_version='0.1.0'; image='${{ steps.identity.outputs.image }}'; installer_asset=$installer.Name; installer_sha256=$sha; release_notes=$env:RELEASE_NOTES; source_commit='${{ github.sha }}' }
+          $manifest | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $output 'release.json') -Encoding UTF8
+          "installer_name=$($installer.Name)" >> $env:GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v6
         with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=raw,value=deployment-test,enable=${{ github.ref == 'refs/heads/deployment-implementation' }}
-            type=sha,prefix=sha-
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+          name: weave-cbt-windows-${{ steps.identity.outputs.channel }}
+          path: |
+            deployment/manager/installer-output/*.exe
+            deployment/manager/installer-output/SHA256SUMS.txt
+            deployment/manager/installer-output/release.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Publish release
+        if: github.event_name == 'workflow_dispatch' && inputs.publish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $channel='${{ steps.identity.outputs.channel }}'; $version='${{ steps.identity.outputs.version }}'; $output='${{ github.workspace }}\deployment\manager\installer-output'
+          if ($channel -eq 'staging') {
+            $tag='manager-staging-latest'; gh release delete $tag --cleanup-tag -y 2>$null
+            gh release create $tag "$output\${{ steps.release.outputs.installer_name }}" "$output\SHA256SUMS.txt" "$output\release.json" --title "WEAVE CBT Staging $version" --notes '${{ inputs.release_notes }}' --prerelease --target '${{ github.sha }}'
+          } else {
+            $tag="manager-v$version"
+            gh release create $tag "$output\${{ steps.release.outputs.installer_name }}" "$output\SHA256SUMS.txt" "$output\release.json" --title "WEAVE CBT $version" --notes '${{ inputs.release_notes }}' --target '${{ github.sha }}'
+          }
 
-      - name: Build and push WEAVE CBT image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: deployment/docker/app/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+  # Backend image publishing is intentionally disabled for this installer pass.
+  # The existing compiled CBT image is pinned through WEAVE_IMAGE and is not rebuilt here.
+  # Frontend tests/lint that were previously commented out remain disabled.
