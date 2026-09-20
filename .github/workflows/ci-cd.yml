@@ -13,7 +13,7 @@ on:
       version:
         description: Manager installer version
         required: true
-        default: '0.1.0'
+        default: '0.1.1'
       cbt_version:
         description: CBT application version represented by the pinned image
         required: true
@@ -30,7 +30,7 @@ on:
       release_notes:
         description: Short release notes
         required: false
-        default: 'WEAVE CBT Windows installer release.'
+        default: 'WEAVE CBT Windows Manager startup and packaging fix.'
 
 permissions:
   contents: read
@@ -65,6 +65,9 @@ jobs:
         run: python -m pip install -e ".[test]"
       - name: Run Manager tests
         run: python -m pytest -q
+      - name: Exercise Manager self-test from source
+        shell: pwsh
+        run: python -m weave_cbt_manager --self-test
 
   runtime-rootfs:
     name: Build WSL runtime rootfs
@@ -118,7 +121,7 @@ jobs:
         id: identity
         shell: pwsh
         env:
-          INPUT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '0.1.0' }}
+          INPUT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '0.1.1' }}
           INPUT_CBT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.cbt_version || '0.1.0' }}
           INPUT_IMAGE: ${{ github.event_name == 'workflow_dispatch' && inputs.weave_image || 'ghcr.io/aphrodite1818/weave-cbt-module:sha-7604735' }}
         run: |
@@ -132,6 +135,25 @@ jobs:
           $dist = & deployment/manager/build/build-manager.ps1 -Environment '${{ matrix.build_env }}' -ApiBaseUrl '${{ matrix.api_url }}' -WeaveImage '${{ steps.identity.outputs.image }}' -CbtVersion '${{ steps.identity.outputs.cbt_version }}' -OutputDirectory '${{ github.workspace }}\deployment\manager\build-output-${{ matrix.channel }}' | Select-Object -Last 1
           if (-not (Test-Path $dist)) { throw "Manager distribution not found: $dist" }
           "dist=$dist" >> $env:GITHUB_OUTPUT
+      - name: Smoke test compiled Manager executable
+        shell: pwsh
+        run: |
+          $exe = Join-Path '${{ steps.manager.outputs.dist }}' 'WeaveCBT-Manager.exe'
+          if (-not (Test-Path $exe)) { throw "Compiled Manager executable not found: $exe" }
+
+          $process = Start-Process -FilePath $exe -ArgumentList '--self-test' -PassThru
+          if (-not $process.WaitForExit(30000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            throw 'Compiled Manager self-test timed out.'
+          }
+          if ($process.ExitCode -ne 0) {
+            $bootstrapLog = Join-Path $env:PROGRAMDATA 'WeaveCBT\logs\bootstrap-error.log'
+            if (Test-Path $bootstrapLog) {
+              Write-Host '--- bootstrap-error.log ---'
+              Get-Content $bootstrapLog
+            }
+            throw "Compiled Manager self-test failed with exit code $($process.ExitCode)."
+          }
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --no-progress -y
@@ -146,7 +168,7 @@ jobs:
         id: release
         shell: pwsh
         env:
-          RELEASE_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'Environment-specific WEAVE CBT Windows installer.' }}
+          RELEASE_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'WEAVE CBT Windows Manager startup and packaging fix.' }}
         run: |
           $output = '${{ github.workspace }}\deployment\manager\installer-output-${{ matrix.channel }}'
           $installer = Get-ChildItem $output -Filter '*.exe' | Select-Object -First 1
@@ -197,7 +219,7 @@ jobs:
             "$output\SHA256SUMS.txt",
             "$output\release.json",
             '--title', "WEAVE CBT ${{ matrix.channel }} ${{ steps.identity.outputs.version }}",
-            '--notes', '${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'Environment-specific WEAVE CBT Windows installer.' }}',
+            '--notes', '${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'WEAVE CBT Windows Manager startup and packaging fix.' }}',
             '--target', '${{ github.sha }}'
           )
           if ('${{ matrix.channel }}' -eq 'staging') { $args += '--prerelease' }
