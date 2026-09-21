@@ -61,8 +61,23 @@ class ManagerController:
         return self.state_store.load()
 
     def installation_present(self) -> bool:
+        """Return true only for a complete or intentionally retained install.
+
+        Merely finding runtime.env is not enough: a failed first-time setup may
+        have written some deployment files before Docker/health checks failed.
+        Conversely, a normal uninstall intentionally retains a complete local
+        runtime and should be recoverable without asking for new DB credentials.
+        """
+
         try:
-            return self.runtime.is_installed() and self.deployment.config_exists()
+            if not self.runtime.is_installed() or not self.deployment.config_exists():
+                return False
+            state = self.state_store.load()
+            return state.installation_status in {
+                "installed",
+                "retained",
+                "recovery_required",
+            }
         except Exception:
             return False
 
@@ -77,16 +92,55 @@ class ManagerController:
         return result
 
     def install_application(self, *, database_name: str, database_user: str, database_password: str) -> HealthSnapshot:
-        runtime_config = self.config.create_runtime_config(InstallationConfigInput(database_name=database_name, database_user=database_user, database_password=database_password))
-        self.deployment.prepare_assets(runtime_env=render_runtime_env(runtime_config), compose_yaml=self.deployment.read_asset(compose_asset_path()), nginx_config=self.deployment.read_asset(nginx_asset_path()))
-        self.deployment.deploy()
-        snapshot = self.health.wait_until_healthy(timeout_seconds=180)
-        if not snapshot.healthy:
-            raise RuntimeError(f"WEAVE CBT did not become healthy: {snapshot.detail}")
+        self.state_store.update(
+            installation_status="configuring",
+            channel=BUILD_METADATA.channel,
+            manager_version=__version__,
+            last_error=None,
+        )
+        try:
+            runtime_config = self.config.create_runtime_config(
+                InstallationConfigInput(
+                    database_name=database_name,
+                    database_user=database_user,
+                    database_password=database_password,
+                )
+            )
+            self.deployment.prepare_assets(
+                runtime_env=render_runtime_env(runtime_config),
+                compose_yaml=self.deployment.read_asset(compose_asset_path()),
+                nginx_config=self.deployment.read_asset(nginx_asset_path()),
+            )
+            self.deployment.deploy()
+            snapshot = self.health.wait_until_healthy(timeout_seconds=180)
+            if not snapshot.healthy:
+                raise RuntimeError(f"WEAVE CBT did not become healthy: {snapshot.detail}")
+        except Exception as exc:
+            self.state_store.update(
+                installation_status="setup_failed",
+                channel=BUILD_METADATA.channel,
+                manager_version=__version__,
+                last_error=str(exc),
+            )
+            raise
+
         state = self.state_store.load()
-        state.mark_installed(channel=BUILD_METADATA.channel, manager_version=__version__, cbt_version=BUILD_METADATA.cbt_version, image=BUILD_METADATA.weave_image)
+        state.mark_installed(
+            channel=BUILD_METADATA.channel,
+            manager_version=__version__,
+            cbt_version=BUILD_METADATA.cbt_version,
+            image=BUILD_METADATA.weave_image,
+        )
         self.state_store.save(state)
-        self.startup.install_tasks()
+
+        # The local server is already healthy at this point. Scheduled-task
+        # creation is desirable for reboot persistence, but must not turn a
+        # healthy installation into a false setup failure. The dashboard also
+        # retries task registration whenever it is opened.
+        try:
+            self.startup.install_tasks()
+        except Exception:
+            logger.exception("WEAVE CBT installed, but startup tasks could not be registered yet.")
         return snapshot
 
     def status(self) -> HealthSnapshot:
