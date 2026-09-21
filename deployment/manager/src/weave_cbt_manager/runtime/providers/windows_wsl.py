@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
+import logging
+import os
 import shutil
 import subprocess
-from pathlib import Path
-from tempfile import TemporaryFile
+import tempfile
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from time import sleep
-from typing import BinaryIO, Sequence
+from typing import Sequence
 
 from ..base import (
     RuntimeCommandResult,
@@ -15,6 +18,8 @@ from ..base import (
     RuntimeProvider,
 )
 
+
+logger = logging.getLogger(__name__)
 
 WEAVE_DISTRO_NAME = "WeaveCBT"
 _WSL_BOOT_CONFIG_COMMAND = (
@@ -60,35 +65,25 @@ class WindowsWSLRuntime(RuntimeProvider):
         arguments: Sequence[str],
         *,
         timeout: float | None = 30,
-        stdin_file: BinaryIO | None = None,
     ) -> subprocess.CompletedProcess[str]:
-        """Run a WSL management/command call whose output must be captured.
-
-        Sensitive payloads use a finite file-backed stdin handle rather than
-        ``subprocess.PIPE``. On affected Windows/WSL builds, piping text into a
-        hidden GUI-launched ``wsl.exe`` process can leave the Linux reader
-        waiting forever for EOF even after Python has supplied the payload.
-        A file-backed handle has an explicit finite length and therefore gives
-        WSL a reliable EOF without exposing secrets in argv or logs.
-        """
+        """Run a captured WSL command after the distro has been started."""
 
         wsl = self._wsl_executable()
         if wsl is None:
             raise RuntimeError("WSL is not available on this system.")
 
-        kwargs: dict[str, object] = {
-            "capture_output": True,
-            "text": True,
-            "encoding": "utf-8",
-            "errors": "replace",
-            "timeout": timeout,
-            "check": False,
-            "startupinfo": self._hidden_console_startupinfo(),
-            "creationflags": subprocess.CREATE_NEW_CONSOLE,
-            "stdin": subprocess.DEVNULL if stdin_file is None else stdin_file,
-        }
-
-        return subprocess.run([str(wsl), *arguments], **kwargs)
+        return subprocess.run(
+            [str(wsl), *arguments],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            check=False,
+            startupinfo=self._hidden_console_startupinfo(),
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+        )
 
     def _run_distro_bootstrap(
         self,
@@ -97,12 +92,10 @@ class WindowsWSLRuntime(RuntimeProvider):
     ) -> subprocess.CompletedProcess[bytes]:
         """Wake the WEAVE distro using normal console-backed WSL startup.
 
-        The first distro command deliberately does not pipe stdin/stdout/stderr
-        through the GUI process. On affected WSL builds, cold-starting a
-        systemd distro with redirected standard streams can return
-        ``Wsl/Service/E_UNEXPECTED`` even though the identical interactive WSL
-        command succeeds. Once WSL has brought the distro up, normal captured
-        commands are safe to use for Docker and diagnostics.
+        The first distro command deliberately does not redirect standard
+        streams through the GUI process. On affected WSL builds, cold-starting
+        a systemd distro with redirected streams can fail even when the same
+        interactive WSL command succeeds.
         """
 
         wsl = self._wsl_executable()
@@ -149,7 +142,6 @@ class WindowsWSLRuntime(RuntimeProvider):
         command: Sequence[str],
         *,
         timeout: float | None,
-        stdin_file: BinaryIO | None = None,
     ) -> subprocess.CompletedProcess[str]:
         return self._run_wsl(
             [
@@ -161,7 +153,6 @@ class WindowsWSLRuntime(RuntimeProvider):
                 *command,
             ],
             timeout=timeout,
-            stdin_file=stdin_file,
         )
 
     def _targeted_restart(self) -> None:
@@ -196,11 +187,10 @@ class WindowsWSLRuntime(RuntimeProvider):
         """Start the dedicated distro without repeatedly interrupting systemd.
 
         WEAVE configures WSL to allow systemd initialization up to 60 seconds.
-        A cold-start probe therefore gets a full 75-second window instead of
-        being killed every 15 seconds. If that attempt fails, a short captured
-        probe first checks whether the distro nevertheless became usable. Only
-        when it is still unusable do we terminate *only* WeaveCBT and perform
-        one final full cold-start attempt.
+        A cold-start probe therefore gets a full 75-second window. If that
+        attempt fails, a captured probe first checks whether the distro became
+        usable anyway. Only when it is still unusable do we terminate only the
+        dedicated WeaveCBT distro and perform one final full attempt.
         """
 
         if cold_start_timeout <= 0:
@@ -263,6 +253,79 @@ class WindowsWSLRuntime(RuntimeProvider):
             # next cold start but must never turn a healthy runtime into a
             # failed installation solely because the config write was blocked.
             return
+
+    @staticmethod
+    def _windows_path_to_wsl_mount(path: Path) -> str:
+        """Map a local Windows drive path to the dedicated distro's /mnt path."""
+
+        resolved = PureWindowsPath(str(path.resolve()))
+        drive = resolved.drive
+        if len(drive) != 2 or drive[1] != ":":
+            raise RuntimeError(
+                "WEAVE CBT could not stage configuration on a local Windows drive."
+            )
+        return str(
+            PurePosixPath(
+                "/mnt",
+                drive[0].lower(),
+                *resolved.parts[1:],
+            )
+        )
+
+    @staticmethod
+    def _stage_host_payload(content: str) -> Path:
+        """Persist a short-lived payload in the current Windows user's temp area."""
+
+        transfer_root = Path(tempfile.gettempdir()) / "WeaveCBT"
+        transfer_root.mkdir(parents=True, exist_ok=True)
+        descriptor, filename = tempfile.mkstemp(
+            prefix="runtime-transfer-",
+            suffix=".tmp",
+            dir=transfer_root,
+        )
+        path = Path(filename)
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(content.encode("utf-8"))
+                handle.flush()
+                os.fsync(handle.fileno())
+        except Exception:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+            path.unlink(missing_ok=True)
+            raise
+        return path
+
+    @staticmethod
+    def _cleanup_host_payload(path: Path) -> None:
+        """Remove a staged payload, retrying briefly if Windows still holds it."""
+
+        for _attempt in range(5):
+            try:
+                path.unlink(missing_ok=True)
+                return
+            except PermissionError:
+                sleep(0.1)
+            except OSError:
+                break
+        logger.warning("Unable to remove temporary WEAVE runtime transfer file: %s", path)
+
+    def _runtime_file_matches(self, path: str, expected_sha256: str) -> bool:
+        """Verify the runtime file exactly matches the staged payload."""
+
+        try:
+            result = self._run_in_distro(["sha256sum", "--", path], timeout=10)
+        except (OSError, subprocess.TimeoutExpired, RuntimeError):
+            return False
+        if result.returncode != 0:
+            return False
+        output = self._normalize_wsl_output(result.stdout)
+        if not output:
+            return False
+        actual = output.split(maxsplit=1)[0].lower()
+        return actual == expected_sha256.lower()
 
     def is_available(self) -> bool:
         if self._wsl_executable() is None:
@@ -413,7 +476,13 @@ class WindowsWSLRuntime(RuntimeProvider):
         mode: str,
         timeout: float | None = None,
     ) -> RuntimeCommandResult:
-        """Atomically write UTF-8 content through a finite file-backed stdin."""
+        """Atomically copy UTF-8 content from a short-lived Windows staging file.
+
+        Configuration bytes are never sent through wsl.exe stdin and never
+        appear in process arguments. The Linux side reads a normal finite file
+        from the mounted Windows drive, installs it atomically, and the Manager
+        verifies the SHA-256 before deleting the host-side staging file.
+        """
 
         if not path.startswith("/"):
             raise ValueError("Runtime file path must be absolute.")
@@ -424,36 +493,74 @@ class WindowsWSLRuntime(RuntimeProvider):
         if not self.is_installed():
             raise RuntimeError("WEAVE CBT WSL runtime has not been installed.")
 
+        payload = content.encode("utf-8")
+        expected_sha256 = hashlib.sha256(payload).hexdigest()
+        staged_path = self._stage_host_payload(content)
+
         script = (
             "set -eu\n"
-            "target=$1\n"
-            "mode=$2\n"
+            "source_file=$1\n"
+            "target=$2\n"
+            "mode=$3\n"
             "parent=$(dirname -- \"$target\")\n"
+            "if [ ! -r \"$source_file\" ]; then\n"
+            "  printf '%s\\n' 'WEAVE staging file is not readable inside WSL.' >&2\n"
+            "  exit 23\n"
+            "fi\n"
             "install -d -m 0755 -- \"$parent\"\n"
             "tmp=\"${target}.tmp.$$\"\n"
             "cleanup() { rm -f -- \"$tmp\"; }\n"
             "trap cleanup EXIT HUP INT TERM\n"
-            "cat > \"$tmp\"\n"
-            "chmod \"$mode\" \"$tmp\"\n"
+            "install -m \"$mode\" -- \"$source_file\" \"$tmp\"\n"
             "mv -f -- \"$tmp\" \"$target\"\n"
             "trap - EXIT HUP INT TERM\n"
         )
 
-        # A TemporaryFile is file-backed and anonymous/short-lived from the
-        # Manager's point of view. It prevents the WSL stdin/PIPE EOF hang seen
-        # on real Windows machines while keeping the config payload out of argv.
-        with TemporaryFile(mode="w+b") as payload_file:
-            payload_file.write(content.encode("utf-8"))
-            payload_file.flush()
-            payload_file.seek(0)
-            result = self._run_in_distro(
-                ["sh", "-c", script, "weave-write", path, mode],
-                timeout=timeout,
-                stdin_file=payload_file,
-            )
+        try:
+            source_path = self._windows_path_to_wsl_mount(staged_path)
+            try:
+                result = self._run_in_distro(
+                    [
+                        "sh",
+                        "-c",
+                        script,
+                        "weave-copy",
+                        source_path,
+                        path,
+                        mode,
+                    ],
+                    timeout=timeout,
+                )
+            except subprocess.TimeoutExpired:
+                if self._runtime_file_matches(path, expected_sha256):
+                    return RuntimeCommandResult(0, "", "")
+                return RuntimeCommandResult(
+                    124,
+                    "",
+                    f"Timed out while copying runtime file {path}.",
+                )
+            except (OSError, RuntimeError) as exc:
+                if self._runtime_file_matches(path, expected_sha256):
+                    return RuntimeCommandResult(0, "", "")
+                return RuntimeCommandResult(
+                    1,
+                    "",
+                    f"Unable to copy runtime file {path}: {exc}",
+                )
 
-        return RuntimeCommandResult(
-            return_code=result.returncode,
-            stdout=self._normalize_wsl_output(result.stdout),
-            stderr=self._normalize_wsl_output(result.stderr),
-        )
+            stdout = self._normalize_wsl_output(result.stdout)
+            stderr = self._normalize_wsl_output(result.stderr)
+            if result.returncode != 0:
+                if self._runtime_file_matches(path, expected_sha256):
+                    return RuntimeCommandResult(0, stdout, stderr)
+                return RuntimeCommandResult(result.returncode, stdout, stderr)
+
+            if not self._runtime_file_matches(path, expected_sha256):
+                return RuntimeCommandResult(
+                    1,
+                    stdout,
+                    f"Runtime file verification failed for {path}.",
+                )
+            return RuntimeCommandResult(0, stdout, stderr)
+        finally:
+            self._cleanup_host_payload(staged_path)
