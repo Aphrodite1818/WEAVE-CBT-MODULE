@@ -30,7 +30,7 @@ def _render_png(renderer: QSvgRenderer, size: int) -> bytes:
 
     payload = QByteArray()
     buffer = QBuffer(payload)
-    if not buffer.open(QIODevice.WriteOnly):
+    if not buffer.open(QIODevice.OpenModeFlag.WriteOnly):
         raise RuntimeError("Unable to create the in-memory icon buffer.")
     try:
         if not image.save(buffer, "PNG"):
