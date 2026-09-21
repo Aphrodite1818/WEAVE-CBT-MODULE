@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 from pathlib import Path
+from time import monotonic, sleep
 from typing import Sequence
 
 from ..base import (
@@ -15,7 +16,6 @@ from ..base import (
 
 
 WEAVE_DISTRO_NAME = "WeaveCBT"
-_SYSTEMD_READY_STATES = frozenset({"running", "degraded"})
 
 
 class WindowsWSLRuntime(RuntimeProvider):
@@ -96,35 +96,59 @@ class WindowsWSLRuntime(RuntimeProvider):
             timeout=timeout,
         )
 
-    def _wait_for_systemd_ready(self, *, timeout: float = 90.0) -> None:
+    def _wait_for_distro_responsive(
+        self,
+        *,
+        timeout: float = 90.0,
+        attempt_timeout: float = 15.0,
+        retry_interval: float = 2.0,
+    ) -> None:
+        """Wait until commands can execute reliably inside the WEAVE distro.
+
+        WSL can briefly report service-level errors such as
+        ``Wsl/Service/E_UNEXPECTED`` while a cold distro is being brought up.
+        Those transient host errors must not be treated as a permanent CBT
+        installation failure. Docker readiness is checked separately by
+        ``DockerService`` after the distro itself can execute commands.
         """
-        Wait for the distro's system instance to finish booting.
 
-        WSL can report a distro as Running before systemd has finished starting
-        Docker and its dependencies. The `--wait` systemctl probe prevents the
-        Manager from racing that cold-start window. A degraded system is
-        accepted because unrelated optional units must not block CBT startup.
-        """
+        deadline = monotonic() + timeout
+        last_error = ""
 
-        try:
-            result = self._run_in_distro(
-                ["systemctl", "is-system-running", "--wait"],
-                timeout=timeout,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise RuntimeError(
-                "WEAVE CBT runtime started, but its system services did not "
-                f"become ready within {int(timeout)} seconds."
-            ) from exc
+        while True:
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                break
 
-        state = self._normalize_wsl_output(result.stdout).casefold()
-        if state in _SYSTEMD_READY_STATES:
-            return
+            try:
+                result = self._run_in_distro(
+                    ["true"],
+                    timeout=min(attempt_timeout, max(0.1, remaining)),
+                )
+            except subprocess.TimeoutExpired:
+                last_error = "WSL startup probe timed out."
+            except OSError as exc:
+                last_error = str(exc)
+            else:
+                if result.returncode == 0:
+                    # WSL may emit a harmless systemd-user-session warning on
+                    # stderr while still executing the requested command. A
+                    # successful exit status is therefore authoritative.
+                    return
 
-        details = self._normalize_wsl_output(result.stderr or result.stdout)
+                last_error = self._normalize_wsl_output(
+                    result.stderr or result.stdout
+                )
+
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                break
+            sleep(min(retry_interval, remaining))
+
         raise RuntimeError(
-            "WEAVE CBT runtime system services failed to become ready"
-            + (f": {details}" if details else ".")
+            "WEAVE CBT runtime did not become responsive within "
+            f"{int(timeout)} seconds"
+            + (f". Last WSL error: {last_error}" if last_error else ".")
         )
 
     def is_available(self) -> bool:
@@ -230,23 +254,16 @@ class WindowsWSLRuntime(RuntimeProvider):
             )
 
     def start(self) -> None:
-        """Start the distro and wait until its system services are usable."""
+        """Start the distro and wait until basic command execution is usable."""
 
         if not self.is_installed():
             raise RuntimeError("WEAVE CBT WSL runtime has not been installed.")
 
-        if not self.is_running():
-            result = self._run_in_distro(["true"], timeout=60)
-            if result.returncode != 0:
-                stderr = self._normalize_wsl_output(result.stderr)
-                raise RuntimeError(
-                    "Unable to start WEAVE CBT runtime"
-                    + (f": {stderr}" if stderr else ".")
-                )
-
-        # A distro may already appear in `wsl --list --running` while systemd
-        # is still booting. Always wait for system readiness before returning.
-        self._wait_for_systemd_ready(timeout=90)
+        # Invoking a command starts a stopped distro automatically. Always use
+        # the same bounded readiness loop even if `wsl --list --running`
+        # already reports the distro as running, because that state can appear
+        # before WSL is actually ready to execute commands reliably.
+        self._wait_for_distro_responsive(timeout=90)
 
     def stop(self) -> None:
         if not self.is_installed() or not self.is_running():
