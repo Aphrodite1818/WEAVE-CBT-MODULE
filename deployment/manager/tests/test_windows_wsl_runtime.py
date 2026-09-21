@@ -16,12 +16,16 @@ def _runtime(tmp_path: Path) -> WindowsWSLRuntime:
     )
 
 
-def test_wsl_invocation_uses_hidden_real_console(
+def test_captured_wsl_invocation_uses_hidden_real_console(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     runtime = _runtime(tmp_path)
-    monkeypatch.setattr(runtime, "_wsl_executable", lambda: Path("C:/Windows/System32/wsl.exe"))
+    monkeypatch.setattr(
+        runtime,
+        "_wsl_executable",
+        lambda: Path("C:/Windows/System32/wsl.exe"),
+    )
     captured: dict[str, object] = {}
 
     def fake_run(command, **kwargs):
@@ -35,74 +39,100 @@ def test_wsl_invocation_uses_hidden_real_console(
 
     assert captured["creationflags"] == subprocess.CREATE_NEW_CONSOLE
     assert captured["stdin"] == subprocess.DEVNULL
+    assert captured["capture_output"] is True
     startupinfo = captured["startupinfo"]
     assert isinstance(startupinfo, subprocess.STARTUPINFO)
     assert startupinfo.dwFlags & subprocess.STARTF_USESHOWWINDOW
     assert startupinfo.wShowWindow == subprocess.SW_HIDE
 
 
-def test_start_accepts_success_even_with_systemd_user_warning(
+def test_bootstrap_wsl_invocation_does_not_redirect_standard_streams(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path)
+    monkeypatch.setattr(
+        runtime,
+        "_wsl_executable",
+        lambda: Path("C:/Windows/System32/wsl.exe"),
+    )
+    captured: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured.update(kwargs)
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    runtime._run_distro_bootstrap(timeout=15)
+
+    assert captured["creationflags"] == subprocess.CREATE_NEW_CONSOLE
+    assert "stdin" not in captured
+    assert "stdout" not in captured
+    assert "stderr" not in captured
+    assert "capture_output" not in captured
+    assert captured["command"][-1] == "true"
+
+
+def test_start_repairs_existing_boot_config_after_bootstrap(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     runtime = _runtime(tmp_path)
     monkeypatch.setattr(runtime, "is_installed", lambda: True)
-    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        runtime,
+        "_run_distro_bootstrap",
+        lambda *, timeout: subprocess.CompletedProcess(["wsl"], 0),
+    )
+    repaired = False
 
-    def fake_run(command, *, timeout):
-        calls.append(tuple(command))
-        return subprocess.CompletedProcess(
-            args=list(command),
-            returncode=0,
-            stdout="",
-            stderr="wsl: Failed to start the systemd user session for 'root'.",
-        )
+    def repair() -> None:
+        nonlocal repaired
+        repaired = True
 
-    monkeypatch.setattr(runtime, "_run_in_distro", fake_run)
+    monkeypatch.setattr(runtime, "_apply_boot_config_best_effort", repair)
 
     runtime.start()
 
-    assert calls == [("true",)]
+    assert repaired is True
 
 
-def test_start_retries_transient_wsl_service_failure(
+def test_start_retries_and_targeted_restarts_only_weave_distro(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     runtime = _runtime(tmp_path)
     monkeypatch.setattr(runtime, "is_installed", lambda: True)
     monkeypatch.setattr(wsl_module, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(runtime, "_apply_boot_config_best_effort", lambda: None)
 
     attempts = 0
+    restarts = 0
 
-    def fake_run(command, *, timeout):
+    def fake_bootstrap(*, timeout):
         nonlocal attempts
         attempts += 1
-        if attempts == 1:
-            return subprocess.CompletedProcess(
-                args=list(command),
-                returncode=1,
-                stdout="",
-                stderr=(
-                    "Catastrophic failure\n"
-                    "Error code: Wsl/Service/E_UNEXPECTED"
-                ),
-            )
         return subprocess.CompletedProcess(
-            args=list(command),
-            returncode=0,
-            stdout="",
-            stderr="",
+            ["wsl"],
+            0 if attempts == 4 else 1,
         )
 
-    monkeypatch.setattr(runtime, "_run_in_distro", fake_run)
+    def targeted_restart() -> None:
+        nonlocal restarts
+        restarts += 1
+
+    monkeypatch.setattr(runtime, "_run_distro_bootstrap", fake_bootstrap)
+    monkeypatch.setattr(runtime, "_targeted_restart", targeted_restart)
 
     runtime.start()
 
-    assert attempts == 2
+    assert attempts == 4
+    assert restarts == 1
 
 
-def test_responsiveness_timeout_reports_last_wsl_error(
+def test_responsiveness_timeout_reports_final_wsl_diagnostic(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -110,19 +140,53 @@ def test_responsiveness_timeout_reports_last_wsl_error(
     times = iter([0.0, 0.0, 0.5, 1.1])
     monkeypatch.setattr(wsl_module, "monotonic", lambda: next(times))
     monkeypatch.setattr(wsl_module, "sleep", lambda _seconds: None)
-
-    def failed_run(command, *, timeout):
-        return subprocess.CompletedProcess(
-            args=list(command),
-            returncode=1,
-            stdout="",
-            stderr="Error code: Wsl/Service/E_UNEXPECTED",
-        )
-
-    monkeypatch.setattr(runtime, "_run_in_distro", failed_run)
+    monkeypatch.setattr(
+        runtime,
+        "_run_distro_bootstrap",
+        lambda *, timeout: subprocess.CompletedProcess(["wsl"], 1),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_diagnose_boot_failure",
+        lambda: "Error code: Wsl/Service/E_UNEXPECTED",
+    )
 
     with pytest.raises(RuntimeError, match="Last WSL error"):
         runtime._wait_for_distro_responsive(
             timeout=1.0,
             retry_interval=0.1,
         )
+
+
+def test_existing_runtime_boot_config_is_upgraded_best_effort(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path)
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(command, *, timeout):
+        calls.append(tuple(command))
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(runtime, "_run_in_distro", fake_run)
+
+    runtime._apply_boot_config_best_effort()
+
+    assert len(calls) == 1
+    assert calls[0][:2] == ("sh", "-c")
+    assert "initTimeout=60000" in calls[0][2]
+    assert "default=root" in calls[0][2]
+
+
+def test_runtime_rootfs_has_longer_wsl_init_timeout_and_user_session_support() -> None:
+    dockerfile = (
+        Path(__file__).resolve().parents[1]
+        / "runtime"
+        / "distro"
+        / "Dockerfile"
+    ).read_text(encoding="utf-8")
+
+    assert "initTimeout=60000" in dockerfile
+    assert "dbus-user-session" in dockerfile
+    assert "libpam-systemd" in dockerfile
