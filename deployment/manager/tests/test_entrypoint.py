@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 
 import weave_cbt_manager.__main__ as manager_entry
+from weave_cbt_manager.app import ManagerController
 
 
 def test_self_test_runs_before_controller_construction(monkeypatch) -> None:
@@ -23,3 +24,10 @@ def test_parser_recognizes_self_test() -> None:
     assert arguments.self_test is True
     assert arguments.first_run is False
     assert arguments.startup is False
+
+
+def test_testing_installer_disk_floor_is_four_gb() -> None:
+    controller = ManagerController()
+
+    assert controller.prerequisites.policy.minimum_free_disk_gb == 4.0
+    assert controller.prerequisites.policy.minimum_memory_gb == 8.0
