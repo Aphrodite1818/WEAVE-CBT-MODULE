@@ -16,6 +16,10 @@ from ..base import (
 
 
 WEAVE_DISTRO_NAME = "WeaveCBT"
+_WSL_BOOT_CONFIG_COMMAND = (
+    "printf '%s\\n' '[boot]' 'systemd=true' 'initTimeout=60000' '' "
+    "'[user]' 'default=root' > /etc/wsl.conf"
+)
 
 
 class WindowsWSLRuntime(RuntimeProvider):
@@ -40,15 +44,7 @@ class WindowsWSLRuntime(RuntimeProvider):
 
     @staticmethod
     def _hidden_console_startupinfo() -> subprocess.STARTUPINFO:
-        """Create a hidden console startup configuration for wsl.exe.
-
-        The Manager is a GUI executable and therefore has no parent console.
-        WSL distro-launch commands have proven unreliable when started with
-        CREATE_NO_WINDOW on some Windows/WSL combinations, even though the
-        identical command succeeds from PowerShell. Give wsl.exe a real console
-        environment, but hide its window so school admins do not see terminal
-        flashes while the Manager operates.
-        """
+        """Create a hidden real-console configuration for Windows child processes."""
 
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
@@ -61,6 +57,8 @@ class WindowsWSLRuntime(RuntimeProvider):
         *,
         timeout: float | None = 30,
     ) -> subprocess.CompletedProcess[str]:
+        """Run a WSL management/command call whose output must be captured."""
+
         wsl = self._wsl_executable()
         if wsl is None:
             raise RuntimeError("WSL is not available on this system.")
@@ -72,6 +70,41 @@ class WindowsWSLRuntime(RuntimeProvider):
             text=True,
             encoding="utf-8",
             errors="replace",
+            timeout=timeout,
+            check=False,
+            startupinfo=self._hidden_console_startupinfo(),
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+        )
+
+    def _run_distro_bootstrap(
+        self,
+        *,
+        timeout: float,
+    ) -> subprocess.CompletedProcess[bytes]:
+        """Wake the WEAVE distro using normal console-backed WSL startup.
+
+        The first distro command deliberately does not pipe stdin/stdout/stderr
+        through the GUI process. On affected WSL builds, cold-starting a
+        systemd distro with redirected standard streams can return
+        ``Wsl/Service/E_UNEXPECTED`` even though the identical interactive WSL
+        command succeeds. Once WSL has brought the distro up, normal captured
+        commands are safe to use for Docker and diagnostics.
+        """
+
+        wsl = self._wsl_executable()
+        if wsl is None:
+            raise RuntimeError("WSL is not available on this system.")
+
+        return subprocess.run(
+            [
+                str(wsl),
+                "--distribution",
+                WEAVE_DISTRO_NAME,
+                "--user",
+                "root",
+                "--",
+                "true",
+            ],
             timeout=timeout,
             check=False,
             startupinfo=self._hidden_console_startupinfo(),
@@ -115,6 +148,28 @@ class WindowsWSLRuntime(RuntimeProvider):
             timeout=timeout,
         )
 
+    def _targeted_restart(self) -> None:
+        """Reset only the WEAVE distro; never shut down unrelated WSL distros."""
+
+        try:
+            self._run_wsl(["--terminate", WEAVE_DISTRO_NAME], timeout=30)
+        except (OSError, subprocess.TimeoutExpired, RuntimeError):
+            return
+
+    def _diagnose_boot_failure(self) -> str:
+        """Capture a final WSL error after bootstrap attempts have failed."""
+
+        try:
+            result = self._run_in_distro(["true"], timeout=10)
+        except subprocess.TimeoutExpired:
+            return "WSL startup probe timed out."
+        except (OSError, RuntimeError) as exc:
+            return str(exc)
+
+        if result.returncode == 0:
+            return ""
+        return self._normalize_wsl_output(result.stderr or result.stdout)
+
     def _wait_for_distro_responsive(
         self,
         *,
@@ -122,53 +177,59 @@ class WindowsWSLRuntime(RuntimeProvider):
         attempt_timeout: float = 15.0,
         retry_interval: float = 2.0,
     ) -> None:
-        """Wait until commands can execute reliably inside the WEAVE distro.
-
-        WSL can briefly report service-level errors such as
-        ``Wsl/Service/E_UNEXPECTED`` while a cold distro is being brought up.
-        Those transient host errors must not be treated as a permanent CBT
-        installation failure. Docker readiness is checked separately by
-        ``DockerService`` after the distro itself can execute commands.
-        """
+        """Wait until the dedicated distro can execute a basic Linux command."""
 
         deadline = monotonic() + timeout
-        last_error = ""
+        attempts = 0
+        restarted = False
 
         while True:
             remaining = deadline - monotonic()
             if remaining <= 0:
                 break
 
+            attempts += 1
             try:
-                result = self._run_in_distro(
-                    ["true"],
+                result = self._run_distro_bootstrap(
                     timeout=min(attempt_timeout, max(0.1, remaining)),
                 )
-            except subprocess.TimeoutExpired:
-                last_error = "WSL startup probe timed out."
-            except OSError as exc:
-                last_error = str(exc)
-            else:
-                if result.returncode == 0:
-                    # WSL may emit a harmless systemd-user-session warning on
-                    # stderr while still executing the requested command. A
-                    # successful exit status is therefore authoritative.
-                    return
+            except (OSError, subprocess.TimeoutExpired):
+                result = None
 
-                last_error = self._normalize_wsl_output(
-                    result.stderr or result.stdout
-                )
+            if result is not None and result.returncode == 0:
+                return
+
+            # A targeted restart clears a half-started WEAVE distro without
+            # touching the user's Ubuntu or Docker Desktop WSL distributions.
+            if attempts >= 3 and not restarted:
+                self._targeted_restart()
+                restarted = True
 
             remaining = deadline - monotonic()
             if remaining <= 0:
                 break
             sleep(min(retry_interval, remaining))
 
+        last_error = self._diagnose_boot_failure()
         raise RuntimeError(
             "WEAVE CBT runtime did not become responsive within "
             f"{int(timeout)} seconds"
             + (f". Last WSL error: {last_error}" if last_error else ".")
         )
+
+    def _apply_boot_config_best_effort(self) -> None:
+        """Upgrade an existing WEAVE distro to the safer WSL boot settings."""
+
+        try:
+            self._run_in_distro(
+                ["sh", "-c", _WSL_BOOT_CONFIG_COMMAND],
+                timeout=15,
+            )
+        except (OSError, subprocess.TimeoutExpired, RuntimeError):
+            # The current session is already usable. This repair improves the
+            # next cold start but must never turn a healthy runtime into a
+            # failed installation solely because the config write was blocked.
+            return
 
     def is_available(self) -> bool:
         if self._wsl_executable() is None:
@@ -273,16 +334,13 @@ class WindowsWSLRuntime(RuntimeProvider):
             )
 
     def start(self) -> None:
-        """Start the distro and wait until basic command execution is usable."""
+        """Start the distro using a console-backed probe, then repair boot config."""
 
         if not self.is_installed():
             raise RuntimeError("WEAVE CBT WSL runtime has not been installed.")
 
-        # Invoking a command starts a stopped distro automatically. Always use
-        # the same bounded readiness loop even if `wsl --list --running`
-        # already reports the distro as running, because that state can appear
-        # before WSL is actually ready to execute commands reliably.
         self._wait_for_distro_responsive(timeout=90)
+        self._apply_boot_config_best_effort()
 
     def stop(self) -> None:
         if not self.is_installed() or not self.is_running():
