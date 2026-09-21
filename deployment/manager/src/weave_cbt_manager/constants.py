@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import os
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 APP_NAME = "WEAVE CBT"
 MANAGER_EXECUTABLE_NAME = "WeaveCBT-Manager.exe"
 WSL_DISTRO_NAME = "WeaveCBT"
 COMPOSE_PROJECT_NAME = "weave-cbt"
 
-RUNTIME_DEPLOYMENT_ROOT = Path("/opt/weave-cbt")
+# These paths live inside the Linux runtime, not on the Windows host. Keep
+# them POSIX-native even when the Manager itself is running on Windows.
+RUNTIME_DEPLOYMENT_ROOT = PurePosixPath("/opt/weave-cbt")
 RUNTIME_COMPOSE_FILE = RUNTIME_DEPLOYMENT_ROOT / "compose.yaml"
 RUNTIME_ENV_FILE = RUNTIME_DEPLOYMENT_ROOT / "runtime.env"
 RUNTIME_NGINX_FILE = RUNTIME_DEPLOYMENT_ROOT / "nginx" / "nginx.conf"
