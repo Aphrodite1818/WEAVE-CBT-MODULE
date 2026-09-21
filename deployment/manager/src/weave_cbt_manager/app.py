@@ -46,7 +46,7 @@ class ManagerController:
         self.docker = DockerService(self.runtime)
         self.prerequisites = PrerequisiteService(
             platform=self.platform, runtime=self.runtime, docker=self.docker,
-            policy=PrerequisitePolicy(minimum_memory_gb=8.0, minimum_free_disk_gb=20.0, supported_architectures=frozenset({"x86_64"})),
+            policy=PrerequisitePolicy(minimum_memory_gb=8.0, minimum_free_disk_gb=4.0, supported_architectures=frozenset({"x86_64"})),
         )
         self.deployment = DeploymentService(self.runtime, self.docker)
         self.health = HealthService(self.deployment)
