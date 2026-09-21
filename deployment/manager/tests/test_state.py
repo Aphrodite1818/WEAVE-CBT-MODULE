@@ -11,11 +11,12 @@ class _Runtime:
 
 
 class _Deployment:
-    def __init__(self, configured=True):
-        self.configured = configured
+    def __init__(self):
+        self.probed = False
 
     def config_exists(self):
-        return self.configured
+        self.probed = True
+        raise AssertionError("installation_present must not cold-start WSL through config_exists")
 
 
 class _StateStore:
@@ -26,10 +27,10 @@ class _StateStore:
         return ManagerState(installation_status=self.status)
 
 
-def _controller_for_status(status: str, *, installed: bool = True, configured: bool = True) -> ManagerController:
+def _controller_for_status(status: str, *, installed: bool = True) -> ManagerController:
     controller = ManagerController.__new__(ManagerController)
     controller.runtime = _Runtime(installed)
-    controller.deployment = _Deployment(configured)
+    controller.deployment = _Deployment()
     controller.state_store = _StateStore(status)
     return controller
 
@@ -50,12 +51,14 @@ def test_partial_setup_is_not_treated_as_complete_installation():
     assert _controller_for_status("setup_failed").installation_present() is False
 
 
-def test_complete_and_retained_installations_are_recoverable():
-    assert _controller_for_status("installed").installation_present() is True
-    assert _controller_for_status("retained").installation_present() is True
-    assert _controller_for_status("recovery_required").installation_present() is True
+def test_complete_and_retained_installations_are_recoverable_without_runtime_file_probe():
+    for status in ("installed", "retained", "recovery_required"):
+        controller = _controller_for_status(status)
+        assert controller.installation_present() is True
+        assert controller.deployment.probed is False
 
 
-def test_installation_requires_runtime_and_complete_config_bundle():
-    assert _controller_for_status("installed", installed=False).installation_present() is False
-    assert _controller_for_status("installed", configured=False).installation_present() is False
+def test_installation_still_requires_registered_weave_runtime():
+    controller = _controller_for_status("installed", installed=False)
+    assert controller.installation_present() is False
+    assert controller.deployment.probed is False
