@@ -38,6 +38,23 @@ class WindowsWSLRuntime(RuntimeProvider):
         executable = shutil.which("wsl.exe") or shutil.which("wsl")
         return Path(executable) if executable is not None else None
 
+    @staticmethod
+    def _hidden_console_startupinfo() -> subprocess.STARTUPINFO:
+        """Create a hidden console startup configuration for wsl.exe.
+
+        The Manager is a GUI executable and therefore has no parent console.
+        WSL distro-launch commands have proven unreliable when started with
+        CREATE_NO_WINDOW on some Windows/WSL combinations, even though the
+        identical command succeeds from PowerShell. Give wsl.exe a real console
+        environment, but hide its window so school admins do not see terminal
+        flashes while the Manager operates.
+        """
+
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+        return startupinfo
+
     def _run_wsl(
         self,
         arguments: Sequence[str],
@@ -50,13 +67,15 @@ class WindowsWSLRuntime(RuntimeProvider):
 
         return subprocess.run(
             [str(wsl), *arguments],
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             encoding="utf-8",
             errors="replace",
             timeout=timeout,
             check=False,
-            creationflags=subprocess.CREATE_NO_WINDOW,
+            startupinfo=self._hidden_console_startupinfo(),
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
         )
 
     @staticmethod
