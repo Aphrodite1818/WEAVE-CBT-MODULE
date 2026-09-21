@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 from pathlib import Path
-from time import monotonic, sleep
+from time import sleep
 from typing import Sequence
 
 from ..base import (
@@ -20,6 +20,9 @@ _WSL_BOOT_CONFIG_COMMAND = (
     "printf '%s\\n' '[boot]' 'systemd=true' 'initTimeout=60000' '' "
     "'[user]' 'default=root' > /etc/wsl.conf"
 )
+_WSL_COLD_START_TIMEOUT_SECONDS = 75.0
+_WSL_START_ATTEMPTS = 2
+_WSL_RETRY_DELAY_SECONDS = 2.0
 
 
 class WindowsWSLRuntime(RuntimeProvider):
@@ -167,7 +170,7 @@ class WindowsWSLRuntime(RuntimeProvider):
             return
 
     def _diagnose_boot_failure(self) -> str:
-        """Capture a final WSL error after bootstrap attempts have failed."""
+        """Capture a final WSL error after a bootstrap attempt has failed."""
 
         try:
             result = self._run_in_distro(["true"], timeout=10)
@@ -183,47 +186,64 @@ class WindowsWSLRuntime(RuntimeProvider):
     def _wait_for_distro_responsive(
         self,
         *,
-        timeout: float = 90.0,
-        attempt_timeout: float = 15.0,
-        retry_interval: float = 2.0,
+        cold_start_timeout: float = _WSL_COLD_START_TIMEOUT_SECONDS,
+        max_attempts: int = _WSL_START_ATTEMPTS,
+        retry_delay: float = _WSL_RETRY_DELAY_SECONDS,
     ) -> None:
-        """Wait until the dedicated distro can execute a basic Linux command."""
+        """Start the dedicated distro without repeatedly interrupting systemd.
 
-        deadline = monotonic() + timeout
-        attempts = 0
-        restarted = False
+        WEAVE configures WSL to allow systemd initialization up to 60 seconds.
+        A cold-start probe therefore gets a full 75-second window instead of
+        being killed every 15 seconds. If that attempt fails, a short captured
+        probe first checks whether the distro nevertheless became usable. Only
+        when it is still unusable do we terminate *only* WeaveCBT and perform
+        one final full cold-start attempt.
+        """
 
-        while True:
-            remaining = deadline - monotonic()
-            if remaining <= 0:
-                break
+        if cold_start_timeout <= 0:
+            raise ValueError("WSL cold-start timeout must be positive.")
+        if max_attempts < 1:
+            raise ValueError("WSL startup attempts must be at least one.")
+        if retry_delay < 0:
+            raise ValueError("WSL retry delay cannot be negative.")
 
-            attempts += 1
+        last_error = ""
+
+        for attempt in range(1, max_attempts + 1):
             try:
-                result = self._run_distro_bootstrap(
-                    timeout=min(attempt_timeout, max(0.1, remaining)),
+                result = self._run_distro_bootstrap(timeout=cold_start_timeout)
+            except subprocess.TimeoutExpired:
+                last_error = (
+                    f"WSL startup attempt {attempt} exceeded "
+                    f"{int(cold_start_timeout)} seconds."
                 )
-            except (OSError, subprocess.TimeoutExpired):
-                result = None
+            except OSError as exc:
+                last_error = str(exc)
+            else:
+                if result.returncode == 0:
+                    return
+                last_error = (
+                    f"WSL startup attempt {attempt} exited with code "
+                    f"{result.returncode}."
+                )
 
-            if result is not None and result.returncode == 0:
+            # The console-backed process can fail or time out even after WSL
+            # has finished bringing the distro up. Before restarting anything,
+            # verify whether a normal command is already succeeding.
+            diagnostic = self._diagnose_boot_failure()
+            if not diagnostic:
                 return
+            last_error = diagnostic
 
-            # A targeted restart clears a half-started WEAVE distro without
-            # touching the user's Ubuntu or Docker Desktop WSL distributions.
-            if attempts >= 3 and not restarted:
+            if attempt < max_attempts:
                 self._targeted_restart()
-                restarted = True
+                if retry_delay:
+                    sleep(retry_delay)
 
-            remaining = deadline - monotonic()
-            if remaining <= 0:
-                break
-            sleep(min(retry_interval, remaining))
-
-        last_error = self._diagnose_boot_failure()
         raise RuntimeError(
-            "WEAVE CBT runtime did not become responsive within "
-            f"{int(timeout)} seconds"
+            "WEAVE CBT runtime did not become responsive after "
+            f"{max_attempts} startup attempt"
+            + ("s" if max_attempts != 1 else "")
             + (f". Last WSL error: {last_error}" if last_error else ".")
         )
 
@@ -344,12 +364,12 @@ class WindowsWSLRuntime(RuntimeProvider):
             )
 
     def start(self) -> None:
-        """Start the distro using a console-backed probe, then repair boot config."""
+        """Start the distro, allowing a complete WSL/systemd cold-start window."""
 
         if not self.is_installed():
             raise RuntimeError("WEAVE CBT WSL runtime has not been installed.")
 
-        self._wait_for_distro_responsive(timeout=90)
+        self._wait_for_distro_responsive()
         self._apply_boot_config_best_effort()
 
     def stop(self) -> None:
