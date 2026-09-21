@@ -46,9 +46,13 @@ class ManagerController:
         self.platform = WindowsPlatform()
         self.runtime = WindowsWSLRuntime(rootfs_archive=rootfs_archive_path(), install_directory=runtime_install_directory())
         self.docker = DockerService(self.runtime)
+        # Production keeps a realistic capacity floor for images and school
+        # data. Staging/development intentionally use the temporary 4 GB floor
+        # used by acceptance testing on constrained machines.
+        minimum_free_disk_gb = 20.0 if BUILD_METADATA.channel == "production" else 4.0
         self.prerequisites = PrerequisiteService(
             platform=self.platform, runtime=self.runtime, docker=self.docker,
-            policy=PrerequisitePolicy(minimum_memory_gb=7.5, minimum_free_disk_gb=20.0, supported_architectures=frozenset({"x86_64"})),
+            policy=PrerequisitePolicy(minimum_memory_gb=7.5, minimum_free_disk_gb=minimum_free_disk_gb, supported_architectures=frozenset({"x86_64"})),
         )
         self.deployment = DeploymentService(self.runtime, self.docker)
         self.health = HealthService(self.deployment)
