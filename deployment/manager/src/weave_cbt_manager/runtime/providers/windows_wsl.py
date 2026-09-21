@@ -56,6 +56,7 @@ class WindowsWSLRuntime(RuntimeProvider):
         arguments: Sequence[str],
         *,
         timeout: float | None = 30,
+        input_text: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
         """Run a WSL management/command call whose output must be captured."""
 
@@ -63,18 +64,25 @@ class WindowsWSLRuntime(RuntimeProvider):
         if wsl is None:
             raise RuntimeError("WSL is not available on this system.")
 
-        return subprocess.run(
-            [str(wsl), *arguments],
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout,
-            check=False,
-            startupinfo=self._hidden_console_startupinfo(),
-            creationflags=subprocess.CREATE_NEW_CONSOLE,
-        )
+        kwargs: dict[str, object] = {
+            "capture_output": True,
+            "text": True,
+            "encoding": "utf-8",
+            "errors": "replace",
+            "timeout": timeout,
+            "check": False,
+            "startupinfo": self._hidden_console_startupinfo(),
+            "creationflags": subprocess.CREATE_NEW_CONSOLE,
+        }
+        if input_text is None:
+            kwargs["stdin"] = subprocess.DEVNULL
+        else:
+            # Transfer sensitive file content over stdin instead of placing it
+            # in argv. This prevents database credentials from appearing in
+            # process listings, exception text, or installer logs.
+            kwargs["input"] = input_text
+
+        return subprocess.run([str(wsl), *arguments], **kwargs)
 
     def _run_distro_bootstrap(
         self,
@@ -135,6 +143,7 @@ class WindowsWSLRuntime(RuntimeProvider):
         command: Sequence[str],
         *,
         timeout: float | None,
+        input_text: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
         return self._run_wsl(
             [
@@ -146,6 +155,7 @@ class WindowsWSLRuntime(RuntimeProvider):
                 *command,
             ],
             timeout=timeout,
+            input_text=input_text,
         )
 
     def _targeted_restart(self) -> None:
@@ -366,6 +376,50 @@ class WindowsWSLRuntime(RuntimeProvider):
             raise RuntimeError("WEAVE CBT WSL runtime has not been installed.")
 
         result = self._run_in_distro(command, timeout=timeout)
+        return RuntimeCommandResult(
+            return_code=result.returncode,
+            stdout=self._normalize_wsl_output(result.stdout),
+            stderr=self._normalize_wsl_output(result.stderr),
+        )
+
+    def write_text_file(
+        self,
+        path: str,
+        content: str,
+        *,
+        mode: str,
+        timeout: float | None = None,
+    ) -> RuntimeCommandResult:
+        """Atomically write a UTF-8 file without exposing its content in argv."""
+
+        if not path.startswith("/"):
+            raise ValueError("Runtime file path must be absolute.")
+        if len(mode) != 4 or mode[0] != "0" or any(
+            character not in "01234567" for character in mode[1:]
+        ):
+            raise ValueError("Runtime file mode must be a four-digit octal mode.")
+        if not self.is_installed():
+            raise RuntimeError("WEAVE CBT WSL runtime has not been installed.")
+
+        script = (
+            "set -eu\n"
+            "target=$1\n"
+            "mode=$2\n"
+            "parent=$(dirname -- \"$target\")\n"
+            "install -d -m 0755 -- \"$parent\"\n"
+            "tmp=\"${target}.tmp.$$\"\n"
+            "cleanup() { rm -f -- \"$tmp\"; }\n"
+            "trap cleanup EXIT HUP INT TERM\n"
+            "cat > \"$tmp\"\n"
+            "chmod \"$mode\" \"$tmp\"\n"
+            "mv -f -- \"$tmp\" \"$target\"\n"
+            "trap - EXIT HUP INT TERM\n"
+        )
+        result = self._run_in_distro(
+            ["sh", "-c", script, "weave-write", path, mode],
+            timeout=timeout,
+            input_text=content,
+        )
         return RuntimeCommandResult(
             return_code=result.returncode,
             stdout=self._normalize_wsl_output(result.stdout),
