@@ -4,8 +4,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       systemd systemd-sysv dbus ca-certificates curl gnupg \
-       iproute2 iputils-ping procps gzip \
+       systemd systemd-sysv dbus dbus-user-session libpam-systemd \
+       ca-certificates curl gnupg iproute2 iputils-ping procps gzip \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc \
     && chmod a+r /etc/apt/keyrings/docker.asc \
@@ -13,7 +13,7 @@ RUN apt-get update \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
        docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin \
-    && printf '[boot]\nsystemd=true\n' > /etc/wsl.conf \
+    && printf '[boot]\nsystemd=true\ninitTimeout=60000\n\n[user]\ndefault=root\n' > /etc/wsl.conf \
     && systemctl enable docker.service containerd.service \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
