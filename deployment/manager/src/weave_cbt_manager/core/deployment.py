@@ -34,14 +34,14 @@ class DeploymentService:
         return path.read_text(encoding="utf-8")
 
     def _write_runtime_file(self, path: PurePosixPath, content: str, *, mode: str) -> None:
-        # File contents travel over the runtime's stdin-backed file channel,
-        # never inside shell arguments. This is especially important for
-        # runtime.env because it contains the local PostgreSQL password.
+        # RuntimeProvider owns the host-to-runtime transfer mechanism. The
+        # Windows provider stages a short-lived host file and copies it into
+        # WSL atomically without placing file contents in argv or stdin pipes.
         result = self.runtime.write_text_file(
             str(path),
             content,
             mode=mode,
-            timeout=20,
+            timeout=30,
         )
         if not result.succeeded:
             raise RuntimeError(
@@ -50,12 +50,29 @@ class DeploymentService:
             )
 
     def prepare_assets(self, *, runtime_env: str, compose_yaml: str, nginx_config: str) -> None:
-        self._write_runtime_file(self.paths.env_file, runtime_env, mode="0600")
+        # Write non-secret assets first and runtime.env last. A partially failed
+        # preparation therefore cannot leave the configuration marker in place
+        # before the rest of the deployment bundle exists.
         self._write_runtime_file(self.paths.compose_file, compose_yaml, mode="0644")
         self._write_runtime_file(self.paths.nginx_file, nginx_config, mode="0644")
+        self._write_runtime_file(self.paths.env_file, runtime_env, mode="0600")
 
     def config_exists(self) -> bool:
-        return self.runtime.execute(["test", "-s", str(self.paths.env_file)], timeout=10).succeeded
+        script = (
+            'test -s "$1" && test -s "$2" && test -s "$3"'
+        )
+        return self.runtime.execute(
+            [
+                "sh",
+                "-c",
+                script,
+                "weave-config-check",
+                str(self.paths.env_file),
+                str(self.paths.compose_file),
+                str(self.paths.nginx_file),
+            ],
+            timeout=10,
+        ).succeeded
 
     def validate(self) -> None:
         result = self.docker.compose(
@@ -98,11 +115,23 @@ class DeploymentService:
     def set_image(self, image: str) -> None:
         if not image or any(character.isspace() for character in image) or "'" in image:
             raise ValueError("Invalid WEAVE image reference.")
-        env_file = shlex.quote(str(self.paths.env_file))
-        temp_file = shlex.quote(str(self.paths.env_file) + ".tmp")
-        line = shlex.quote(f"WEAVE_IMAGE='{image}'")
-        command = f"grep -v '^WEAVE_IMAGE=' {env_file} > {temp_file} && printf '%s\\n' {line} >> {temp_file} && chmod 0600 {temp_file} && mv {temp_file} {env_file}"
-        result = self.runtime.execute(["sh", "-lc", command], timeout=20)
+        script = (
+            "set -eu\n"
+            "env_file=$1\n"
+            "image=$2\n"
+            "tmp=\"${env_file}.tmp.$$\"\n"
+            "cleanup() { rm -f -- \"$tmp\"; }\n"
+            "trap cleanup EXIT HUP INT TERM\n"
+            "awk '!/^WEAVE_IMAGE=/' \"$env_file\" > \"$tmp\"\n"
+            "printf \"WEAVE_IMAGE='%s'\\n\" \"$image\" >> \"$tmp\"\n"
+            "chmod 0600 \"$tmp\"\n"
+            "mv -f -- \"$tmp\" \"$env_file\"\n"
+            "trap - EXIT HUP INT TERM\n"
+        )
+        result = self.runtime.execute(
+            ["sh", "-c", script, "weave-image-update", str(self.paths.env_file), image],
+            timeout=20,
+        )
         if not result.succeeded:
             raise RuntimeError(f"Unable to update WEAVE image: {result.stderr or result.stdout}")
 
