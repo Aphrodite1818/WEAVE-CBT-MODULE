@@ -82,7 +82,8 @@ def test_windows_drive_path_maps_to_default_wsl_mount(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
     path = Path(r"C:\Users\Taiwo\AppData\Local\Temp\WeaveCBT\payload.tmp")
     mapped = runtime._windows_path_to_wsl_mount(path)
-    assert mapped == "/mnt/c/Users/Taiwo/AppData/Local/Temp/WeaveCBT/payload.tmp"
+    # Path.resolve uses the real casing of an existing Windows user directory.
+    assert mapped.casefold() == "/mnt/c/Users/Taiwo/AppData/Local/Temp/WeaveCBT/payload.tmp".casefold()
 
 
 def test_write_text_file_uses_host_staging_not_wsl_stdin(
@@ -394,3 +395,35 @@ def test_runtime_rootfs_has_longer_wsl_init_timeout_and_user_session_support() -
     assert "initTimeout=60000" in dockerfile
     assert "dbus-user-session" in dockerfile
     assert "libpam-systemd" in dockerfile
+
+
+@pytest.mark.parametrize("encoding", ["utf-8", "utf-16", "utf-16-le"])
+def test_wsl_output_preserves_localized_diagnostics(encoding):
+    message = "WSL: erreur syst?me ? 0x80370102"
+    assert WindowsWSLRuntime._decode_output(message.encode(encoding)) == message
+
+
+def test_inbox_wsl_with_no_systemd_support_is_not_ready(monkeypatch, tmp_path):
+    runtime = _runtime(tmp_path)
+    monkeypatch.setattr(runtime, "_wsl_executable", lambda: Path("wsl.exe"))
+    calls = []
+    def run(arguments, **kwargs):
+        calls.append(arguments)
+        return subprocess.CompletedProcess(arguments, 0 if arguments == ["--status"] else 1, stdout="", stderr="")
+    monkeypatch.setattr(runtime, "_run_wsl", run)
+    assert runtime.is_available() is False
+    assert calls == [["--status"], ["--version"]]
+
+
+def test_keepalive_is_detached_and_scoped_to_weave(monkeypatch, tmp_path):
+    from unittest.mock import Mock
+    runtime = _runtime(tmp_path)
+    monkeypatch.setattr(runtime, "_wsl_executable", lambda: Path("wsl.exe"))
+    launch = Mock()
+    monkeypatch.setattr(subprocess, "Popen", launch)
+    runtime.keep_alive()
+    command = launch.call_args.args[0]
+    assert command[1:3] == ["--distribution", "WeaveCBT"]
+    assert "flock" in command
+    assert command[-2:] == ["sleep", "infinity"]
+    assert launch.call_args.kwargs["creationflags"] == subprocess.CREATE_NO_WINDOW

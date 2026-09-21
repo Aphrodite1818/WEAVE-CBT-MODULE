@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -72,18 +73,37 @@ class WindowsWSLRuntime(RuntimeProvider):
         if wsl is None:
             raise RuntimeError("WSL is not available on this system.")
 
-        return subprocess.run(
+        result = subprocess.run(
             [str(wsl), *arguments],
             stdin=subprocess.DEVNULL,
             capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
             timeout=timeout,
             check=False,
             startupinfo=self._hidden_console_startupinfo(),
             creationflags=subprocess.CREATE_NEW_CONSOLE,
         )
+        # WSL management commands emit UTF-16LE on Windows; Linux commands
+        # emit UTF-8. Decoding everything as UTF-8 corrupts localized errors.
+        return subprocess.CompletedProcess(
+            result.args, result.returncode,
+            self._decode_output(result.stdout), self._decode_output(result.stderr),
+        )
+
+    @staticmethod
+    def _decode_output(value: bytes | str | None) -> str:
+        if isinstance(value, str):
+            return value
+        if not value:
+            return ""
+        encoding = "utf-16" if value.startswith((b"\xff\xfe", b"\xfe\xff")) else (
+            "utf-16-le" if b"\x00" in value else "utf-8"
+        )
+        return value.decode(encoding, errors="replace").lstrip("\ufeff")
+
+    def _modern_wsl_available(self) -> bool:
+        result = self._run_wsl(["--version"])
+        match = re.search(r"(\d+)\.(\d+)\.(\d+)", result.stdout)
+        return bool(result.returncode == 0 and match and tuple(map(int, match.groups())) >= (0, 67, 6))
 
     def _run_distro_bootstrap(
         self,
@@ -333,9 +353,9 @@ class WindowsWSLRuntime(RuntimeProvider):
 
         try:
             result = self._run_wsl(["--status"])
+            return result.returncode == 0 and self._modern_wsl_available()
         except (OSError, subprocess.TimeoutExpired, RuntimeError):
             return False
-        return result.returncode == 0
 
     def is_installed(self) -> bool:
         if not self.is_available():
@@ -367,6 +387,14 @@ class WindowsWSLRuntime(RuntimeProvider):
             raise RuntimeError(
                 "wsl.exe is not available on this Windows installation."
             )
+
+        # Inbox WSL can pass --status while lacking systemd support.
+        status = self._run_wsl(["--status"])
+        if status.returncode == 0:
+            result = self._run_wsl(["--update", "--web-download"], timeout=600)
+            if result.returncode != 0:
+                raise RuntimeError("Unable to update WSL: " + self._normalize_wsl_output(result.stderr or result.stdout))
+            return RuntimePreparationResult(reboot_required=not self.is_available())
 
         try:
             result = self._run_wsl(
@@ -423,7 +451,7 @@ class WindowsWSLRuntime(RuntimeProvider):
             timeout=300,
         )
         if result.returncode != 0:
-            stderr = self._normalize_wsl_output(result.stderr)
+            stderr = self._normalize_wsl_output(result.stderr or result.stdout)
             raise RuntimeError(
                 "Unable to create WEAVE CBT WSL runtime"
                 + (f": {stderr}" if stderr else ".")
@@ -437,6 +465,22 @@ class WindowsWSLRuntime(RuntimeProvider):
 
         self._wait_for_distro_responsive()
         self._apply_boot_config_best_effort()
+
+    def keep_alive(self) -> None:
+        """Hold a WSL client open independently of the desktop window.
+
+        A Linux flock makes repeated starts harmless. Systemd services alone
+        do not prevent WSL idle shutdown. This process ends with this distro.
+        """
+        wsl = self._wsl_executable()
+        if wsl is None:
+            raise RuntimeError("WSL is unavailable.")
+        subprocess.Popen(
+            [str(wsl), "--distribution", WEAVE_DISTRO_NAME, "--user", "root",
+             "--exec", "flock", "--nonblock", "/run/weave-cbt-keepalive.lock", "sleep", "infinity"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
 
     def stop(self) -> None:
         if not self.is_installed() or not self.is_running():

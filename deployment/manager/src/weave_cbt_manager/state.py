@@ -27,6 +27,8 @@ class ManagerState:
     installed_at: str | None = None
     updated_at: str | None = None
     last_error: str | None = None
+    owner_sid: str | None = None
+    startup_warning: str | None = None
     last_update_check_at: str | None = None
     available_manager_version: str | None = None
     available_cbt_version: str | None = None

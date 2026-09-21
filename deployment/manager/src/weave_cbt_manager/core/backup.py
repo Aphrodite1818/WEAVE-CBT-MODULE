@@ -26,17 +26,22 @@ class BackupService:
         prefix = self._compose_prefix()
         inner = 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"'
         command = f"install -d -m 0700 {shlex.quote(str(RUNTIME_BACKUP_ROOT))} && {prefix} exec -T postgres sh -lc {shlex.quote(inner)} | gzip -c > {shlex.quote(str(backup))} && test -s {shlex.quote(str(backup))} && chmod 0600 {shlex.quote(str(backup))}"
-        result = self.runtime.execute(["sh", "-lc", command], timeout=1800)
+        result = self.runtime.execute(["bash", "-o", "pipefail", "-c", "umask 077; " + command], timeout=1800)
         if not result.succeeded:
             raise RuntimeError(f"Unable to back up the WEAVE CBT database: {result.stderr or result.stdout}")
         return backup
 
     def restore_database_backup(self, backup: PurePosixPath) -> None:
         prefix = self._compose_prefix()
-        self.runtime.execute(["sh", "-lc", f"{prefix} stop api worker nginx migrate >/dev/null 2>&1 || true"], timeout=120)
+        checked = self.runtime.execute(["gzip", "-t", str(backup)], timeout=120)
+        if not checked.succeeded:
+            raise RuntimeError("The database backup is damaged; restoration was stopped before changing the database.")
+        stopped = self.runtime.execute(["sh", "-lc", f"{prefix} stop api worker nginx migrate"], timeout=120)
+        if not stopped.succeeded:
+            raise RuntimeError("Unable to stop application services before database restoration.")
         recreate = 'dropdb --if-exists --force -U "$POSTGRES_USER" "$POSTGRES_DB" && createdb -U "$POSTGRES_USER" "$POSTGRES_DB"'
         restore = 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" "$POSTGRES_DB"'
         command = f"test -s {shlex.quote(str(backup))} && {prefix} exec -T postgres sh -lc {shlex.quote(recreate)} && gunzip -c {shlex.quote(str(backup))} | {prefix} exec -T postgres sh -lc {shlex.quote(restore)}"
-        result = self.runtime.execute(["sh", "-lc", command], timeout=1800)
+        result = self.runtime.execute(["bash", "-o", "pipefail", "-c", command], timeout=1800)
         if not result.succeeded:
             raise RuntimeError(f"Unable to restore the WEAVE CBT database backup: {result.stderr or result.stdout}")

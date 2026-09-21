@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
+import ctypes
 from pathlib import Path
 import re
-import subprocess
 import tempfile
 
 import httpx
@@ -148,4 +148,7 @@ class UpdateService:
 
     @staticmethod
     def launch_manager_installer(installer: Path) -> None:
-        subprocess.Popen(["powershell.exe", "-NoProfile", "-Command", "Start-Process", "-FilePath", str(installer), "-Verb", "RunAs"], creationflags=subprocess.CREATE_NO_WINDOW)
+        # ShellExecute handles Windows paths with spaces without a shell parser.
+        result = ctypes.windll.shell32.ShellExecuteW(None, "runas", str(installer), None, str(installer.parent), 1)
+        if result <= 32:
+            raise RuntimeError("The installer could not start or its administrator prompt was cancelled.")

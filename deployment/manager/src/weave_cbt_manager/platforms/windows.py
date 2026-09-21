@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import ctypes
+import csv
 import ipaddress
 import os
 import platform
 import shutil
 import socket
+import subprocess
+import sys
 from pathlib import Path
 
 import psutil
@@ -52,13 +55,18 @@ class WindowsPlatform(PlatformAdapter):
         return Path("C:/ProgramData/WeaveCBT")
 
     def is_supported(self) -> bool:
-        return platform.system().lower() == "windows"
+        return platform.system().lower() == "windows" and sys.getwindowsversion().build >= 19041
 
     def is_admin(self) -> bool:
         try:
             return bool(ctypes.windll.shell32.IsUserAnAdmin())
         except (AttributeError, OSError):
             return False
+
+    def account_sid(self) -> str:
+        result = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True,
+                                text=True, check=True, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW)
+        return next(csv.reader(result.stdout.splitlines()))[1]
 
     def memory(self) -> SystemMemory:
         memory = psutil.virtual_memory()
@@ -126,7 +134,7 @@ class WindowsPlatform(PlatformAdapter):
 
                 if ip.is_private and not interface_is_virtual:
                     preferred.append(address.address)
-                else:
+                elif not interface_is_virtual:
                     fallback.append(address.address)
 
         if preferred:

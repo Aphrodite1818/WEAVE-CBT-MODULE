@@ -4,6 +4,10 @@ on:
   push:
     branches: [deployment-implementation]
     paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'deployment/docker/**'
+      - '.dockerignore'
       - 'deployment/manager/**'
       - 'deployment/compose.yaml'
       - 'deployment/nginx/nginx.conf'
@@ -13,15 +17,15 @@ on:
       version:
         description: Manager installer version
         required: true
-        default: '0.1.10'
+        default: '0.1.11'
       cbt_version:
         description: CBT application version represented by the pinned image
         required: true
         default: '0.1.0'
       weave_image:
-        description: Existing stable GHCR image. This workflow does not rebuild the backend image.
-        required: true
-        default: 'ghcr.io/aphrodite1818/weave-cbt-module:sha-7604735'
+        description: Optional existing public image. Leave empty to build and publish the application from this commit.
+        required: false
+        default: ''
       publish:
         description: Publish/update the production and staging channel releases
         required: true
@@ -30,7 +34,7 @@ on:
       release_notes:
         description: Short release notes
         required: false
-        default: 'WEAVE CBT Manager 0.1.10 removes WSL stdin-based configuration transfer, copies short-lived host staging files atomically with SHA-256 verification, and hardens partial-install recovery.'
+        default: 'Weave CBT Manager 0.1.11 adds guided setup, the official Weave icon, recoverable installation, school network access and verified application packaging.'
 
 permissions:
   contents: read
@@ -69,6 +73,78 @@ jobs:
         shell: pwsh
         run: python -m weave_cbt_manager --self-test
 
+  app-image:
+    name: Build and verify CBT application image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.resolve.outputs.image }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Resolve image repository
+        id: repository
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: echo "name=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: inputs.weave_image == ''
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish application
+        id: build
+        if: inputs.weave_image == ''
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deployment/docker/app/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.repository.outputs.name }}:sha-${{ github.sha }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=cbt-app
+          cache-to: type=gha,mode=max,scope=cbt-app
+      - name: Resolve immutable image and verify anonymous pull
+        id: resolve
+        env:
+          REQUESTED_IMAGE: ${{ inputs.weave_image }}
+          BUILT_IMAGE: ${{ steps.repository.outputs.name }}@${{ steps.build.outputs.digest }}
+        run: |
+          image="${REQUESTED_IMAGE:-$BUILT_IMAGE}"
+          export DOCKER_CONFIG="$(mktemp -d)"
+          docker pull "$image"
+          resolved=$(docker image inspect "$image" --format '{{index .RepoDigests 0}}')
+          test -n "$resolved"
+          echo "image=$resolved" >> "$GITHUB_OUTPUT"
+          echo "WEAVE_IMAGE=$resolved" >> "$GITHUB_ENV"
+      - name: Start the exact application shipped in the installer
+        run: |
+          cat > deployment/ci.env <<'EOF'
+          ENVIRONMENT='stg'
+          WEAVE_API_BASE_URL='https://weave-container-staging.up.railway.app'
+          POSTGRES_DB='weave_cbt'
+          POSTGRES_USER='weave'
+          POSTGRES_PASSWORD='CI-only-credential-2026'
+          DATABASE_URL='postgresql+asyncpg://weave:CI-only-credential-2026@postgres:5432/weave_cbt'
+          REDIS_URL='redis://redis:6379/0'
+          DEBUG='false'
+          EOF
+          docker compose -p weave-cbt-ci -f deployment/compose.yaml --env-file deployment/ci.env up -d --wait --wait-timeout 240
+          curl --fail --retry 20 --retry-delay 3 --retry-all-errors http://localhost/staff -o /tmp/staff.html
+          curl --fail --retry 20 --retry-delay 3 --retry-all-errors http://localhost/student -o /tmp/student.html
+          grep -q '<html' /tmp/staff.html
+          grep -q '<html' /tmp/student.html
+      - name: Application diagnostics
+        if: failure()
+        run: docker compose -p weave-cbt-ci -f deployment/compose.yaml --env-file deployment/ci.env logs --no-color --tail 100
+      - name: Stop CI services
+        if: always()
+        run: docker compose -p weave-cbt-ci -f deployment/compose.yaml --env-file deployment/ci.env down --volumes
+
   runtime-rootfs:
     name: Build WSL runtime rootfs
     runs-on: ubuntu-latest
@@ -89,8 +165,6 @@ jobs:
           DEBUG='false'
           EOF
           docker compose --project-name weave-cbt-ci --file deployment/compose.yaml --project-directory deployment --env-file /tmp/weave-runtime.env config --quiet
-      - name: Verify pinned CBT image can be pulled without registry login
-        run: docker pull ghcr.io/aphrodite1818/weave-cbt-module:sha-7604735
       - name: Build dedicated WEAVE runtime
         run: docker build -f deployment/manager/runtime/distro/Dockerfile -t weave-cbt-wsl-runtime deployment/manager/runtime/distro
       - name: Export WSL root filesystem
@@ -109,7 +183,7 @@ jobs:
   windows-installer:
     name: Build ${{ matrix.channel }} Windows installer
     runs-on: windows-latest
-    needs: [manager-tests, runtime-rootfs]
+    needs: [manager-tests, runtime-rootfs, app-image]
     permissions:
       contents: write
     strategy:
@@ -138,10 +212,12 @@ jobs:
         id: identity
         shell: pwsh
         env:
-          INPUT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '0.1.10' }}
+          INPUT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '0.1.11' }}
           INPUT_CBT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.cbt_version || '0.1.0' }}
-          INPUT_IMAGE: ${{ github.event_name == 'workflow_dispatch' && inputs.weave_image || 'ghcr.io/aphrodite1818/weave-cbt-module:sha-7604735' }}
+          INPUT_IMAGE: ${{ needs.app-image.outputs.image }}
         run: |
+          if ($env:INPUT_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid manager version" }
+          if ($env:INPUT_CBT_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid CBT version" }
           "version=$env:INPUT_VERSION" >> $env:GITHUB_OUTPUT
           "cbt_version=$env:INPUT_CBT_VERSION" >> $env:GITHUB_OUTPUT
           "image=$env:INPUT_IMAGE" >> $env:GITHUB_OUTPUT
@@ -149,7 +225,7 @@ jobs:
         id: manager
         shell: pwsh
         run: |
-          $dist = & deployment/manager/build/build-manager.ps1 -Environment '${{ matrix.build_env }}' -ApiBaseUrl '${{ matrix.api_url }}' -WeaveImage '${{ steps.identity.outputs.image }}' -CbtVersion '${{ steps.identity.outputs.cbt_version }}' -OutputDirectory '${{ github.workspace }}\deployment\manager\build-output-${{ matrix.channel }}' | Select-Object -Last 1
+          $dist = & deployment/manager/build/build-manager.ps1 -Environment '${{ matrix.build_env }}' -ApiBaseUrl '${{ matrix.api_url }}' -WeaveImage '${{ steps.identity.outputs.image }}' -CbtVersion '${{ steps.identity.outputs.cbt_version }}' -ManagerVersion '${{ steps.identity.outputs.version }}' -OutputDirectory '${{ github.workspace }}\deployment\manager\build-output-${{ matrix.channel }}' | Select-Object -Last 1
           if (-not (Test-Path $dist)) { throw "Manager distribution not found: $dist" }
           "dist=$dist" >> $env:GITHUB_OUTPUT
       - name: Smoke test compiled Manager executable
@@ -158,7 +234,7 @@ jobs:
           $exe = Join-Path '${{ steps.manager.outputs.dist }}' 'WeaveCBT-Manager.exe'
           if (-not (Test-Path $exe)) { throw "Compiled Manager executable not found: $exe" }
 
-          $process = Start-Process -FilePath $exe -ArgumentList '--self-test' -PassThru
+          $process = Start-Process -FilePath $exe -ArgumentList '--self-test' -WindowStyle Hidden -PassThru
           if (-not $process.WaitForExit(30000)) {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
             throw 'Compiled Manager self-test timed out.'
@@ -185,7 +261,7 @@ jobs:
         id: release
         shell: pwsh
         env:
-          RELEASE_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'WEAVE CBT Manager 0.1.10 removes WSL stdin-based configuration transfer, copies short-lived host staging files atomically with SHA-256 verification, and hardens partial-install recovery.' }}
+          RELEASE_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'Weave CBT Manager 0.1.11 adds guided setup, the official Weave icon, recoverable installation, school network access and verified application packaging.' }}
         run: |
           $output = '${{ github.workspace }}\deployment\manager\installer-output-${{ matrix.channel }}'
           $installer = Get-ChildItem $output -Filter '*.exe' | Select-Object -First 1
@@ -222,7 +298,7 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'WEAVE CBT Manager 0.1.10 removes WSL stdin-based configuration transfer, copies short-lived host staging files atomically with SHA-256 verification, and hardens partial-install recovery.' }}
+          RELEASE_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'Weave CBT Manager 0.1.11 adds guided setup, the official Weave icon, recoverable installation, school network access and verified application packaging.' }}
         run: |
           $tag='${{ matrix.release_tag }}'
           $output='${{ github.workspace }}\deployment\manager\installer-output-${{ matrix.channel }}'
@@ -271,7 +347,3 @@ jobs:
           }
           gh @createArgs
           if ($LASTEXITCODE -ne 0) { throw "Unable to publish release $tag." }
-
-  # Backend image publishing is intentionally disabled for this installer pass.
-  # The existing compiled CBT image is pinned through WEAVE_IMAGE and is not rebuilt here.
-  # Frontend tests/lint that were previously commented out remain disabled.

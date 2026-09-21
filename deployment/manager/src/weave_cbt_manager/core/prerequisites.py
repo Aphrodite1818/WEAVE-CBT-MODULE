@@ -164,10 +164,9 @@ class PrerequisiteService:
         return PrerequisiteCheck(
             key="admin",
             label="Administrator privileges",
-            state=PrerequisiteState.ACTION_REQUIRED,
+            state=PrerequisiteState.BLOCKED,
             message=(
-                "Administrator privileges are required to install "
-                "WEAVE CBT."
+                "Close the Manager and select Run as administrator to prepare this computer."
             ),
         )
 

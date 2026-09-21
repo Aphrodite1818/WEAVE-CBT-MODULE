@@ -57,6 +57,25 @@ class DeploymentService:
         self._write_runtime_file(self.paths.nginx_file, nginx_config, mode="0644")
         self._write_runtime_file(self.paths.env_file, runtime_env, mode="0600")
 
+    def environment_exists(self) -> bool:
+        result = self.runtime.execute(["test", "-s", str(self.paths.env_file)], timeout=15)
+        if result.return_code not in (0, 1):
+            raise RuntimeError("Unable to inspect saved server configuration: " + result.stderr)
+        return result.succeeded
+
+    def refresh_assets(self, *, compose_yaml: str, nginx_config: str) -> None:
+        """Repair deployment files without replacing existing database secrets."""
+        self._write_runtime_file(self.paths.compose_file, compose_yaml, mode="0644")
+        self._write_runtime_file(self.paths.nginx_file, nginx_config, mode="0644")
+
+    def has_persistent_data(self) -> bool:
+        result = self.docker.docker(
+            ["volume", "ls", "--quiet", "--filter", f"label=com.docker.compose.project={COMPOSE_PROJECT_NAME}"], timeout=15,
+        )
+        if not result.succeeded:
+            raise RuntimeError("Unable to check for existing school data: " + result.stderr)
+        return bool(result.stdout.strip())
+
     def config_exists(self) -> bool:
         script = (
             'test -s "$1" && test -s "$2" && test -s "$3"'

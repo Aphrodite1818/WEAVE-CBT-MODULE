@@ -244,8 +244,8 @@ class DockerService:
         if not self.runtime.is_installed():
             raise RuntimeError("WEAVE CBT runtime has not been installed.")
 
-        if not self.runtime.is_running():
-            self.runtime.start()
+        # WSL's Running state can precede a usable systemd session.
+        self.runtime.start()
 
         if not self.wait_until_installed(timeout_seconds=60):
             raise RuntimeError(

@@ -23,17 +23,22 @@ class WindowsStartupService:
         return result
 
     def install_tasks(self) -> None:
-        self._run(["schtasks", "/Create", "/F", "/RL", "HIGHEST", "/SC", "ONLOGON", "/TN", STARTUP_TASK_NAME, "/TR", self._manager_command("--startup")])
-        self._run(["schtasks", "/Create", "/F", "/RL", "HIGHEST", "/SC", "DAILY", "/ST", "12:00", "/TN", UPDATE_CHECK_TASK_NAME, "/TR", self._manager_command("--check-updates")])
+        # WSL distributions are registered per Windows user, never SYSTEM.
+        user = self._run(["whoami"]).stdout.strip()
+        identity = ["/RU", user, "/IT"]
+        self._run(["schtasks", "/Create", "/F", "/RL", "HIGHEST", *identity, "/SC", "ONLOGON", "/TN", STARTUP_TASK_NAME, "/TR", self._manager_command("--startup")])
+        self._run(["schtasks", "/Create", "/F", "/RL", "HIGHEST", *identity, "/SC", "DAILY", "/ST", "12:00", "/TN", UPDATE_CHECK_TASK_NAME, "/TR", self._manager_command("--check-updates")])
 
     def remove_tasks(self) -> None:
         for name in (STARTUP_TASK_NAME, UPDATE_CHECK_TASK_NAME):
             self._run(["schtasks", "/Delete", "/F", "/TN", name], check=False)
 
     def register_resume_after_reboot(self) -> None:
-        self._run(["reg", "add", r"HKLM\Software\Microsoft\Windows\CurrentVersion\RunOnce", "/v", RUNONCE_VALUE_NAME, "/t", "REG_SZ", "/d", self._manager_command("--first-run"), "/f"])
+        user = self._run(["whoami"]).stdout.strip()
+        self._run(["schtasks", "/Create", "/F", "/RL", "HIGHEST", "/RU", user, "/IT", "/SC", "ONLOGON", "/TN", RUNONCE_VALUE_NAME, "/TR", self._manager_command("--first-run")])
 
     def clear_resume_after_reboot(self) -> None:
+        self._run(["schtasks", "/Delete", "/F", "/TN", RUNONCE_VALUE_NAME], check=False)
         self._run(["reg", "delete", r"HKLM\Software\Microsoft\Windows\CurrentVersion\RunOnce", "/v", RUNONCE_VALUE_NAME, "/f"], check=False)
 
     @staticmethod

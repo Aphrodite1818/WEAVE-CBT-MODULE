@@ -26,8 +26,9 @@ def test_parser_recognizes_self_test() -> None:
     assert arguments.startup is False
 
 
-def test_testing_installer_disk_floor_is_four_gb() -> None:
+def test_installer_reserves_space_for_runtime_images_and_school_data() -> None:
     controller = ManagerController()
 
-    assert controller.prerequisites.policy.minimum_free_disk_gb == 4.0
-    assert controller.prerequisites.policy.minimum_memory_gb == 8.0
+    assert controller.prerequisites.policy.minimum_free_disk_gb == 20.0
+    # An 8 GB host exposes slightly less usable physical RAM to Windows.
+    assert controller.prerequisites.policy.minimum_memory_gb == 7.5

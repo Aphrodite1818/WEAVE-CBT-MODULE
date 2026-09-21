@@ -36,8 +36,11 @@ DefaultDirName={autopf}\WEAVE CBT
 DefaultGroupName={#ProductName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=admin
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
+ArchitecturesAllowed=x64os
+ArchitecturesInstallIn64BitMode=x64os
+MinVersion=10.0.19041
+SetupIconFile=..\resources\weave.ico
+UninstallDisplayIcon={app}\manager\WeaveCBT-Manager.exe
 OutputDir={#OutputDir}
 OutputBaseFilename={#OutputName}
 Compression=lzma2/ultra64
@@ -65,3 +68,25 @@ Filename: "{app}\manager\WeaveCBT-Manager.exe"; Parameters: "--first-run"; Descr
 
 [UninstallRun]
 Filename: "{app}\manager\WeaveCBT-Manager.exe"; Parameters: "--uninstall-keep-data"; Flags: runhidden waituntilterminated skipifdoesntexist
+
+[Code]
+function InitializeSetup(): Boolean;
+var
+  State: AnsiString;
+  OtherChannel: String;
+begin
+  Result := True;
+#if BuildChannel == "staging"
+  OtherChannel := 'production';
+#else
+  OtherChannel := 'staging';
+#endif
+  if LoadStringFromFile(ExpandConstant('{commonappdata}\WeaveCBT\manager-state.json'), State) then
+  begin
+    if Pos('"channel": "' + OtherChannel + '"', String(State)) > 0 then
+    begin
+      MsgBox('This computer already contains a ' + OtherChannel + ' Weave server. Use its matching installer. Production and staging require separate computers.', mbError, MB_OK);
+      Result := False;
+    end;
+  end;
+end;

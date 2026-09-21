@@ -1,3 +1,6 @@
 """WEAVE CBT Manager package."""
 
-__version__ = "0.1.10"
+try:
+    from .generated_build import MANAGER_VERSION as __version__
+except ImportError:
+    __version__ = "0.1.11"

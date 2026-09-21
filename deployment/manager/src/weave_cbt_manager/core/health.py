@@ -57,9 +57,9 @@ class HealthService:
         request = Request("http://127.0.0.1/staff", method="GET", headers={"User-Agent": "WEAVE-CBT-Manager"})
         try:
             with urlopen(request, timeout=3) as response:
-                return 200 <= response.status < 500
-        except HTTPError as exc:
-            return 200 <= exc.code < 500
+                return response.status == 200 and "text/html" in response.headers.get("Content-Type", "")
+        except HTTPError:
+            return False
         except (URLError, OSError, TimeoutError):
             return False
 
@@ -77,11 +77,13 @@ class HealthService:
             health = str(record.get("Health") or record.get("health") or "").lower()
             exit_code = record.get("ExitCode", record.get("exit_code"))
             if service == "migrate" and state in {"exited", "stopped"}:
-                migration_ok = str(exit_code or "0") == "0"
+                migration_ok = exit_code is not None and str(exit_code) == "0"
             if state == "running" and health not in {"unhealthy", "starting"}:
                 counts[service] = counts.get(service, 0) + 1
         missing = [f"{service} ({counts.get(service, 0)}/{expected})" for service, expected in self.REQUIRED_RUNNING.items() if counts.get(service, 0) < expected]
-        services_ready = not missing and (migration_ok or not any(str(r.get("Service")) == "migrate" for r in records))
+        if not migration_ok:
+            missing.append("Database migration has not completed successfully")
+        services_ready = not missing
         web_reachable = self._web_reachable() if services_ready else False
         detail = "Healthy" if services_ready and web_reachable else "; ".join(missing) or "Web endpoint is not reachable."
         return HealthSnapshot(True, services_ready, web_reachable, detail)

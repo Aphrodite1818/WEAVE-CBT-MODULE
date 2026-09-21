@@ -1,48 +1,45 @@
-"""First-install database configuration page."""
-
-from __future__ import annotations
-
+"""A staff-friendly welcome; database credentials belong to the installer."""
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QFormLayout, QGroupBox, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
-
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QWidget
+from ..theme import button, label
 
 class SetupPage(QWidget):
-    install_requested = Signal(str, str, str)
+    install_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
-        layout = QVBoxLayout(self)
-        title = QLabel("Set up your local CBT server")
-        title.setStyleSheet("font-size: 24px; font-weight: 600;")
-        body = QLabel("Choose the local PostgreSQL details used only by this WEAVE CBT server. WEAVE manages the cloud connection automatically.")
-        body.setWordWrap(True)
-        layout.addWidget(title)
-        layout.addWidget(body)
-        group = QGroupBox("Database configuration")
-        form = QFormLayout(group)
-        self.database_name = QLineEdit("weave_cbt")
-        self.database_user = QLineEdit("weave")
-        self.password = QLineEdit()
-        self.password.setEchoMode(QLineEdit.Password)
-        self.confirm_password = QLineEdit()
-        self.confirm_password.setEchoMode(QLineEdit.Password)
-        form.addRow("Database name", self.database_name)
-        form.addRow("Database username", self.database_user)
-        form.addRow("Database password", self.password)
-        form.addRow("Confirm password", self.confirm_password)
-        layout.addWidget(group)
-        self.error = QLabel("")
-        self.error.setStyleSheet("color: #b91c1c;")
-        self.error.setWordWrap(True)
-        layout.addWidget(self.error)
-        self.install_button = QPushButton("Install WEAVE CBT")
-        self.install_button.clicked.connect(self._submit)
-        layout.addWidget(self.install_button)
-        layout.addStretch(1)
-
-    def _submit(self) -> None:
-        if self.password.text() != self.confirm_password.text():
-            self.error.setText("The database passwords do not match.")
-            return
-        self.error.clear()
-        self.install_requested.emit(self.database_name.text(), self.database_user.text(), self.password.text())
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 16, 0, 16)
+        layout.setSpacing(32)
+        copy = QVBoxLayout()
+        copy.setSpacing(18)
+        copy.addStretch()
+        copy.addWidget(label("YOUR SCHOOL. YOUR SERVER.", "eyebrow"))
+        copy.addWidget(label("A smoother start\nto every exam.", "heading"))
+        copy.addWidget(label("Turn this computer into your school's Weave CBT server. We'll prepare everything you need, then guide you into Weave."))
+        copy.addSpacing(8)
+        for title, detail in [
+            ("01  Prepare this computer", "We check Windows, storage and the local runtime."),
+            ("02  Set up your server", "We install the services and secure the local database."),
+            ("03  Connect your school", "Open Weave to pair your school and get exam-ready."),
+        ]:
+            copy.addWidget(label(title, "section"))
+            copy.addWidget(label(detail))
+        copy.addSpacing(10)
+        self.install_button = button("Set up this computer  →", self.install_requested.emit, primary=True)
+        copy.addWidget(self.install_button)
+        copy.addWidget(label("Internet is needed for the initial download. Windows may need a restart."))
+        copy.addStretch()
+        layout.addLayout(copy, 6)
+        hero = QFrame()
+        hero.setObjectName("hero")
+        right = QVBoxLayout(hero)
+        right.setContentsMargins(32, 36, 32, 36)
+        right.setSpacing(24)
+        right.addWidget(label("WEAVE CBT / WINDOWS", "heroBody"))
+        right.addStretch()
+        right.addWidget(label("Ready for\nthe next\nbright mind.", "heroTitle"))
+        right.addWidget(label("One local server.\nA connected classroom.\nMore room to focus.", "heroBody"))
+        right.addStretch()
+        right.addWidget(label("Built for your school network", "heroBody"))
+        layout.addWidget(hero, 5)
