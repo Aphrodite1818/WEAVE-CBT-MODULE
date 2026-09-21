@@ -1,7 +1,7 @@
 """Operational dashboard with clear readiness and classroom entry points."""
 from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QApplication, QGridLayout, QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout, QWidget
 from ..theme import button, card, label
 
 class DashboardPage(QWidget):
@@ -13,6 +13,8 @@ class DashboardPage(QWidget):
     uninstall_requested = Signal()
     purge_requested = Signal()
     logs_requested = Signal()
+    database_credentials_requested = Signal()
+    database_console_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -71,6 +73,16 @@ class DashboardPage(QWidget):
         maintenance_toggle.setObjectName("link")
         layout.addWidget(maintenance_toggle, alignment=Qt.AlignLeft)
         self.maintenance, maintenance_layout = card()
+        maintenance_layout.addWidget(label("Database administration", "section"))
+        maintenance_layout.addWidget(label("Weave generates a strong local PostgreSQL password automatically. An administrator can reveal it here when direct database access is genuinely needed. PostgreSQL remains private to this server and is not exposed to the school LAN."))
+        database_row = QHBoxLayout()
+        reveal = button("Reveal database credentials", self.database_credentials_requested.emit)
+        console = button("Open PostgreSQL console", self.database_console_requested.emit)
+        database_row.addWidget(reveal)
+        database_row.addWidget(console)
+        maintenance_layout.addLayout(database_row)
+        self.action_buttons.extend([reveal, console])
+        maintenance_layout.addSpacing(10)
         maintenance_layout.addWidget(label("Installation settings", "section"))
         maintenance_layout.addWidget(label("Uninstalling the manager keeps school data. Permanent removal cannot be undone."))
         row = QHBoxLayout()
