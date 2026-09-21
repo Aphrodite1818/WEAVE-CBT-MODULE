@@ -19,6 +19,22 @@ class DeploymentPaths:
     nginx_file: PurePosixPath = PurePosixPath(str(RUNTIME_NGINX_FILE))
 
 
+@dataclass(frozen=True, slots=True)
+class DatabaseCredentials:
+    database_name: str
+    database_user: str
+    database_password: str
+
+
+def _decode_env_value(value: str) -> str:
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] == "'":
+        return value[1:-1].replace("\\'", "'")
+    if len(value) >= 2 and value[0] == value[-1] == '"':
+        return value[1:-1]
+    return value
+
+
 class DeploymentService:
     """Own the local WEAVE Compose project without touching persistent volumes."""
 
@@ -62,6 +78,33 @@ class DeploymentService:
         if result.return_code not in (0, 1):
             raise RuntimeError("Unable to inspect saved server configuration: " + result.stderr)
         return result.succeeded
+
+    def database_credentials(self) -> DatabaseCredentials:
+        """Read the locally stored PostgreSQL credentials on explicit admin request.
+
+        The secret is returned only to the Manager process. It is never copied
+        into Manager state, command arguments, or logs.
+        """
+        result = self.runtime.execute(["cat", str(self.paths.env_file)], timeout=10)
+        if not result.succeeded:
+            raise RuntimeError("Unable to read the saved database credentials.")
+
+        values: dict[str, str] = {}
+        wanted = {"POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD"}
+        for line in result.stdout.splitlines():
+            key, separator, raw_value = line.partition("=")
+            if separator and key in wanted:
+                values[key] = _decode_env_value(raw_value)
+
+        missing = wanted.difference(values)
+        if missing:
+            raise RuntimeError("The saved database configuration is incomplete. Run Repair before accessing the database.")
+
+        return DatabaseCredentials(
+            database_name=values["POSTGRES_DB"],
+            database_user=values["POSTGRES_USER"],
+            database_password=values["POSTGRES_PASSWORD"],
+        )
 
     def refresh_assets(self, *, compose_yaml: str, nginx_config: str) -> None:
         """Repair deployment files without replacing existing database secrets."""
