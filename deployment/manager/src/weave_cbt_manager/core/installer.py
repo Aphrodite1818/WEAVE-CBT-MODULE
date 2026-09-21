@@ -179,41 +179,26 @@ class InstallerService:
             )
 
     def _prepare_docker(self) -> None:
-        """Ensure Docker Engine and Compose are operational."""
+        """
+        Ensure Docker Engine and Compose are operational.
+
+        Docker readiness is intentionally delegated to DockerService so a
+        cold-starting WSL2 distro is given a bounded retry window instead of
+        failing installation after one short CLI timeout.
+        """
 
         self._progress(
             InstallationStage.CHECKING_DOCKER,
-            "Preparing the container engine.",
+            "Preparing the container engine. This can take up to a minute on first start.",
         )
 
-        status = self.docker.status()
-
-        if not status.installed:
-            raise InstallationError(
-                "Docker Engine is missing from the WEAVE CBT runtime."
-            )
-
-        if not status.compose_available:
-            raise InstallationError(
-                "Docker Compose v2 is missing from the WEAVE CBT runtime."
-            )
-
-        if not status.running:
-            self.docker.start()
-
-        final_status = self.docker.status()
-
-        if not final_status.ready:
-            raise InstallationError(
-                "The WEAVE CBT container engine could not be prepared."
-            )
+        try:
+            self.docker.ensure_ready()
+        except RuntimeError as exc:
+            raise InstallationError(str(exc)) from exc
 
     def install(self) -> InstallationResult:
-        """
-        Perform the infrastructure installation sequence.
-
-        Application deployment is deliberately not handled here yet.
-        """
+        """Perform the infrastructure installation sequence."""
 
         try:
             self._check_prerequisites()
