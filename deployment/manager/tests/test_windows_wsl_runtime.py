@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -40,40 +41,11 @@ def test_captured_wsl_invocation_uses_hidden_real_console(
     assert captured["creationflags"] == subprocess.CREATE_NEW_CONSOLE
     assert captured["stdin"] == subprocess.DEVNULL
     assert captured["capture_output"] is True
+    assert "input" not in captured
     startupinfo = captured["startupinfo"]
     assert isinstance(startupinfo, subprocess.STARTUPINFO)
     assert startupinfo.dwFlags & subprocess.STARTF_USESHOWWINDOW
     assert startupinfo.wShowWindow == subprocess.SW_HIDE
-
-
-def test_wsl_file_backed_stdin_does_not_put_secret_in_process_arguments(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    runtime = _runtime(tmp_path)
-    monkeypatch.setattr(
-        runtime,
-        "_wsl_executable",
-        lambda: Path("C:/Windows/System32/wsl.exe"),
-    )
-    captured: dict[str, object] = {}
-
-    def fake_run(command, **kwargs):
-        captured["command"] = command
-        captured.update(kwargs)
-        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-
-    secret = b"POSTGRES_PASSWORD='not-for-argv'\n"
-    payload_path = tmp_path / "payload"
-    payload_path.write_bytes(secret)
-    with payload_path.open("rb") as payload_file:
-        runtime._run_wsl(["--status"], stdin_file=payload_file)
-        assert captured["stdin"] is payload_file
-
-    assert "input" not in captured
-    assert secret.decode() not in " ".join(captured["command"])
 
 
 def test_bootstrap_wsl_invocation_does_not_redirect_standard_streams(
@@ -106,42 +78,149 @@ def test_bootstrap_wsl_invocation_does_not_redirect_standard_streams(
     assert captured["command"][-1] == "true"
 
 
-def test_write_text_file_is_atomic_file_backed_and_secret_free_in_argv(
+def test_windows_drive_path_maps_to_default_wsl_mount(tmp_path: Path) -> None:
+    runtime = _runtime(tmp_path)
+    path = Path(r"C:\Users\Taiwo\AppData\Local\Temp\WeaveCBT\payload.tmp")
+    mapped = runtime._windows_path_to_wsl_mount(path)
+    assert mapped == "/mnt/c/Users/Taiwo/AppData/Local/Temp/WeaveCBT/payload.tmp"
+
+
+def test_write_text_file_uses_host_staging_not_wsl_stdin(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     runtime = _runtime(tmp_path)
     monkeypatch.setattr(runtime, "is_installed", lambda: True)
-    captured: dict[str, object] = {}
+    staged = tmp_path / "payload.tmp"
+    secret = "POSTGRES_PASSWORD='super-secret'\n"
+    expected_hash = hashlib.sha256(secret.encode("utf-8")).hexdigest()
+    calls: list[list[str]] = []
 
-    def fake_run(command, *, timeout, stdin_file=None):
-        captured["command"] = list(command)
-        captured["timeout"] = timeout
-        captured["stdin_is_file"] = stdin_file is not None
-        captured["payload"] = stdin_file.read().decode("utf-8") if stdin_file else None
+    def stage(content: str) -> Path:
+        assert content == secret
+        staged.write_text(content, encoding="utf-8")
+        return staged
+
+    def fake_run(command, *, timeout):
+        calls.append(list(command))
+        if command[0] == "sha256sum":
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=f"{expected_hash}  /opt/weave-cbt/runtime.env\n",
+                stderr="",
+            )
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
+    monkeypatch.setattr(runtime, "_stage_host_payload", stage)
+    monkeypatch.setattr(
+        runtime,
+        "_windows_path_to_wsl_mount",
+        lambda _path: "/mnt/c/Users/Taiwo/AppData/Local/Temp/WeaveCBT/payload.tmp",
+    )
     monkeypatch.setattr(runtime, "_run_in_distro", fake_run)
 
-    secret = "POSTGRES_PASSWORD='super-secret'\n"
     result = runtime.write_text_file(
         "/opt/weave-cbt/runtime.env",
         secret,
         mode="0600",
-        timeout=20,
+        timeout=30,
     )
 
     assert result.succeeded
-    assert captured["stdin_is_file"] is True
-    assert captured["payload"] == secret
-    assert captured["timeout"] == 20
-    command = captured["command"]
-    assert command[:2] == ["sh", "-c"]
-    assert "-l" not in command
-    assert command[-2:] == ["/opt/weave-cbt/runtime.env", "0600"]
-    assert "super-secret" not in " ".join(command)
-    assert "mv -f" in command[2]
-    assert "trap cleanup" in command[2]
+    assert not staged.exists()
+    copy_command = calls[0]
+    assert copy_command[:2] == ["sh", "-c"]
+    assert copy_command[-3:] == [
+        "/mnt/c/Users/Taiwo/AppData/Local/Temp/WeaveCBT/payload.tmp",
+        "/opt/weave-cbt/runtime.env",
+        "0600",
+    ]
+    assert "cat >" not in copy_command[2]
+    assert "install -m" in copy_command[2]
+    assert secret not in " ".join(copy_command)
+    assert calls[1] == ["sha256sum", "--", "/opt/weave-cbt/runtime.env"]
+
+
+def test_copy_timeout_is_accepted_when_target_hash_matches(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path)
+    monkeypatch.setattr(runtime, "is_installed", lambda: True)
+    staged = tmp_path / "payload.tmp"
+    secret = "POSTGRES_PASSWORD='super-secret'\n"
+    expected_hash = hashlib.sha256(secret.encode("utf-8")).hexdigest()
+    copy_attempts = 0
+
+    def stage(content: str) -> Path:
+        staged.write_text(content, encoding="utf-8")
+        return staged
+
+    def fake_run(command, *, timeout):
+        nonlocal copy_attempts
+        if command[0] == "sha256sum":
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=f"{expected_hash}  /opt/weave-cbt/runtime.env\n",
+                stderr="",
+            )
+        copy_attempts += 1
+        raise subprocess.TimeoutExpired(cmd=command, timeout=timeout)
+
+    monkeypatch.setattr(runtime, "_stage_host_payload", stage)
+    monkeypatch.setattr(runtime, "_windows_path_to_wsl_mount", lambda _path: "/mnt/c/payload.tmp")
+    monkeypatch.setattr(runtime, "_run_in_distro", fake_run)
+
+    result = runtime.write_text_file(
+        "/opt/weave-cbt/runtime.env",
+        secret,
+        mode="0600",
+        timeout=30,
+    )
+
+    assert result.succeeded
+    assert copy_attempts == 1
+    assert not staged.exists()
+
+
+def test_copy_success_is_rejected_when_target_hash_does_not_match(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path)
+    monkeypatch.setattr(runtime, "is_installed", lambda: True)
+    staged = tmp_path / "payload.tmp"
+
+    def stage(content: str) -> Path:
+        staged.write_text(content, encoding="utf-8")
+        return staged
+
+    def fake_run(command, *, timeout):
+        if command[0] == "sha256sum":
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=f"{'0' * 64}  /opt/weave-cbt/runtime.env\n",
+                stderr="",
+            )
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(runtime, "_stage_host_payload", stage)
+    monkeypatch.setattr(runtime, "_windows_path_to_wsl_mount", lambda _path: "/mnt/c/payload.tmp")
+    monkeypatch.setattr(runtime, "_run_in_distro", fake_run)
+
+    result = runtime.write_text_file(
+        "/opt/weave-cbt/runtime.env",
+        "POSTGRES_PASSWORD='super-secret'\n",
+        mode="0600",
+        timeout=30,
+    )
+
+    assert not result.succeeded
+    assert "verification failed" in result.stderr.lower()
+    assert not staged.exists()
 
 
 def test_start_allows_complete_cold_start_window(
@@ -290,7 +369,7 @@ def test_existing_runtime_boot_config_is_upgraded_best_effort(
     runtime = _runtime(tmp_path)
     calls: list[tuple[str, ...]] = []
 
-    def fake_run(command, *, timeout, stdin_file=None):
+    def fake_run(command, *, timeout):
         calls.append(tuple(command))
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
