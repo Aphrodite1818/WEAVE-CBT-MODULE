@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from time import monotonic, sleep
 from typing import Sequence
 
 from .base import RuntimeCommandResult, RuntimeProvider
@@ -19,11 +21,7 @@ class DockerStatus:
 
     @property
     def ready(self) -> bool:
-        return (
-            self.installed
-            and self.running
-            and self.compose_available
-        )
+        return self.installed and self.running and self.compose_available
 
 
 class DockerService:
@@ -48,57 +46,111 @@ class DockerService:
         *,
         timeout: float | None = 30,
     ) -> RuntimeCommandResult:
-        return self.runtime.execute(
-            command,
-            timeout=timeout,
-        )
+        return self.runtime.execute(command, timeout=timeout)
+
+    def _probe(
+        self,
+        command: Sequence[str],
+        *,
+        timeout: float,
+    ) -> RuntimeCommandResult | None:
+        """Run a read-only Docker probe without surfacing transient timeouts."""
+
+        try:
+            return self._execute(command, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return None
+
+    def _wait_for_command(
+        self,
+        command: Sequence[str],
+        *,
+        timeout_seconds: float,
+        attempt_timeout_seconds: float = 15.0,
+        retry_interval_seconds: float = 2.0,
+    ) -> bool:
+        """
+        Retry a Docker probe until it succeeds or the bounded deadline expires.
+
+        Cold WSL2 starts can take substantially longer than an individual
+        Docker CLI probe. A timed-out probe is therefore treated as transient,
+        while the overall deadline still prevents installation from hanging.
+        """
+
+        deadline = monotonic() + timeout_seconds
+
+        while True:
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                return False
+
+            result = self._probe(
+                command,
+                timeout=min(attempt_timeout_seconds, remaining),
+            )
+            if result is not None and result.succeeded:
+                return True
+
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                return False
+
+            sleep(min(retry_interval_seconds, remaining))
 
     def is_installed(self) -> bool:
-        """
-        Return whether the Docker CLI exists inside the runtime.
-        """
+        """Return whether the Docker CLI exists inside the runtime."""
 
-        result = self._execute(
+        result = self._probe(["docker", "--version"], timeout=15)
+        return result is not None and result.succeeded
+
+    def wait_until_installed(self, *, timeout_seconds: float = 60.0) -> bool:
+        """Wait for the Docker CLI to become responsive after runtime startup."""
+
+        return self._wait_for_command(
             ["docker", "--version"],
-            timeout=10,
+            timeout_seconds=timeout_seconds,
         )
-
-        return result.succeeded
 
     def is_running(self) -> bool:
-        """
-        Return whether Docker Engine is accepting commands.
-        """
+        """Return whether Docker Engine is accepting commands."""
 
         if not self.is_installed():
             return False
 
-        result = self._execute(
-            ["docker", "info"],
-            timeout=15,
-        )
+        result = self._probe(["docker", "info"], timeout=20)
+        return result is not None and result.succeeded
 
-        return result.succeeded
+    def wait_until_running(self, *, timeout_seconds: float = 60.0) -> bool:
+        """Wait until the Docker daemon accepts commands."""
+
+        return self._wait_for_command(
+            ["docker", "info"],
+            timeout_seconds=timeout_seconds,
+        )
 
     def compose_available(self) -> bool:
-        """
-        Return whether Docker Compose v2 is available.
-        """
+        """Return whether Docker Compose v2 is available."""
 
         if not self.is_installed():
             return False
 
-        result = self._execute(
+        result = self._probe(["docker", "compose", "version"], timeout=15)
+        return result is not None and result.succeeded
+
+    def wait_until_compose_available(
+        self,
+        *,
+        timeout_seconds: float = 60.0,
+    ) -> bool:
+        """Wait until Docker Compose v2 responds successfully."""
+
+        return self._wait_for_command(
             ["docker", "compose", "version"],
-            timeout=10,
+            timeout_seconds=timeout_seconds,
         )
 
-        return result.succeeded
-
     def status(self) -> DockerStatus:
-        """
-        Return the current Docker readiness state.
-        """
+        """Return the current Docker readiness state without raising on probe timeouts."""
 
         installed = self.is_installed()
 
@@ -116,13 +168,9 @@ class DockerService:
         )
 
     def start(self) -> None:
-        """
-        Start Docker Engine inside the runtime.
+        """Start Docker Engine inside the runtime and wait for daemon readiness."""
 
-        The WEAVE runtime is expected to use systemd to manage dockerd.
-        """
-
-        if not self.is_installed():
+        if not self.wait_until_installed(timeout_seconds=60):
             raise RuntimeError(
                 "Docker Engine is not installed inside the WEAVE CBT runtime."
             )
@@ -132,7 +180,7 @@ class DockerService:
 
         result = self._execute(
             ["systemctl", "start", "docker"],
-            timeout=30,
+            timeout=60,
         )
 
         if not result.succeeded:
@@ -141,15 +189,13 @@ class DockerService:
                 f"{result.stderr or result.stdout}"
             )
 
-        if not self.is_running():
+        if not self.wait_until_running(timeout_seconds=60):
             raise RuntimeError(
-                "Docker Engine was started but did not become ready."
+                "Docker Engine was started but did not become ready within 60 seconds."
             )
 
     def stop(self) -> None:
-        """
-        Stop Docker Engine inside the runtime.
-        """
+        """Stop Docker Engine inside the runtime."""
 
         if not self.is_installed():
             return
@@ -169,18 +215,16 @@ class DockerService:
             )
 
     def restart(self) -> None:
-        """
-        Restart Docker Engine inside the runtime.
-        """
+        """Restart Docker Engine inside the runtime."""
 
-        if not self.is_installed():
+        if not self.wait_until_installed(timeout_seconds=60):
             raise RuntimeError(
                 "Docker Engine is not installed inside the WEAVE CBT runtime."
             )
 
         result = self._execute(
             ["systemctl", "restart", "docker"],
-            timeout=30,
+            timeout=60,
         )
 
         if not result.succeeded:
@@ -189,36 +233,37 @@ class DockerService:
                 f"{result.stderr or result.stdout}"
             )
 
-        if not self.is_running():
+        if not self.wait_until_running(timeout_seconds=60):
             raise RuntimeError(
-                "Docker Engine did not become ready after restart."
+                "Docker Engine did not become ready within 60 seconds after restart."
             )
 
     def ensure_ready(self) -> None:
-        """
-        Ensure the runtime and Docker Engine are ready for deployment.
-        """
+        """Ensure the runtime, Docker CLI, Compose, and daemon are ready."""
 
         if not self.runtime.is_installed():
-            raise RuntimeError(
-                "WEAVE CBT runtime has not been installed."
-            )
+            raise RuntimeError("WEAVE CBT runtime has not been installed.")
 
         if not self.runtime.is_running():
             self.runtime.start()
 
-        if not self.is_installed():
+        if not self.wait_until_installed(timeout_seconds=60):
             raise RuntimeError(
-                "Docker Engine is missing from the WEAVE CBT runtime."
+                "Docker Engine did not become available within 60 seconds of starting the WEAVE CBT runtime."
             )
 
-        if not self.compose_available():
+        if not self.wait_until_compose_available(timeout_seconds=60):
             raise RuntimeError(
-                "Docker Compose v2 is missing from the WEAVE CBT runtime."
+                "Docker Compose v2 did not become available within 60 seconds of starting the WEAVE CBT runtime."
             )
 
         if not self.is_running():
             self.start()
+
+        if not self.wait_until_running(timeout_seconds=60):
+            raise RuntimeError(
+                "Docker Engine did not become ready within 60 seconds."
+            )
 
     def docker(
         self,
@@ -226,23 +271,12 @@ class DockerService:
         *,
         timeout: float | None = None,
     ) -> RuntimeCommandResult:
-        """
-        Execute an arbitrary Docker CLI command.
-
-        Example:
-
-            docker(["ps", "--all"])
-        """
+        """Execute an arbitrary Docker CLI command."""
 
         if not arguments:
-            raise ValueError(
-                "Docker command arguments cannot be empty."
-            )
+            raise ValueError("Docker command arguments cannot be empty.")
 
-        return self._execute(
-            ["docker", *arguments],
-            timeout=timeout,
-        )
+        return self._execute(["docker", *arguments], timeout=timeout)
 
     def compose(
         self,
@@ -261,40 +295,23 @@ class DockerService:
         filesystem paths.
         """
 
-        command: list[str] = [
-            "docker",
-            "compose",
-        ]
+        command: list[str] = ["docker", "compose"]
 
         if project_name is not None:
-            command.extend(
-                ["--project-name", project_name]
-            )
+            command.extend(["--project-name", project_name])
 
         if compose_file is not None:
-            command.extend(
-                ["--file", str(compose_file)]
-            )
+            command.extend(["--file", str(compose_file)])
 
         if project_directory is not None:
-            command.extend(
-                [
-                    "--project-directory",
-                    str(project_directory),
-                ]
-            )
+            command.extend(["--project-directory", str(project_directory)])
 
         if env_file is not None:
-            command.extend(
-                ["--env-file", str(env_file)]
-            )
+            command.extend(["--env-file", str(env_file)])
 
         command.extend(arguments)
 
-        return self._execute(
-            command,
-            timeout=timeout,
-        )
+        return self._execute(command, timeout=timeout)
 
     def pull(
         self,
@@ -305,9 +322,7 @@ class DockerService:
         project_name: str | None = None,
         timeout: float | None = 1800,
     ) -> None:
-        """
-        Pull all images referenced by the WEAVE Compose project.
-        """
+        """Pull all images referenced by the WEAVE Compose project."""
 
         result = self.compose(
             ["pull"],
@@ -333,9 +348,7 @@ class DockerService:
         project_name: str | None = None,
         timeout: float | None = 300,
     ) -> None:
-        """
-        Start the WEAVE Compose stack in detached mode.
-        """
+        """Start the WEAVE Compose stack in detached mode."""
 
         result = self.compose(
             ["up", "--detach"],
@@ -390,9 +403,7 @@ class DockerService:
         env_file: Path | str | None = None,
         project_name: str | None = None,
     ) -> RuntimeCommandResult:
-        """
-        Return Compose service status.
-        """
+        """Return Compose service status."""
 
         return self.compose(
             ["ps"],
