@@ -46,7 +46,7 @@ def test_captured_wsl_invocation_uses_hidden_real_console(
     assert startupinfo.wShowWindow == subprocess.SW_HIDE
 
 
-def test_wsl_input_is_sent_over_stdin_not_process_arguments(
+def test_wsl_file_backed_stdin_does_not_put_secret_in_process_arguments(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -65,12 +65,15 @@ def test_wsl_input_is_sent_over_stdin_not_process_arguments(
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    secret = "POSTGRES_PASSWORD='not-for-argv'\n"
-    runtime._run_wsl(["--status"], input_text=secret)
+    secret = b"POSTGRES_PASSWORD='not-for-argv'\n"
+    payload_path = tmp_path / "payload"
+    payload_path.write_bytes(secret)
+    with payload_path.open("rb") as payload_file:
+        runtime._run_wsl(["--status"], stdin_file=payload_file)
+        assert captured["stdin"] is payload_file
 
-    assert captured["input"] == secret
-    assert "stdin" not in captured
-    assert secret not in " ".join(captured["command"])
+    assert "input" not in captured
+    assert secret.decode() not in " ".join(captured["command"])
 
 
 def test_bootstrap_wsl_invocation_does_not_redirect_standard_streams(
@@ -103,7 +106,7 @@ def test_bootstrap_wsl_invocation_does_not_redirect_standard_streams(
     assert captured["command"][-1] == "true"
 
 
-def test_write_text_file_is_atomic_and_does_not_put_secret_in_argv(
+def test_write_text_file_is_atomic_file_backed_and_secret_free_in_argv(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -111,10 +114,11 @@ def test_write_text_file_is_atomic_and_does_not_put_secret_in_argv(
     monkeypatch.setattr(runtime, "is_installed", lambda: True)
     captured: dict[str, object] = {}
 
-    def fake_run(command, *, timeout, input_text=None):
+    def fake_run(command, *, timeout, stdin_file=None):
         captured["command"] = list(command)
         captured["timeout"] = timeout
-        captured["input_text"] = input_text
+        captured["stdin_is_file"] = stdin_file is not None
+        captured["payload"] = stdin_file.read().decode("utf-8") if stdin_file else None
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr(runtime, "_run_in_distro", fake_run)
@@ -128,7 +132,8 @@ def test_write_text_file_is_atomic_and_does_not_put_secret_in_argv(
     )
 
     assert result.succeeded
-    assert captured["input_text"] == secret
+    assert captured["stdin_is_file"] is True
+    assert captured["payload"] == secret
     assert captured["timeout"] == 20
     command = captured["command"]
     assert command[:2] == ["sh", "-c"]
@@ -285,7 +290,7 @@ def test_existing_runtime_boot_config_is_upgraded_best_effort(
     runtime = _runtime(tmp_path)
     calls: list[tuple[str, ...]] = []
 
-    def fake_run(command, *, timeout, input_text=None):
+    def fake_run(command, *, timeout, stdin_file=None):
         calls.append(tuple(command))
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
