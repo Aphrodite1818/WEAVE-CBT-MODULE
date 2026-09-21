@@ -33,7 +33,14 @@ class ManagerState:
     available_manager_version: str | None = None
     available_cbt_version: str | None = None
 
-    def mark_installed(self, *, channel: str, manager_version: str, cbt_version: str, image: str) -> None:
+    def mark_installed(
+        self,
+        *,
+        channel: str,
+        manager_version: str,
+        cbt_version: str,
+        image: str,
+    ) -> None:
         now = _utc_now()
         self.installation_status = "installed"
         self.channel = channel
@@ -43,6 +50,25 @@ class ManagerState:
         self.installed_at = self.installed_at or now
         self.updated_at = now
         self.last_error = None
+
+    def normalize(self) -> None:
+        """Repair state combinations that cannot represent a real retained install.
+
+        A retained installation must have reached far enough to record either
+        an installed timestamp or the CBT image/version that owns persisted
+        data. Older uninstall attempts could mark a completely empty manager
+        state as retained before cleanup finished, which made the next launch
+        skip fresh setup and then complain that runtime.env was missing.
+        """
+
+        if (
+            self.installation_status == "retained"
+            and self.installed_at is None
+            and self.current_image is None
+            and self.current_cbt_version is None
+        ):
+            self.installation_status = "new"
+            self.last_error = None
 
 
 class StateStore:
@@ -61,11 +87,15 @@ class StateStore:
         if not isinstance(payload, dict):
             return ManagerState(installation_status="recovery_required")
         allowed = ManagerState.__dataclass_fields__.keys()
-        filtered: dict[str, Any] = {key: payload[key] for key in allowed if key in payload}
+        filtered: dict[str, Any] = {
+            key: payload[key] for key in allowed if key in payload
+        }
         try:
-            return ManagerState(**filtered)
+            state = ManagerState(**filtered)
         except TypeError:
             return ManagerState(installation_status="recovery_required")
+        state.normalize()
+        return state
 
     def save(self, state: ManagerState) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
