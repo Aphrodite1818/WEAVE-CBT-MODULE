@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 import shlex
@@ -35,14 +34,20 @@ class DeploymentService:
         return path.read_text(encoding="utf-8")
 
     def _write_runtime_file(self, path: PurePosixPath, content: str, *, mode: str) -> None:
-        encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
-        parent = shlex.quote(str(path.parent))
-        target = shlex.quote(str(path))
-        payload = shlex.quote(encoded)
-        command = f"install -d -m 0755 {parent} && printf %s {payload} | base64 -d > {target} && chmod {mode} {target}"
-        result = self.runtime.execute(["sh", "-lc", command], timeout=30)
+        # File contents travel over the runtime's stdin-backed file channel,
+        # never inside shell arguments. This is especially important for
+        # runtime.env because it contains the local PostgreSQL password.
+        result = self.runtime.write_text_file(
+            str(path),
+            content,
+            mode=mode,
+            timeout=20,
+        )
         if not result.succeeded:
-            raise RuntimeError(f"Unable to write runtime file {path}: {result.stderr or result.stdout}")
+            raise RuntimeError(
+                f"Unable to write runtime file {path}: "
+                f"{result.stderr or result.stdout}"
+            )
 
     def prepare_assets(self, *, runtime_env: str, compose_yaml: str, nginx_config: str) -> None:
         self._write_runtime_file(self.paths.env_file, runtime_env, mode="0600")
