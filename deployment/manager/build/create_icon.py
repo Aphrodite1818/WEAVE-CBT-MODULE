@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import os
 import struct
 from pathlib import Path
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 from PySide6.QtCore import QByteArray, QBuffer, QIODevice
-from PySide6.QtGui import QGuiApplication, QImage, QPainter
+from PySide6.QtGui import QImage, QPainter
 from PySide6.QtSvg import QSvgRenderer
 
 from weave_cbt_manager.ui.brand import MARK
@@ -72,7 +69,10 @@ def _write_ico(path: Path, images: list[tuple[int, bytes]]) -> None:
 
 
 def main() -> int:
-    application = QGuiApplication.instance() or QGuiApplication([])
+    # Icon generation is deliberately GUI-application-free. QImage/QPainter and
+    # QSvgRenderer can render entirely in memory; constructing a QGuiApplication
+    # here makes headless Windows CI depend on a Qt platform plugin and can
+    # terminate pytest before it can report a normal Python failure.
     renderer = QSvgRenderer(MARK)
     if not renderer.isValid():
         raise RuntimeError("The embedded Weave SVG mark is invalid.")
@@ -85,7 +85,6 @@ def main() -> int:
     if not destination.is_file() or destination.stat().st_size < 1024:
         raise RuntimeError("The generated Weave Windows icon is invalid or empty.")
 
-    application.processEvents()
     print(destination)
     return 0
 
