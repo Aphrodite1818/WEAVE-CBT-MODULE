@@ -89,6 +89,8 @@ jobs:
           DEBUG='false'
           EOF
           docker compose --project-name weave-cbt-ci --file deployment/compose.yaml --project-directory deployment --env-file /tmp/weave-runtime.env config --quiet
+      - name: Verify pinned CBT image can be pulled without registry login
+        run: docker pull ghcr.io/aphrodite1818/weave-cbt-module:sha-7604735
       - name: Build dedicated WEAVE runtime
         run: docker build -f deployment/manager/runtime/distro/Dockerfile -t weave-cbt-wsl-runtime deployment/manager/runtime/distro
       - name: Export WSL root filesystem
