@@ -61,23 +61,25 @@ class ManagerController:
         return self.state_store.load()
 
     def installation_present(self) -> bool:
-        """Return true only for a complete or intentionally retained install.
+        """Return true for a durable complete or intentionally retained install.
 
-        Merely finding runtime.env is not enough: a failed first-time setup may
-        have written some deployment files before Docker/health checks failed.
-        Conversely, a normal uninstall intentionally retains a complete local
-        runtime and should be recoverable without asking for new DB credentials.
+        This method deliberately does not execute a command inside WSL. The UI
+        calls it before the runtime has been started, and probing runtime files
+        here would cold-start WSL through the captured-command path instead of
+        the provider's dedicated bootstrap path. Durable Manager state is the
+        installation marker; health/repair verifies runtime files after WSL is
+        started safely.
         """
 
         try:
-            if not self.runtime.is_installed() or not self.deployment.config_exists():
-                return False
             state = self.state_store.load()
-            return state.installation_status in {
+            if state.installation_status not in {
                 "installed",
                 "retained",
                 "recovery_required",
-            }
+            }:
+                return False
+            return self.runtime.is_installed()
         except Exception:
             return False
 
@@ -164,6 +166,8 @@ class ManagerController:
         if not self.installation_present():
             return
         self.docker.ensure_ready()
+        if not self.deployment.config_exists():
+            raise RuntimeError("Runtime configuration is missing. Open WEAVE CBT Manager and run repair.")
         self.deployment.ensure_running()
         snapshot = self.health.wait_until_healthy(timeout_seconds=90)
         if not snapshot.healthy:
