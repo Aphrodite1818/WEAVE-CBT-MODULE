@@ -13,7 +13,7 @@ on:
       version:
         description: Manager installer version
         required: true
-        default: '0.1.2'
+        default: '0.1.3'
       cbt_version:
         description: CBT application version represented by the pinned image
         required: true
@@ -30,7 +30,7 @@ on:
       release_notes:
         description: Short release notes
         required: false
-        default: 'WEAVE CBT Manager 0.1.2 improves cold WSL and Docker startup readiness.'
+        default: 'WEAVE CBT Manager 0.1.3 waits for WSL system services and Docker readiness during cold startup.'
 
 permissions:
   contents: read
@@ -121,7 +121,7 @@ jobs:
         id: identity
         shell: pwsh
         env:
-          INPUT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '0.1.2' }}
+          INPUT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '0.1.3' }}
           INPUT_CBT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.cbt_version || '0.1.0' }}
           INPUT_IMAGE: ${{ github.event_name == 'workflow_dispatch' && inputs.weave_image || 'ghcr.io/aphrodite1818/weave-cbt-module:sha-7604735' }}
         run: |
@@ -168,7 +168,7 @@ jobs:
         id: release
         shell: pwsh
         env:
-          RELEASE_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'WEAVE CBT Manager 0.1.2 improves cold WSL and Docker startup readiness.' }}
+          RELEASE_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'WEAVE CBT Manager 0.1.3 waits for WSL system services and Docker readiness during cold startup.' }}
         run: |
           $output = '${{ github.workspace }}\deployment\manager\installer-output-${{ matrix.channel }}'
           $installer = Get-ChildItem $output -Filter '*.exe' | Select-Object -First 1
@@ -219,7 +219,7 @@ jobs:
             "$output\SHA256SUMS.txt",
             "$output\release.json",
             '--title', "WEAVE CBT ${{ matrix.channel }} ${{ steps.identity.outputs.version }}",
-            '--notes', '${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'WEAVE CBT Manager 0.1.2 improves cold WSL and Docker startup readiness.' }}',
+            '--notes', '${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'WEAVE CBT Manager 0.1.3 waits for WSL system services and Docker readiness during cold startup.' }}',
             '--target', '${{ github.sha }}'
           )
           if ('${{ matrix.channel }}' -eq 'staging') { $args += '--prerelease' }
