@@ -46,6 +46,33 @@ def test_captured_wsl_invocation_uses_hidden_real_console(
     assert startupinfo.wShowWindow == subprocess.SW_HIDE
 
 
+def test_wsl_input_is_sent_over_stdin_not_process_arguments(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path)
+    monkeypatch.setattr(
+        runtime,
+        "_wsl_executable",
+        lambda: Path("C:/Windows/System32/wsl.exe"),
+    )
+    captured: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured.update(kwargs)
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    secret = "POSTGRES_PASSWORD='not-for-argv'\n"
+    runtime._run_wsl(["--status"], input_text=secret)
+
+    assert captured["input"] == secret
+    assert "stdin" not in captured
+    assert secret not in " ".join(captured["command"])
+
+
 def test_bootstrap_wsl_invocation_does_not_redirect_standard_streams(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -73,6 +100,42 @@ def test_bootstrap_wsl_invocation_does_not_redirect_standard_streams(
     assert "stderr" not in captured
     assert "capture_output" not in captured
     assert captured["command"][-1] == "true"
+
+
+def test_write_text_file_is_atomic_and_does_not_put_secret_in_argv(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path)
+    monkeypatch.setattr(runtime, "is_installed", lambda: True)
+    captured: dict[str, object] = {}
+
+    def fake_run(command, *, timeout, input_text=None):
+        captured["command"] = list(command)
+        captured["timeout"] = timeout
+        captured["input_text"] = input_text
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(runtime, "_run_in_distro", fake_run)
+
+    secret = "POSTGRES_PASSWORD='super-secret'\n"
+    result = runtime.write_text_file(
+        "/opt/weave-cbt/runtime.env",
+        secret,
+        mode="0600",
+        timeout=20,
+    )
+
+    assert result.succeeded
+    assert captured["input_text"] == secret
+    assert captured["timeout"] == 20
+    command = captured["command"]
+    assert command[:2] == ["sh", "-c"]
+    assert "-l" not in command
+    assert command[-2:] == ["/opt/weave-cbt/runtime.env", "0600"]
+    assert "super-secret" not in " ".join(command)
+    assert "mv -f" in command[2]
+    assert "trap cleanup" in command[2]
 
 
 def test_start_repairs_existing_boot_config_after_bootstrap(
@@ -165,7 +228,7 @@ def test_existing_runtime_boot_config_is_upgraded_best_effort(
     runtime = _runtime(tmp_path)
     calls: list[tuple[str, ...]] = []
 
-    def fake_run(command, *, timeout):
+    def fake_run(command, *, timeout, input_text=None):
         calls.append(tuple(command))
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
