@@ -16,6 +16,31 @@ def _runtime(tmp_path: Path) -> WindowsWSLRuntime:
     )
 
 
+def test_wsl_invocation_uses_hidden_real_console(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path)
+    monkeypatch.setattr(runtime, "_wsl_executable", lambda: Path("C:/Windows/System32/wsl.exe"))
+    captured: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured.update(kwargs)
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    runtime._run_wsl(["--status"])
+
+    assert captured["creationflags"] == subprocess.CREATE_NEW_CONSOLE
+    assert captured["stdin"] == subprocess.DEVNULL
+    startupinfo = captured["startupinfo"]
+    assert isinstance(startupinfo, subprocess.STARTUPINFO)
+    assert startupinfo.dwFlags & subprocess.STARTF_USESHOWWINDOW
+    assert startupinfo.wShowWindow == subprocess.SW_HIDE
+
+
 def test_start_accepts_success_even_with_systemd_user_warning(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
