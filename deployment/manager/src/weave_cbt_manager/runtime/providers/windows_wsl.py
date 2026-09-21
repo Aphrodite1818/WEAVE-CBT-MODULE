@@ -6,6 +6,7 @@ import hashlib
 import logging
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import tempfile
@@ -85,8 +86,10 @@ class WindowsWSLRuntime(RuntimeProvider):
         # WSL management commands emit UTF-16LE on Windows; Linux commands
         # emit UTF-8. Decoding everything as UTF-8 corrupts localized errors.
         return subprocess.CompletedProcess(
-            result.args, result.returncode,
-            self._decode_output(result.stdout), self._decode_output(result.stderr),
+            result.args,
+            result.returncode,
+            self._decode_output(result.stdout),
+            self._decode_output(result.stderr),
         )
 
     @staticmethod
@@ -95,15 +98,21 @@ class WindowsWSLRuntime(RuntimeProvider):
             return value
         if not value:
             return ""
-        encoding = "utf-16" if value.startswith((b"\xff\xfe", b"\xfe\xff")) else (
-            "utf-16-le" if b"\x00" in value else "utf-8"
+        encoding = (
+            "utf-16"
+            if value.startswith((b"\xff\xfe", b"\xfe\xff"))
+            else ("utf-16-le" if b"\x00" in value else "utf-8")
         )
         return value.decode(encoding, errors="replace").lstrip("\ufeff")
 
     def _modern_wsl_available(self) -> bool:
         result = self._run_wsl(["--version"])
         match = re.search(r"(\d+)\.(\d+)\.(\d+)", result.stdout)
-        return bool(result.returncode == 0 and match and tuple(map(int, match.groups())) >= (0, 67, 6))
+        return bool(
+            result.returncode == 0
+            and match
+            and tuple(map(int, match.groups())) >= (0, 67, 6)
+        )
 
     def _run_distro_bootstrap(
         self,
@@ -275,24 +284,6 @@ class WindowsWSLRuntime(RuntimeProvider):
             return
 
     @staticmethod
-    def _windows_path_to_wsl_mount(path: Path) -> str:
-        """Map a local Windows drive path to the dedicated distro's /mnt path."""
-
-        resolved = PureWindowsPath(str(path.resolve()))
-        drive = resolved.drive
-        if len(drive) != 2 or drive[1] != ":":
-            raise RuntimeError(
-                "WEAVE CBT could not stage configuration on a local Windows drive."
-            )
-        return str(
-            PurePosixPath(
-                "/mnt",
-                drive[0].lower(),
-                *resolved.parts[1:],
-            )
-        )
-
-    @staticmethod
     def _stage_host_payload(content: str) -> Path:
         """Persist a short-lived payload in the current Windows user's temp area."""
 
@@ -331,6 +322,57 @@ class WindowsWSLRuntime(RuntimeProvider):
             except OSError:
                 break
         logger.warning("Unable to remove temporary WEAVE runtime transfer file: %s", path)
+
+    @staticmethod
+    def _wsl_share_candidates(runtime_path: str) -> tuple[str, str]:
+        """Return Windows UNC paths for a file inside the dedicated WSL distro.
+
+        Writing through the WSL filesystem share avoids depending on DrvFS
+        automounts such as /mnt/c or /mnt/d. Those mounts can be unavailable or
+        unreadable for imported distros and elevated installer temp files.
+        """
+
+        posix_path = PurePosixPath(runtime_path)
+        if not posix_path.is_absolute():
+            raise ValueError("Runtime staging path must be absolute.")
+        relative_parts = posix_path.parts[1:]
+        return (
+            str(
+                PureWindowsPath(
+                    rf"\\wsl.localhost\{WEAVE_DISTRO_NAME}",
+                    *relative_parts,
+                )
+            ),
+            str(
+                PureWindowsPath(
+                    rf"\\wsl$\{WEAVE_DISTRO_NAME}",
+                    *relative_parts,
+                )
+            ),
+        )
+
+    def _copy_host_payload_to_wsl(self, host_path: Path, runtime_path: str) -> None:
+        """Copy a staged Windows file into WSL without using wsl.exe stdin.
+
+        Modern WSL exposes each running distro through \\wsl.localhost; \\wsl$
+        remains a compatibility alias. Trying both removes the previous
+        dependency on Linux being able to read the Windows temp directory.
+        """
+
+        errors: list[str] = []
+        for candidate in self._wsl_share_candidates(runtime_path):
+            try:
+                shutil.copyfile(host_path, candidate)
+                return
+            except OSError as exc:
+                errors.append(f"{candidate}: {exc}")
+
+        detail = "; ".join(errors)
+        raise RuntimeError(
+            "Windows could not transfer the WEAVE configuration into the local "
+            "Linux runtime through the WSL filesystem share"
+            + (f": {detail}" if detail else ".")
+        )
 
     def _runtime_file_matches(self, path: str, expected_sha256: str) -> bool:
         """Verify the runtime file exactly matches the staged payload."""
@@ -393,7 +435,10 @@ class WindowsWSLRuntime(RuntimeProvider):
         if status.returncode == 0:
             result = self._run_wsl(["--update", "--web-download"], timeout=600)
             if result.returncode != 0:
-                raise RuntimeError("Unable to update WSL: " + self._normalize_wsl_output(result.stderr or result.stdout))
+                raise RuntimeError(
+                    "Unable to update WSL: "
+                    + self._normalize_wsl_output(result.stderr or result.stdout)
+                )
             return RuntimePreparationResult(reboot_required=not self.is_available())
 
         try:
@@ -472,13 +517,27 @@ class WindowsWSLRuntime(RuntimeProvider):
         A Linux flock makes repeated starts harmless. Systemd services alone
         do not prevent WSL idle shutdown. This process ends with this distro.
         """
+
         wsl = self._wsl_executable()
         if wsl is None:
             raise RuntimeError("WSL is unavailable.")
         subprocess.Popen(
-            [str(wsl), "--distribution", WEAVE_DISTRO_NAME, "--user", "root",
-             "--exec", "flock", "--nonblock", "/run/weave-cbt-keepalive.lock", "sleep", "infinity"],
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            [
+                str(wsl),
+                "--distribution",
+                WEAVE_DISTRO_NAME,
+                "--user",
+                "root",
+                "--exec",
+                "flock",
+                "--nonblock",
+                "/run/weave-cbt-keepalive.lock",
+                "sleep",
+                "infinity",
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
 
@@ -520,12 +579,13 @@ class WindowsWSLRuntime(RuntimeProvider):
         mode: str,
         timeout: float | None = None,
     ) -> RuntimeCommandResult:
-        """Atomically copy UTF-8 content from a short-lived Windows staging file.
+        """Atomically place UTF-8 content inside the dedicated WSL distro.
 
-        Configuration bytes are never sent through wsl.exe stdin and never
-        appear in process arguments. The Linux side reads a normal finite file
-        from the mounted Windows drive, installs it atomically, and the Manager
-        verifies the SHA-256 before deleting the host-side staging file.
+        The payload is first written to a short-lived Windows temp file, then
+        Windows copies it directly into the running distro through the WSL UNC
+        filesystem share. Linux never has to read /mnt/c or /mnt/d, and the
+        payload never appears in wsl.exe arguments or stdin. A SHA-256 check is
+        performed before and after the atomic rename.
         """
 
         if not path.startswith("/"):
@@ -540,40 +600,65 @@ class WindowsWSLRuntime(RuntimeProvider):
         payload = content.encode("utf-8")
         expected_sha256 = hashlib.sha256(payload).hexdigest()
         staged_path = self._stage_host_payload(content)
-
-        script = (
-            "set -eu\n"
-            "source_file=$1\n"
-            "target=$2\n"
-            "mode=$3\n"
-            "parent=$(dirname -- \"$target\")\n"
-            "if [ ! -r \"$source_file\" ]; then\n"
-            "  printf '%s\\n' 'WEAVE staging file is not readable inside WSL.' >&2\n"
-            "  exit 23\n"
-            "fi\n"
-            "install -d -m 0755 -- \"$parent\"\n"
-            "tmp=\"${target}.tmp.$$\"\n"
-            "cleanup() { rm -f -- \"$tmp\"; }\n"
-            "trap cleanup EXIT HUP INT TERM\n"
-            "install -m \"$mode\" -- \"$source_file\" \"$tmp\"\n"
-            "mv -f -- \"$tmp\" \"$target\"\n"
-            "trap - EXIT HUP INT TERM\n"
+        target = PurePosixPath(path)
+        runtime_staging = PurePosixPath("/tmp") / (
+            f"weave-cbt-transfer-{secrets.token_hex(12)}.tmp"
         )
+        command_timeout = timeout if timeout is not None else 30
 
         try:
-            source_path = self._windows_path_to_wsl_mount(staged_path)
+            parent_result = self._run_in_distro(
+                ["install", "-d", "-m", "0755", "--", str(target.parent)],
+                timeout=command_timeout,
+            )
+            if parent_result.returncode != 0:
+                return RuntimeCommandResult(
+                    parent_result.returncode,
+                    self._normalize_wsl_output(parent_result.stdout),
+                    self._normalize_wsl_output(
+                        parent_result.stderr or parent_result.stdout
+                    ),
+                )
+
+            staging_result = self._run_in_distro(
+                [
+                    "install",
+                    "-m",
+                    mode,
+                    "/dev/null",
+                    str(runtime_staging),
+                ],
+                timeout=command_timeout,
+            )
+            if staging_result.returncode != 0:
+                return RuntimeCommandResult(
+                    staging_result.returncode,
+                    self._normalize_wsl_output(staging_result.stdout),
+                    self._normalize_wsl_output(
+                        staging_result.stderr or staging_result.stdout
+                    ),
+                )
+
             try:
-                result = self._run_in_distro(
-                    [
-                        "sh",
-                        "-c",
-                        script,
-                        "weave-copy",
-                        source_path,
-                        path,
-                        mode,
-                    ],
-                    timeout=timeout,
+                self._copy_host_payload_to_wsl(staged_path, str(runtime_staging))
+            except (OSError, RuntimeError) as exc:
+                return RuntimeCommandResult(
+                    1,
+                    "",
+                    f"Unable to copy runtime file {path}: {exc}",
+                )
+
+            if not self._runtime_file_matches(str(runtime_staging), expected_sha256):
+                return RuntimeCommandResult(
+                    1,
+                    "",
+                    f"Runtime staging verification failed for {path}.",
+                )
+
+            try:
+                move_result = self._run_in_distro(
+                    ["mv", "-f", "--", str(runtime_staging), path],
+                    timeout=command_timeout,
                 )
             except subprocess.TimeoutExpired:
                 if self._runtime_file_matches(path, expected_sha256):
@@ -581,7 +666,7 @@ class WindowsWSLRuntime(RuntimeProvider):
                 return RuntimeCommandResult(
                     124,
                     "",
-                    f"Timed out while copying runtime file {path}.",
+                    f"Timed out while finalizing runtime file {path}.",
                 )
             except (OSError, RuntimeError) as exc:
                 if self._runtime_file_matches(path, expected_sha256):
@@ -589,15 +674,19 @@ class WindowsWSLRuntime(RuntimeProvider):
                 return RuntimeCommandResult(
                     1,
                     "",
-                    f"Unable to copy runtime file {path}: {exc}",
+                    f"Unable to finalize runtime file {path}: {exc}",
                 )
 
-            stdout = self._normalize_wsl_output(result.stdout)
-            stderr = self._normalize_wsl_output(result.stderr)
-            if result.returncode != 0:
+            stdout = self._normalize_wsl_output(move_result.stdout)
+            stderr = self._normalize_wsl_output(move_result.stderr)
+            if move_result.returncode != 0:
                 if self._runtime_file_matches(path, expected_sha256):
                     return RuntimeCommandResult(0, stdout, stderr)
-                return RuntimeCommandResult(result.returncode, stdout, stderr)
+                return RuntimeCommandResult(
+                    move_result.returncode,
+                    stdout,
+                    stderr,
+                )
 
             if not self._runtime_file_matches(path, expected_sha256):
                 return RuntimeCommandResult(
@@ -608,3 +697,10 @@ class WindowsWSLRuntime(RuntimeProvider):
             return RuntimeCommandResult(0, stdout, stderr)
         finally:
             self._cleanup_host_payload(staged_path)
+            try:
+                self._run_in_distro(
+                    ["rm", "-f", "--", str(runtime_staging)],
+                    timeout=10,
+                )
+            except (OSError, subprocess.TimeoutExpired, RuntimeError):
+                pass
