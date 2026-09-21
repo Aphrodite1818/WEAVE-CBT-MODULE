@@ -11,10 +11,10 @@ from typing import Callable
 
 from . import __version__
 from .build_metadata import BUILD_METADATA
-from .constants import compose_asset_path, log_directory, nginx_asset_path, rootfs_archive_path, runtime_install_directory, state_file
+from .constants import COMPOSE_PROJECT_NAME, WSL_DISTRO_NAME, compose_asset_path, log_directory, nginx_asset_path, rootfs_archive_path, runtime_install_directory, state_file
 from .core.backup import BackupService
 from .core.config import ConfigService, InstallationConfigInput, render_runtime_env
-from .core.deployment import DeploymentService
+from .core.deployment import DatabaseCredentials, DeploymentService
 from .core.health import HealthService, HealthSnapshot
 from .core.installer import InstallationProgress, InstallationResult, InstallerService
 from .core.networking import WindowsNetworkingService
@@ -73,6 +73,17 @@ class ManagerController:
                 f"This computer has a {channel} installation. Open that channel's Manager. "
                 "Production and staging must use separate server computers."
             )
+
+    def _prepare_database_admin(self) -> None:
+        self._check_channel()
+        if not self.platform.is_admin():
+            raise RuntimeError("Administrator privileges are required to access local database administration tools.")
+        if not self.runtime.is_installed():
+            raise RuntimeError("The WEAVE CBT runtime is not installed on this computer.")
+        self.runtime.start()
+        self.runtime.keep_alive()
+        if not self.deployment.environment_exists():
+            raise RuntimeError("Saved database configuration is missing. Run Repair before accessing the database.")
 
     @property
     def state(self) -> ManagerState:
@@ -180,6 +191,40 @@ class ManagerController:
             logger.exception("WEAVE CBT installed, but startup tasks could not be registered yet.")
             self.state_store.update(startup_warning="Automatic startup could not be registered. Open the Manager after signing in, or use Repair to try again.")
         return snapshot
+
+    def database_credentials(self) -> DatabaseCredentials:
+        """Return saved DB credentials only after an explicit elevated admin action."""
+        self._prepare_database_admin()
+        return self.deployment.database_credentials()
+
+    def open_database_console(self) -> None:
+        """Open an interactive psql session without exposing PostgreSQL to the LAN."""
+        self._prepare_database_admin()
+        self.docker.ensure_ready()
+        self.deployment.ensure_running()
+
+        wsl = shutil.which("wsl.exe") or shutil.which("wsl")
+        if not wsl:
+            raise RuntimeError("WSL is unavailable; the database console cannot be opened.")
+
+        paths = self.deployment.paths
+        command = [
+            wsl,
+            "--distribution", WSL_DISTRO_NAME,
+            "--user", "root",
+            "--",
+            "docker", "compose",
+            "--project-name", COMPOSE_PROJECT_NAME,
+            "--file", str(paths.compose_file),
+            "--project-directory", str(paths.root),
+            "--env-file", str(paths.env_file),
+            "exec", "postgres", "sh", "-lc",
+            'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"',
+        ]
+        try:
+            subprocess.Popen(command, creationflags=subprocess.CREATE_NEW_CONSOLE)
+        except OSError as exc:
+            raise RuntimeError("Unable to open the local PostgreSQL console.") from exc
 
     def status(self) -> HealthSnapshot:
         self._check_channel()
