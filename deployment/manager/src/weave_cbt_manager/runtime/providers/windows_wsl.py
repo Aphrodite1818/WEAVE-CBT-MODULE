@@ -5,8 +5,9 @@ from __future__ import annotations
 import shutil
 import subprocess
 from pathlib import Path
+from tempfile import TemporaryFile
 from time import sleep
-from typing import Sequence
+from typing import BinaryIO, Sequence
 
 from ..base import (
     RuntimeCommandResult,
@@ -59,9 +60,17 @@ class WindowsWSLRuntime(RuntimeProvider):
         arguments: Sequence[str],
         *,
         timeout: float | None = 30,
-        input_text: str | None = None,
+        stdin_file: BinaryIO | None = None,
     ) -> subprocess.CompletedProcess[str]:
-        """Run a WSL management/command call whose output must be captured."""
+        """Run a WSL management/command call whose output must be captured.
+
+        Sensitive payloads use a finite file-backed stdin handle rather than
+        ``subprocess.PIPE``. On affected Windows/WSL builds, piping text into a
+        hidden GUI-launched ``wsl.exe`` process can leave the Linux reader
+        waiting forever for EOF even after Python has supplied the payload.
+        A file-backed handle has an explicit finite length and therefore gives
+        WSL a reliable EOF without exposing secrets in argv or logs.
+        """
 
         wsl = self._wsl_executable()
         if wsl is None:
@@ -76,14 +85,8 @@ class WindowsWSLRuntime(RuntimeProvider):
             "check": False,
             "startupinfo": self._hidden_console_startupinfo(),
             "creationflags": subprocess.CREATE_NEW_CONSOLE,
+            "stdin": subprocess.DEVNULL if stdin_file is None else stdin_file,
         }
-        if input_text is None:
-            kwargs["stdin"] = subprocess.DEVNULL
-        else:
-            # Transfer sensitive file content over stdin instead of placing it
-            # in argv. This prevents database credentials from appearing in
-            # process listings, exception text, or installer logs.
-            kwargs["input"] = input_text
 
         return subprocess.run([str(wsl), *arguments], **kwargs)
 
@@ -146,7 +149,7 @@ class WindowsWSLRuntime(RuntimeProvider):
         command: Sequence[str],
         *,
         timeout: float | None,
-        input_text: str | None = None,
+        stdin_file: BinaryIO | None = None,
     ) -> subprocess.CompletedProcess[str]:
         return self._run_wsl(
             [
@@ -158,7 +161,7 @@ class WindowsWSLRuntime(RuntimeProvider):
                 *command,
             ],
             timeout=timeout,
-            input_text=input_text,
+            stdin_file=stdin_file,
         )
 
     def _targeted_restart(self) -> None:
@@ -410,7 +413,7 @@ class WindowsWSLRuntime(RuntimeProvider):
         mode: str,
         timeout: float | None = None,
     ) -> RuntimeCommandResult:
-        """Atomically write a UTF-8 file without exposing its content in argv."""
+        """Atomically write UTF-8 content through a finite file-backed stdin."""
 
         if not path.startswith("/"):
             raise ValueError("Runtime file path must be absolute.")
@@ -435,11 +438,20 @@ class WindowsWSLRuntime(RuntimeProvider):
             "mv -f -- \"$tmp\" \"$target\"\n"
             "trap - EXIT HUP INT TERM\n"
         )
-        result = self._run_in_distro(
-            ["sh", "-c", script, "weave-write", path, mode],
-            timeout=timeout,
-            input_text=content,
-        )
+
+        # A TemporaryFile is file-backed and anonymous/short-lived from the
+        # Manager's point of view. It prevents the WSL stdin/PIPE EOF hang seen
+        # on real Windows machines while keeping the config payload out of argv.
+        with TemporaryFile(mode="w+b") as payload_file:
+            payload_file.write(content.encode("utf-8"))
+            payload_file.flush()
+            payload_file.seek(0)
+            result = self._run_in_distro(
+                ["sh", "-c", script, "weave-write", path, mode],
+                timeout=timeout,
+                stdin_file=payload_file,
+            )
+
         return RuntimeCommandResult(
             return_code=result.returncode,
             stdout=self._normalize_wsl_output(result.stdout),
