@@ -205,25 +205,60 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'WEAVE CBT Manager 0.1.3 waits for WSL system services and Docker readiness during cold startup.' }}
         run: |
           $tag='${{ matrix.release_tag }}'
           $output='${{ github.workspace }}\deployment\manager\installer-output-${{ matrix.channel }}'
+          $installer="$output\${{ steps.release.outputs.installer_name }}"
+          $checksum="$output\SHA256SUMS.txt"
+          $manifest="$output\release.json"
+          $title="WEAVE CBT ${{ matrix.channel }} ${{ steps.identity.outputs.version }}"
+
+          # Keep the stable channel tag/release instead of deleting it. Deleting
+          # the tag first made GitHub Actions recreate a protected integration
+          # resource and caused HTTP 403 failures.
           gh release view $tag *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release delete $tag --cleanup-tag --yes
-            if ($LASTEXITCODE -ne 0) { throw "Unable to replace existing release $tag." }
+          $releaseExists = $LASTEXITCODE -eq 0
+
+          if ($releaseExists) {
+            gh release upload $tag $installer $checksum $manifest --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Unable to upload assets to release $tag." }
+
+            $editArgs = @('release', 'edit', $tag, '--title', $title, '--notes', $env:RELEASE_NOTES)
+            if ('${{ matrix.channel }}' -eq 'staging') {
+              $editArgs += '--prerelease'
+            } else {
+              $editArgs += '--latest'
+            }
+            gh @editArgs
+            if ($LASTEXITCODE -ne 0) { throw "Unable to update release metadata for $tag." }
+            exit 0
           }
-          $args = @(
+
+          # Bootstrap a missing stable tag explicitly, then create the release
+          # against that existing tag. This avoids asking `gh release create`
+          # to create both the tag and release in a single integration call.
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -f $tag '${{ github.sha }}'
+          git push origin "refs/tags/$tag" --force
+          if ($LASTEXITCODE -ne 0) { throw "Unable to create stable release tag $tag." }
+
+          $createArgs = @(
             'release', 'create', $tag,
-            "$output\${{ steps.release.outputs.installer_name }}",
-            "$output\SHA256SUMS.txt",
-            "$output\release.json",
-            '--title', "WEAVE CBT ${{ matrix.channel }} ${{ steps.identity.outputs.version }}",
-            '--notes', '${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'WEAVE CBT Manager 0.1.3 waits for WSL system services and Docker readiness during cold startup.' }}',
-            '--target', '${{ github.sha }}'
+            $installer,
+            $checksum,
+            $manifest,
+            '--verify-tag',
+            '--title', $title,
+            '--notes', $env:RELEASE_NOTES
           )
-          if ('${{ matrix.channel }}' -eq 'staging') { $args += '--prerelease' }
-          gh @args
+          if ('${{ matrix.channel }}' -eq 'staging') {
+            $createArgs += '--prerelease'
+          } else {
+            $createArgs += '--latest'
+          }
+          gh @createArgs
           if ($LASTEXITCODE -ne 0) { throw "Unable to publish release $tag." }
 
   # Backend image publishing is intentionally disabled for this installer pass.
