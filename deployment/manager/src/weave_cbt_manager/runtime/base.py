@@ -101,3 +101,20 @@ class RuntimeProvider(ABC):
         The caller provides command arguments separately rather than passing
         a shell command string.
         """
+
+    @abstractmethod
+    def write_text_file(
+        self,
+        path: str,
+        content: str,
+        *,
+        mode: str,
+        timeout: float | None = None,
+    ) -> RuntimeCommandResult:
+        """
+        Atomically write UTF-8 text to a file inside the runtime.
+
+        File content must be transferred out-of-band from the command line so
+        secrets such as database credentials are not exposed in process
+        arguments or error messages.
+        """
