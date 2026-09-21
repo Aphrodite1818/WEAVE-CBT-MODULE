@@ -17,7 +17,7 @@ on:
       version:
         description: Manager installer version
         required: true
-        default: '0.1.11'
+        default: '0.1.12'
       cbt_version:
         description: CBT application version represented by the pinned image
         required: true
@@ -34,7 +34,7 @@ on:
       release_notes:
         description: Short release notes
         required: false
-        default: 'Weave CBT Manager 0.1.11 adds guided setup, the official Weave icon, recoverable installation, school network access and verified application packaging.'
+        default: 'Weave CBT Manager 0.1.12 makes Windows-to-WSL configuration transfer independent of drive mounts and self-heals empty retained setup state.'
 
 permissions:
   contents: read
@@ -212,7 +212,7 @@ jobs:
         id: identity
         shell: pwsh
         env:
-          INPUT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '0.1.11' }}
+          INPUT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '0.1.12' }}
           INPUT_CBT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.cbt_version || '0.1.0' }}
           INPUT_IMAGE: ${{ needs.app-image.outputs.image }}
         run: |
@@ -261,7 +261,7 @@ jobs:
         id: release
         shell: pwsh
         env:
-          RELEASE_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'Weave CBT Manager 0.1.11 adds guided setup, the official Weave icon, recoverable installation, school network access and verified application packaging.' }}
+          RELEASE_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'Weave CBT Manager 0.1.12 makes Windows-to-WSL configuration transfer independent of drive mounts and self-heals empty retained setup state.' }}
         run: |
           $output = '${{ github.workspace }}\deployment\manager\installer-output-${{ matrix.channel }}'
           $installer = Get-ChildItem $output -Filter '*.exe' | Select-Object -First 1
@@ -298,7 +298,7 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'Weave CBT Manager 0.1.11 adds guided setup, the official Weave icon, recoverable installation, school network access and verified application packaging.' }}
+          RELEASE_NOTES: ${{ github.event_name == 'workflow_dispatch' && inputs.release_notes || 'Weave CBT Manager 0.1.12 makes Windows-to-WSL configuration transfer independent of drive mounts and self-heals empty retained setup state.' }}
         run: |
           $tag='${{ matrix.release_tag }}'
           $output='${{ github.workspace }}\deployment\manager\installer-output-${{ matrix.channel }}'
