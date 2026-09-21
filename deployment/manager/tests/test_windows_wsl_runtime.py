@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -78,15 +79,51 @@ def test_bootstrap_wsl_invocation_does_not_redirect_standard_streams(
     assert captured["command"][-1] == "true"
 
 
-def test_windows_drive_path_maps_to_default_wsl_mount(tmp_path: Path) -> None:
+def test_wsl_share_paths_do_not_depend_on_windows_drive_mounts(tmp_path: Path) -> None:
     runtime = _runtime(tmp_path)
-    path = Path(r"C:\Users\Taiwo\AppData\Local\Temp\WeaveCBT\payload.tmp")
-    mapped = runtime._windows_path_to_wsl_mount(path)
-    # Path.resolve uses the real casing of an existing Windows user directory.
-    assert mapped.casefold() == "/mnt/c/Users/Taiwo/AppData/Local/Temp/WeaveCBT/payload.tmp".casefold()
+    primary, fallback = runtime._wsl_share_candidates(
+        "/tmp/weave-cbt-transfer-payload.tmp"
+    )
+
+    assert primary.casefold() == (
+        r"\\wsl.localhost\WeaveCBT\tmp\weave-cbt-transfer-payload.tmp".casefold()
+    )
+    assert fallback.casefold() == (
+        r"\\wsl$\WeaveCBT\tmp\weave-cbt-transfer-payload.tmp".casefold()
+    )
+    assert "/mnt/" not in primary
+    assert "/mnt/" not in fallback
 
 
-def test_write_text_file_uses_host_staging_not_wsl_stdin(
+def test_copy_host_payload_falls_back_to_legacy_wsl_share(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path)
+    host_payload = tmp_path / "payload.tmp"
+    host_payload.write_text("payload", encoding="utf-8")
+    destinations: list[str] = []
+
+    def fake_copy(source, destination):
+        assert Path(source) == host_payload
+        destinations.append(str(destination))
+        if "wsl.localhost" in str(destination).casefold():
+            raise OSError("primary WSL share unavailable")
+        return str(destination)
+
+    monkeypatch.setattr(shutil, "copyfile", fake_copy)
+
+    runtime._copy_host_payload_to_wsl(
+        host_payload,
+        "/tmp/weave-cbt-transfer-payload.tmp",
+    )
+
+    assert len(destinations) == 2
+    assert "wsl.localhost" in destinations[0].casefold()
+    assert "wsl$" in destinations[1].casefold()
+
+
+def test_write_text_file_uses_wsl_share_not_drvfs_or_stdin(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -96,11 +133,15 @@ def test_write_text_file_uses_host_staging_not_wsl_stdin(
     secret = "POSTGRES_PASSWORD='super-secret'\n"
     expected_hash = hashlib.sha256(secret.encode("utf-8")).hexdigest()
     calls: list[list[str]] = []
+    copies: list[tuple[Path, str]] = []
 
     def stage(content: str) -> Path:
         assert content == secret
         staged.write_text(content, encoding="utf-8")
         return staged
+
+    def copy_to_wsl(source: Path, destination: str) -> None:
+        copies.append((source, destination))
 
     def fake_run(command, *, timeout):
         calls.append(list(command))
@@ -108,17 +149,13 @@ def test_write_text_file_uses_host_staging_not_wsl_stdin(
             return subprocess.CompletedProcess(
                 command,
                 0,
-                stdout=f"{expected_hash}  /opt/weave-cbt/runtime.env\n",
+                stdout=f"{expected_hash}  {command[-1]}\n",
                 stderr="",
             )
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr(runtime, "_stage_host_payload", stage)
-    monkeypatch.setattr(
-        runtime,
-        "_windows_path_to_wsl_mount",
-        lambda _path: "/mnt/c/Users/Taiwo/AppData/Local/Temp/WeaveCBT/payload.tmp",
-    )
+    monkeypatch.setattr(runtime, "_copy_host_payload_to_wsl", copy_to_wsl)
     monkeypatch.setattr(runtime, "_run_in_distro", fake_run)
 
     result = runtime.write_text_file(
@@ -130,20 +167,59 @@ def test_write_text_file_uses_host_staging_not_wsl_stdin(
 
     assert result.succeeded
     assert not staged.exists()
-    copy_command = calls[0]
-    assert copy_command[:2] == ["sh", "-c"]
-    assert copy_command[-3:] == [
-        "/mnt/c/Users/Taiwo/AppData/Local/Temp/WeaveCBT/payload.tmp",
+    assert len(copies) == 1
+    assert copies[0][0] == staged
+    assert copies[0][1].startswith("/tmp/weave-cbt-transfer-")
+    assert copies[0][1].endswith(".tmp")
+
+    flattened = " ".join(part for command in calls for part in command)
+    assert "/mnt/c" not in flattened
+    assert "/mnt/d" not in flattened
+    assert "cat >" not in flattened
+    assert secret not in flattened
+    assert ["install", "-d", "-m", "0755", "--", "/opt/weave-cbt"] in calls
+    assert any(command[:3] == ["install", "-m", "0600"] for command in calls)
+    assert ["mv", "-f", "--", copies[0][1], "/opt/weave-cbt/runtime.env"] in calls
+
+
+def test_share_copy_failure_does_not_replace_target(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path)
+    monkeypatch.setattr(runtime, "is_installed", lambda: True)
+    staged = tmp_path / "payload.tmp"
+    calls: list[list[str]] = []
+
+    def stage(content: str) -> Path:
+        staged.write_text(content, encoding="utf-8")
+        return staged
+
+    def fail_copy(_source: Path, _destination: str) -> None:
+        raise RuntimeError("WSL share unavailable")
+
+    def fake_run(command, *, timeout):
+        calls.append(list(command))
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(runtime, "_stage_host_payload", stage)
+    monkeypatch.setattr(runtime, "_copy_host_payload_to_wsl", fail_copy)
+    monkeypatch.setattr(runtime, "_run_in_distro", fake_run)
+
+    result = runtime.write_text_file(
         "/opt/weave-cbt/runtime.env",
-        "0600",
-    ]
-    assert "cat >" not in copy_command[2]
-    assert "install -m" in copy_command[2]
-    assert secret not in " ".join(copy_command)
-    assert calls[1] == ["sha256sum", "--", "/opt/weave-cbt/runtime.env"]
+        "POSTGRES_PASSWORD='super-secret'\n",
+        mode="0600",
+        timeout=30,
+    )
+
+    assert not result.succeeded
+    assert "wsl share unavailable" in result.stderr.lower()
+    assert not any(command and command[0] == "mv" for command in calls)
+    assert not staged.exists()
 
 
-def test_copy_timeout_is_accepted_when_target_hash_matches(
+def test_move_timeout_is_accepted_when_target_hash_matches(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -152,26 +228,28 @@ def test_copy_timeout_is_accepted_when_target_hash_matches(
     staged = tmp_path / "payload.tmp"
     secret = "POSTGRES_PASSWORD='super-secret'\n"
     expected_hash = hashlib.sha256(secret.encode("utf-8")).hexdigest()
-    copy_attempts = 0
+    move_attempts = 0
 
     def stage(content: str) -> Path:
         staged.write_text(content, encoding="utf-8")
         return staged
 
     def fake_run(command, *, timeout):
-        nonlocal copy_attempts
+        nonlocal move_attempts
+        if command[0] == "mv":
+            move_attempts += 1
+            raise subprocess.TimeoutExpired(cmd=command, timeout=timeout)
         if command[0] == "sha256sum":
             return subprocess.CompletedProcess(
                 command,
                 0,
-                stdout=f"{expected_hash}  /opt/weave-cbt/runtime.env\n",
+                stdout=f"{expected_hash}  {command[-1]}\n",
                 stderr="",
             )
-        copy_attempts += 1
-        raise subprocess.TimeoutExpired(cmd=command, timeout=timeout)
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr(runtime, "_stage_host_payload", stage)
-    monkeypatch.setattr(runtime, "_windows_path_to_wsl_mount", lambda _path: "/mnt/c/payload.tmp")
+    monkeypatch.setattr(runtime, "_copy_host_payload_to_wsl", lambda *_args: None)
     monkeypatch.setattr(runtime, "_run_in_distro", fake_run)
 
     result = runtime.write_text_file(
@@ -182,39 +260,45 @@ def test_copy_timeout_is_accepted_when_target_hash_matches(
     )
 
     assert result.succeeded
-    assert copy_attempts == 1
+    assert move_attempts == 1
     assert not staged.exists()
 
 
-def test_copy_success_is_rejected_when_target_hash_does_not_match(
+def test_successful_move_is_rejected_when_target_hash_does_not_match(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     runtime = _runtime(tmp_path)
     monkeypatch.setattr(runtime, "is_installed", lambda: True)
     staged = tmp_path / "payload.tmp"
+    secret = "POSTGRES_PASSWORD='super-secret'\n"
+    expected_hash = hashlib.sha256(secret.encode("utf-8")).hexdigest()
+    hash_calls = 0
 
     def stage(content: str) -> Path:
         staged.write_text(content, encoding="utf-8")
         return staged
 
     def fake_run(command, *, timeout):
+        nonlocal hash_calls
         if command[0] == "sha256sum":
+            hash_calls += 1
+            digest = expected_hash if hash_calls == 1 else "0" * 64
             return subprocess.CompletedProcess(
                 command,
                 0,
-                stdout=f"{'0' * 64}  /opt/weave-cbt/runtime.env\n",
+                stdout=f"{digest}  {command[-1]}\n",
                 stderr="",
             )
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr(runtime, "_stage_host_payload", stage)
-    monkeypatch.setattr(runtime, "_windows_path_to_wsl_mount", lambda _path: "/mnt/c/payload.tmp")
+    monkeypatch.setattr(runtime, "_copy_host_payload_to_wsl", lambda *_args: None)
     monkeypatch.setattr(runtime, "_run_in_distro", fake_run)
 
     result = runtime.write_text_file(
         "/opt/weave-cbt/runtime.env",
-        "POSTGRES_PASSWORD='super-secret'\n",
+        secret,
         mode="0600",
         timeout=30,
     )
@@ -407,9 +491,16 @@ def test_inbox_wsl_with_no_systemd_support_is_not_ready(monkeypatch, tmp_path):
     runtime = _runtime(tmp_path)
     monkeypatch.setattr(runtime, "_wsl_executable", lambda: Path("wsl.exe"))
     calls = []
+
     def run(arguments, **kwargs):
         calls.append(arguments)
-        return subprocess.CompletedProcess(arguments, 0 if arguments == ["--status"] else 1, stdout="", stderr="")
+        return subprocess.CompletedProcess(
+            arguments,
+            0 if arguments == ["--status"] else 1,
+            stdout="",
+            stderr="",
+        )
+
     monkeypatch.setattr(runtime, "_run_wsl", run)
     assert runtime.is_available() is False
     assert calls == [["--status"], ["--version"]]
@@ -417,6 +508,7 @@ def test_inbox_wsl_with_no_systemd_support_is_not_ready(monkeypatch, tmp_path):
 
 def test_keepalive_is_detached_and_scoped_to_weave(monkeypatch, tmp_path):
     from unittest.mock import Mock
+
     runtime = _runtime(tmp_path)
     monkeypatch.setattr(runtime, "_wsl_executable", lambda: Path("wsl.exe"))
     launch = Mock()
