@@ -92,9 +92,10 @@ def test_bootstrap_wsl_invocation_does_not_redirect_standard_streams(
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    runtime._run_distro_bootstrap(timeout=15)
+    runtime._run_distro_bootstrap(timeout=75)
 
     assert captured["creationflags"] == subprocess.CREATE_NEW_CONSOLE
+    assert captured["timeout"] == 75
     assert "stdin" not in captured
     assert "stdout" not in captured
     assert "stderr" not in captured
@@ -138,6 +139,26 @@ def test_write_text_file_is_atomic_and_does_not_put_secret_in_argv(
     assert "trap cleanup" in command[2]
 
 
+def test_start_allows_complete_cold_start_window(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path)
+    monkeypatch.setattr(runtime, "is_installed", lambda: True)
+    timeouts: list[float] = []
+
+    def fake_bootstrap(*, timeout):
+        timeouts.append(timeout)
+        return subprocess.CompletedProcess(["wsl"], 0)
+
+    monkeypatch.setattr(runtime, "_run_distro_bootstrap", fake_bootstrap)
+    monkeypatch.setattr(runtime, "_apply_boot_config_best_effort", lambda: None)
+
+    runtime.start()
+
+    assert timeouts == [75.0]
+
+
 def test_start_repairs_existing_boot_config_after_bootstrap(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -162,7 +183,7 @@ def test_start_repairs_existing_boot_config_after_bootstrap(
     assert repaired is True
 
 
-def test_start_retries_and_targeted_restarts_only_weave_distro(
+def test_start_retries_once_and_targeted_restarts_only_weave_distro(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -171,15 +192,14 @@ def test_start_retries_and_targeted_restarts_only_weave_distro(
     monkeypatch.setattr(wsl_module, "sleep", lambda _seconds: None)
     monkeypatch.setattr(runtime, "_apply_boot_config_best_effort", lambda: None)
 
-    attempts = 0
+    timeouts: list[float] = []
     restarts = 0
 
     def fake_bootstrap(*, timeout):
-        nonlocal attempts
-        attempts += 1
+        timeouts.append(timeout)
         return subprocess.CompletedProcess(
             ["wsl"],
-            0 if attempts == 4 else 1,
+            0 if len(timeouts) == 2 else 1,
         )
 
     def targeted_restart() -> None:
@@ -187,38 +207,75 @@ def test_start_retries_and_targeted_restarts_only_weave_distro(
         restarts += 1
 
     monkeypatch.setattr(runtime, "_run_distro_bootstrap", fake_bootstrap)
-    monkeypatch.setattr(runtime, "_targeted_restart", targeted_restart)
-
-    runtime.start()
-
-    assert attempts == 4
-    assert restarts == 1
-
-
-def test_responsiveness_timeout_reports_final_wsl_diagnostic(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    runtime = _runtime(tmp_path)
-    times = iter([0.0, 0.0, 0.5, 1.1])
-    monkeypatch.setattr(wsl_module, "monotonic", lambda: next(times))
-    monkeypatch.setattr(wsl_module, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(
-        runtime,
-        "_run_distro_bootstrap",
-        lambda *, timeout: subprocess.CompletedProcess(["wsl"], 1),
-    )
     monkeypatch.setattr(
         runtime,
         "_diagnose_boot_failure",
         lambda: "Error code: Wsl/Service/E_UNEXPECTED",
     )
+    monkeypatch.setattr(runtime, "_targeted_restart", targeted_restart)
+
+    runtime.start()
+
+    assert timeouts == [75.0, 75.0]
+    assert restarts == 1
+
+
+def test_bootstrap_timeout_is_accepted_if_followup_probe_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path)
+    monkeypatch.setattr(runtime, "is_installed", lambda: True)
+    monkeypatch.setattr(runtime, "_apply_boot_config_best_effort", lambda: None)
+    restarts = 0
+
+    def timed_out_bootstrap(*, timeout):
+        raise subprocess.TimeoutExpired(cmd=["wsl"], timeout=timeout)
+
+    def targeted_restart() -> None:
+        nonlocal restarts
+        restarts += 1
+
+    monkeypatch.setattr(runtime, "_run_distro_bootstrap", timed_out_bootstrap)
+    monkeypatch.setattr(runtime, "_diagnose_boot_failure", lambda: "")
+    monkeypatch.setattr(runtime, "_targeted_restart", targeted_restart)
+
+    runtime.start()
+
+    assert restarts == 0
+
+
+def test_failed_start_reports_final_wsl_diagnostic(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime = _runtime(tmp_path)
+    monkeypatch.setattr(wsl_module, "sleep", lambda _seconds: None)
+    attempts = 0
+    restarts = 0
+
+    def timed_out_bootstrap(*, timeout):
+        nonlocal attempts
+        attempts += 1
+        raise subprocess.TimeoutExpired(cmd=["wsl"], timeout=timeout)
+
+    def targeted_restart() -> None:
+        nonlocal restarts
+        restarts += 1
+
+    monkeypatch.setattr(runtime, "_run_distro_bootstrap", timed_out_bootstrap)
+    monkeypatch.setattr(
+        runtime,
+        "_diagnose_boot_failure",
+        lambda: "WSL startup probe timed out.",
+    )
+    monkeypatch.setattr(runtime, "_targeted_restart", targeted_restart)
 
     with pytest.raises(RuntimeError, match="Last WSL error"):
-        runtime._wait_for_distro_responsive(
-            timeout=1.0,
-            retry_interval=0.1,
-        )
+        runtime._wait_for_distro_responsive()
+
+    assert attempts == 2
+    assert restarts == 1
 
 
 def test_existing_runtime_boot_config_is_upgraded_best_effort(
