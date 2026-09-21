@@ -14,11 +14,17 @@ The Windows x64 installer bundles the native Qt manager and an Ubuntu WSL2 files
 
 ## Setup and recovery
 
-Open the manager and select **Set up this computer**. It prepares a current WSL runtime, resumes after a required Windows restart, generates a random database password, downloads the services, and verifies the migration and staff portal. The dashboard provides the staff portal and a copyable student address.
+Open the manager and select **Set up this computer**. It prepares a current WSL runtime, resumes after a required Windows restart, generates a strong random database password, downloads the services, and verifies the migration and staff portal. The dashboard provides the staff portal and a copyable student address.
 
 A failed setup can be retried. Existing `runtime.env` credentials are reused because PostgreSQL does not change the password of an initialized volume when its environment changes. If school data exists without its configuration, setup stops and requests restoration rather than replacing credentials.
 
 The server runs in the dedicated `WeaveCBT` distribution. A detached, singleton WSL client keeps it alive after the manager closes. Windows port forwarding is refreshed on startup, repair and a healthy status refresh. WSL NAT address changes are detected and the manager replaces only forwarding rules it owns. Network discovery does not depend on internet connectivity. Only the web port is exposed on the selected physical LAN address; the database and Redis stay internal.
+
+## Database administration
+
+Normal setup does not require school staff to invent or manage a database password. WEAVE generates and stores the PostgreSQL credential in the protected local `runtime.env` file.
+
+An elevated server administrator can open **Diagnostics and installation settings → Database administration** to deliberately reveal or copy the database name, username and generated password, or open an interactive PostgreSQL console. Credentials are read only on demand and are not persisted in Manager state or placed in command arguments. PostgreSQL remains private to the local WEAVE runtime; the Manager does not expose port 5432 to the school LAN.
 
 Logs are in `%PROGRAMDATA%\WeaveCBT\logs`. The setup error page and dashboard provide an **Open logs** action. The manager serializes operations and prevents closing during an active operation. Uninstall retains school data. Permanent deletion requires typing `DELETE`.
 
@@ -28,7 +34,7 @@ Logs are in `%PROGRAMDATA%\WeaveCBT\logs`. The setup error page and dashboard pr
 
 The build generates the official multi-resolution Weave icon from the same vector paths and default colors as the frontend, embeds it in the manager EXE, and uses it for the installer and Windows shortcuts. Manager version is passed consistently into the binary and release manifest. Increase the CBT version when releasing application updates so existing installations discover them.
 
-CI runs manager regression tests and a compiled Qt self-test. This is not a substitute for a clean Windows machine acceptance test covering WSL provisioning, reboot/resume, LAN access from a second computer, and operation after closing the GUI. No physical-machine installation or reboot is performed by the unit tests.
+CI runs manager regression tests and a compiled Qt self-test. This is not a substitute for a clean Windows machine acceptance test covering WSL provisioning, reboot/resume, LAN access from a second computer, database-admin controls, and operation after closing the GUI. No physical-machine installation or reboot is performed by the unit tests.
 
 ## Local checks
 
