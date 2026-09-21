@@ -6,7 +6,21 @@ import subprocess
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QHBoxLayout, QInputDialog, QMainWindow, QMessageBox, QScrollArea, QStackedWidget, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QInputDialog,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QScrollArea,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 from .. import __version__
 from ..app import ManagerController
@@ -16,15 +30,17 @@ from ..core.updates import ReleaseInfo, is_newer
 from .pages.dashboard import DashboardPage
 from .pages.installing import InstallingPage
 from .pages.setup import SetupPage
-from .theme import STYLESHEET, label
+from .theme import STYLESHEET, button, label
 
 logger = logging.getLogger(__name__)
 
 from .brand import application_icon, mark_pixmap
 
+
 class WorkerSignals(QObject):
     completed = Signal(object, object)
     progress = Signal(str)
+
 
 class Worker(QRunnable):
     def __init__(self, function, *, on_result=None, on_error=None, with_progress=False):
@@ -45,6 +61,57 @@ class Worker(QRunnable):
             self.signals.completed.emit(None, str(exc))
         else:
             self.signals.completed.emit(value, None)
+
+
+class DatabaseCredentialsDialog(QDialog):
+    """Reveal generated PostgreSQL credentials only after an explicit admin action."""
+
+    def __init__(self, credentials, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Local database access")
+        self.setModal(True)
+        self.setMinimumWidth(560)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(14)
+        layout.addWidget(label("PostgreSQL credentials", "section"))
+        layout.addWidget(label("These credentials belong to this local WEAVE CBT server. PostgreSQL is not exposed to the school LAN. Keep the password private."))
+
+        form = QFormLayout()
+        form.setSpacing(10)
+        self.database_field = self._field(credentials.database_name)
+        self.user_field = self._field(credentials.database_user)
+        self.password_field = self._field(credentials.database_password)
+        self.password_field.setEchoMode(QLineEdit.Password)
+        form.addRow("Database", self.database_field)
+        form.addRow("User", self.user_field)
+        form.addRow("Password", self.password_field)
+        layout.addLayout(form)
+
+        show_password = QCheckBox("Show password")
+        show_password.toggled.connect(
+            lambda visible: self.password_field.setEchoMode(
+                QLineEdit.Normal if visible else QLineEdit.Password
+            )
+        )
+        layout.addWidget(show_password)
+
+        actions = QHBoxLayout()
+        actions.addWidget(button("Copy database name", lambda: QApplication.clipboard().setText(credentials.database_name)))
+        actions.addWidget(button("Copy username", lambda: QApplication.clipboard().setText(credentials.database_user)))
+        actions.addWidget(button("Copy password", lambda: QApplication.clipboard().setText(credentials.database_password)))
+        actions.addStretch()
+        actions.addWidget(button("Close", self.accept, primary=True))
+        layout.addLayout(actions)
+
+    @staticmethod
+    def _field(value: str) -> QLineEdit:
+        field = QLineEdit(value)
+        field.setReadOnly(True)
+        field.setMinimumWidth(360)
+        return field
+
 
 class MainWindow(QMainWindow):
     def __init__(self, controller: ManagerController, *, force_setup: bool = False) -> None:
@@ -105,6 +172,8 @@ class MainWindow(QMainWindow):
         self.dashboard.repair_requested.connect(self._repair)
         self.dashboard.update_check_requested.connect(self._check_updates)
         self.dashboard.install_update_requested.connect(self._install_update)
+        self.dashboard.database_credentials_requested.connect(self._reveal_database_credentials)
+        self.dashboard.database_console_requested.connect(self._open_database_console)
         self.dashboard.uninstall_requested.connect(self._launch_uninstaller)
         self.dashboard.purge_requested.connect(self._purge)
         self._show(self.installing)
@@ -223,6 +292,34 @@ class MainWindow(QMainWindow):
             return
         self._run(lambda: self.controller.install_available_update(self.latest_release),
                   on_result=lambda message: (self._refresh_health(), QMessageBox.information(self, "Update", message)))
+
+    def _reveal_database_credentials(self):
+        if QMessageBox.question(
+            self,
+            "Reveal database credentials",
+            "The database password grants direct access to local school data. Reveal it only for database administration and do not share it with students or staff. Continue?",
+        ) != QMessageBox.Yes:
+            return
+        self._run(
+            self.controller.database_credentials,
+            on_result=lambda credentials: DatabaseCredentialsDialog(credentials, self).exec(),
+        )
+
+    def _open_database_console(self):
+        if QMessageBox.question(
+            self,
+            "Open PostgreSQL console",
+            "This opens a direct administrator console for the local WEAVE CBT database. Changes made there can affect school data. Continue?",
+        ) != QMessageBox.Yes:
+            return
+        self._run(
+            self.controller.open_database_console,
+            on_result=lambda _: QMessageBox.information(
+                self,
+                "Database console",
+                "The PostgreSQL console has been opened in a separate window. Close that window when you are finished.",
+            ),
+        )
 
     def _restart_windows(self):
         if QMessageBox.question(self, "Restart Windows", "Save your work in other applications before restarting. Restart now?") == QMessageBox.Yes:
