@@ -4,6 +4,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout, QWidget
 from ..theme import button, card, label
 
+
 class DashboardPage(QWidget):
     refresh_requested = Signal()
     restart_requested = Signal()
@@ -15,10 +16,14 @@ class DashboardPage(QWidget):
     logs_requested = Signal()
     database_credentials_requested = Signal()
     database_console_requested = Signal()
+    network_enable_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
         self.lan_url = ""
+        self.server_ready = False
+        self.current_lan_ip = None
+        self.network_access = None
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 16, 0, 16)
         layout.setSpacing(18)
@@ -45,7 +50,7 @@ class DashboardPage(QWidget):
         layout.addWidget(status_card)
         network, net_layout = card()
         net_layout.addWidget(label("Connect your classroom", "section"))
-        net_layout.addWidget(label("Students open this address on computers connected to the same school network."))
+        net_layout.addWidget(label("Students open this address on computers connected to the same trusted school network."))
         row = QHBoxLayout()
         self.network_address = label("Checking network address…", "section")
         self.network_address.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -54,7 +59,16 @@ class DashboardPage(QWidget):
         self.copy_button.setEnabled(False)
         row.addWidget(self.copy_button)
         net_layout.addLayout(row)
-        net_layout.addWidget(label("Use a Private or Domain network in Windows. Keep this server awake and signed in during exams."))
+        self.network_detail = label("Checking the Windows network profile…")
+        net_layout.addWidget(self.network_detail)
+        self.enable_network_button = button(
+            "Enable school network access",
+            self.network_enable_requested.emit,
+            primary=True,
+        )
+        self.enable_network_button.hide()
+        net_layout.addWidget(self.enable_network_button, alignment=Qt.AlignLeft)
+        net_layout.addWidget(label("WEAVE only opens classroom access on Windows Private or Domain networks. New Public networks require one administrator approval."))
         layout.addWidget(network)
         actions = QHBoxLayout()
         self.action_buttons = []
@@ -106,10 +120,55 @@ class DashboardPage(QWidget):
             self.copy_button.setText("Link copied")
 
     def set_busy(self, busy: bool) -> None:
-        for widget in [*self.action_buttons, self.install_update_button]:
+        for widget in [*self.action_buttons, self.install_update_button, self.enable_network_button]:
             widget.setEnabled(not busy)
 
+    def _render_network(self) -> None:
+        status = self.network_access
+        self.lan_url = ""
+        self.copy_button.setEnabled(False)
+        self.copy_button.setText("Copy student link")
+        self.enable_network_button.hide()
+
+        if status is None:
+            self.network_address.setText("Checking network access…")
+            self.network_detail.setText("Checking the Windows network profile…")
+            return
+
+        if not status.connected:
+            self.network_address.setText("Connect this computer to the school Wi-Fi or Ethernet network")
+            self.network_detail.setText("No active classroom network was detected.")
+            return
+
+        network_name = status.network_name or status.interface_alias or "Current network"
+        if status.requires_approval:
+            self.network_address.setText("School network access is currently blocked by Windows")
+            self.network_detail.setText(
+                f"{network_name} is marked Public. Approve it only if this is a trusted school network."
+            )
+            self.enable_network_button.show()
+            return
+
+        if not status.trusted:
+            self.network_address.setText("School network access is not ready")
+            self.network_detail.setText(
+                f"WEAVE could not verify the Windows network profile for {network_name}."
+            )
+            return
+
+        self.network_detail.setText(
+            f"{network_name} · {status.category} · classroom access enabled"
+        )
+        if self.server_ready and status.lan_ip:
+            self.lan_url = f"http://{status.lan_ip}/student"
+            self.network_address.setText(self.lan_url)
+            self.copy_button.setEnabled(True)
+        else:
+            self.network_address.setText("Available when the server is healthy")
+
     def set_health(self, snapshot, lan_ip: str | None) -> None:
+        self.server_ready = snapshot.healthy
+        self.current_lan_ip = lan_ip
         self.status.setText("●  Your server is ready" if snapshot.healthy else "●  Your server needs attention")
         self.status.setStyleSheet("color: #047857;" if snapshot.healthy else "color: #b45309;")
         self.detail.setText("Weave is ready to open on this computer." if snapshot.healthy else snapshot.detail)
@@ -118,10 +177,11 @@ class DashboardPage(QWidget):
                                         (snapshot.runtime_ready, snapshot.services_ready, snapshot.web_reachable)):
             widget.setText(("✓  " if ready else "○  ") + title)
             widget.setStyleSheet("color: #047857;" if ready else "color: #64748b;")
-        self.lan_url = f"http://{lan_ip}/student" if lan_ip and snapshot.healthy else ""
-        self.network_address.setText(self.lan_url or "Available when the server and school network are ready")
-        self.copy_button.setEnabled(bool(self.lan_url))
-        self.copy_button.setText("Copy student link")
+        self._render_network()
+
+    def set_network_access(self, status) -> None:
+        self.network_access = status
+        self._render_network()
 
     def set_update(self, message: str, *, available: bool) -> None:
         self.update_message.setText(message)
