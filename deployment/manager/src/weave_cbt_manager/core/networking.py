@@ -295,11 +295,11 @@ class WindowsNetworkingService:
     ) -> NetworkAccessStatus:
         """Mark one explicitly approved Public Windows network as Private."""
 
-        if not status.connected or status.interface_index is None:
+        if not status.connected:
             raise RuntimeError("No connected school network is available to approve.")
         if status.trusted:
             return status
-        if not status.requires_approval:
+        if not status.requires_approval or status.interface_index is None:
             raise RuntimeError(
                 "Windows could not identify the current network profile. "
                 "Reconnect to the school network and try again."
