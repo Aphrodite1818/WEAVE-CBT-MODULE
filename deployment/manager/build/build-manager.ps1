@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory=$true)][string]$ApiBaseUrl,
     [Parameter(Mandatory=$true)][string]$WeaveImage,
     [Parameter(Mandatory=$true)][string]$CbtVersion,
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$ManagerVersion = "0.1.11",
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$ManagerVersion = "0.1.13",
     [string]$OutputDirectory = "$PSScriptRoot\..\build-output"
 )
 
