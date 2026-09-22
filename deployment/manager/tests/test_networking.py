@@ -3,7 +3,10 @@ from unittest.mock import Mock
 
 import pytest
 
-from weave_cbt_manager.core.networking import WindowsNetworkingService
+from weave_cbt_manager.core.networking import (
+    NetworkAccessStatus,
+    WindowsNetworkingService,
+)
 from weave_cbt_manager.runtime.base import RuntimeCommandResult
 
 
@@ -179,3 +182,66 @@ def test_mirrored_network_never_forwards_back_to_itself(tmp_path):
         command[:5] == ["netsh", "interface", "portproxy", "add", "v4tov4"]
         for command in calls(instance)
     )
+
+
+def test_public_windows_profile_requires_explicit_approval(tmp_path):
+    instance = service(tmp_path)
+    instance._run.return_value = json.dumps(
+        {
+            "network_name": "School Wi-Fi",
+            "interface_alias": "Wi-Fi",
+            "interface_index": 10,
+            "category": "Public",
+        }
+    )
+
+    status = instance.inspect_access("192.168.1.2")
+
+    assert status.lan_ip == "192.168.1.2"
+    assert status.network_name == "School Wi-Fi"
+    assert status.requires_approval is True
+    assert status.trusted is False
+    assert "Get-NetConnectionProfile" in instance._run.call_args.args[0][-1]
+    assert "Set-NetConnectionProfile" not in instance._run.call_args.args[0][-1]
+
+
+def test_approving_public_profile_changes_only_selected_interface(tmp_path):
+    instance = service(tmp_path)
+    public = NetworkAccessStatus(
+        lan_ip="192.168.1.2",
+        network_name="School Wi-Fi",
+        interface_alias="Wi-Fi",
+        interface_index=10,
+        category="Public",
+    )
+    private = NetworkAccessStatus(
+        lan_ip="192.168.1.2",
+        network_name="School Wi-Fi",
+        interface_alias="Wi-Fi",
+        interface_index=10,
+        category="Private",
+    )
+    instance.inspect_access = Mock(return_value=private)
+
+    updated = instance.approve_current_network(public)
+
+    assert updated.trusted is True
+    command = instance._run.call_args.args[0][-1]
+    assert "Set-NetConnectionProfile -InterfaceIndex 10 -NetworkCategory Private" in command
+    assert "Public" not in command
+
+
+def test_unknown_profile_is_never_silently_trusted(tmp_path):
+    instance = service(tmp_path)
+    unknown = NetworkAccessStatus(
+        lan_ip="192.168.1.2",
+        network_name=None,
+        interface_alias=None,
+        interface_index=None,
+        category="Unknown",
+    )
+
+    with pytest.raises(RuntimeError, match="could not identify"):
+        instance.approve_current_network(unknown)
+
+    instance._run.assert_not_called()
