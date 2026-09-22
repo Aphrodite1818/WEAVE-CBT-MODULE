@@ -17,7 +17,7 @@ from .core.config import ConfigService, InstallationConfigInput, render_runtime_
 from .core.deployment import DatabaseCredentials, DeploymentService
 from .core.health import HealthService, HealthSnapshot
 from .core.installer import InstallationProgress, InstallationResult, InstallerService
-from .core.networking import WindowsNetworkingService
+from .core.networking import NetworkAccessStatus, WindowsNetworkingService
 from .core.prerequisites import PrerequisitePolicy, PrerequisiteService
 from .core.startup import WindowsStartupService
 from .core.updates import ReleaseInfo, UpdateService, is_newer
@@ -225,6 +225,44 @@ class ManagerController:
             subprocess.Popen(command, creationflags=subprocess.CREATE_NEW_CONSOLE)
         except OSError as exc:
             raise RuntimeError("Unable to open the local PostgreSQL console.") from exc
+
+    def network_access(self) -> NetworkAccessStatus:
+        return self.networking.inspect_access(self.platform.lan_ip())
+
+    def reconcile_network(self) -> NetworkAccessStatus:
+        """Rebuild WEAVE-owned LAN forwarding for the host's current network."""
+
+        self._check_channel()
+        lan_ip = self.platform.lan_ip()
+        if not self.installation_present():
+            return self.networking.inspect_access(lan_ip)
+        if not self.runtime.is_installed():
+            return self.networking.inspect_access(lan_ip)
+
+        self.runtime.start()
+        self.runtime.keep_alive()
+        if not self.deployment.config_exists():
+            return self.networking.inspect_access(lan_ip)
+        self.networking.configure(lan_ip)
+        return self.networking.inspect_access(lan_ip)
+
+    def enable_school_network(self) -> NetworkAccessStatus:
+        """Trust the current Public Windows network after explicit admin approval."""
+
+        self._check_channel()
+        if not self.platform.is_admin():
+            raise RuntimeError(
+                "Administrator privileges are required to enable school network access."
+            )
+        lan_ip = self.platform.lan_ip()
+        status = self.networking.inspect_access(lan_ip)
+        if not status.connected:
+            raise RuntimeError(
+                "Connect this computer to the trusted school Wi-Fi or Ethernet network first."
+            )
+        status = self.networking.approve_current_network(status)
+        self.networking.configure(status.lan_ip)
+        return self.networking.inspect_access(status.lan_ip)
 
     def status(self) -> HealthSnapshot:
         self._check_channel()
