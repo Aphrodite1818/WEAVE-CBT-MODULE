@@ -8,6 +8,7 @@ import pytest
 pytest.importorskip("PySide6")
 from PySide6.QtWidgets import QApplication
 from weave_cbt_manager.core.health import HealthSnapshot
+from weave_cbt_manager.core.networking import NetworkAccessStatus
 from weave_cbt_manager.state import ManagerState
 from weave_cbt_manager.ui.main_window import MainWindow
 
@@ -27,6 +28,13 @@ def fake_controller():
     controller.state = ManagerState()
     controller.installation_present.return_value = False
     controller.platform.lan_ip.return_value = "192.168.1.10"
+    controller.network_access.return_value = NetworkAccessStatus(
+        lan_ip="192.168.1.10",
+        network_name="School Wi-Fi",
+        interface_alias="Wi-Fi",
+        interface_index=10,
+        category="Private",
+    )
     controller.prepare_infrastructure.return_value = SimpleNamespace(reboot_required=False)
     controller.install_application.return_value = HealthSnapshot(True, True, True, "Healthy")
     return controller
@@ -65,6 +73,7 @@ def test_unhealthy_server_does_not_advertise_an_available_student_link(applicati
     window = MainWindow(controller)
     window.show()
     drain(application, lambda: not window.busy and window.stack.currentWidget() == window.pages[window.setup])
+    window.dashboard.set_network_access(controller.network_access.return_value)
     window.dashboard.set_health(HealthSnapshot(True, False, False, "Database unavailable"), "192.168.1.10")
     assert not window.dashboard.open_button.isEnabled()
     assert not window.dashboard.copy_button.isEnabled()
