@@ -174,8 +174,13 @@ class MainWindow(QMainWindow):
         self.dashboard.install_update_requested.connect(self._install_update)
         self.dashboard.database_credentials_requested.connect(self._reveal_database_credentials)
         self.dashboard.database_console_requested.connect(self._open_database_console)
+        self.dashboard.network_enable_requested.connect(self._enable_school_network)
         self.dashboard.uninstall_requested.connect(self._launch_uninstaller)
         self.dashboard.purge_requested.connect(self._purge)
+        self.network_timer = QTimer(self)
+        self.network_timer.setInterval(15_000)
+        self.network_timer.timeout.connect(self._poll_network)
+        self.network_timer.start()
         self._show(self.installing)
         QTimer.singleShot(0, self._discover)
 
@@ -243,6 +248,7 @@ class MainWindow(QMainWindow):
     def _installed(self, snapshot):
         self._show_dashboard()
         self._render_health(snapshot, self.controller.platform.lan_ip())
+        self._refresh_network_access()
 
     def _render_health(self, snapshot, lan_ip):
         self.dashboard.set_health(snapshot, lan_ip)
@@ -252,14 +258,79 @@ class MainWindow(QMainWindow):
     def _startup_failed(self, message):
         from ..core.health import HealthSnapshot
         self.dashboard.set_health(HealthSnapshot(False, False, False, message), None)
+        self._refresh_network_access()
 
     def _show_dashboard(self):
         self._show(self.dashboard)
 
     def _refresh_health(self):
         def inspect():
-            return self.controller.status(), self.controller.platform.lan_ip()
-        self._run(inspect, on_result=lambda result: self._render_health(*result), on_error=self._startup_failed)
+            snapshot = self.controller.status()
+            lan_ip = self.controller.platform.lan_ip()
+            return snapshot, lan_ip, self.controller.network_access()
+
+        def completed(result):
+            snapshot, lan_ip, network_access = result
+            self._render_health(snapshot, lan_ip)
+            self.dashboard.set_network_access(network_access)
+
+        self._run(inspect, on_result=completed, on_error=self._startup_failed)
+
+    def _refresh_network_access(self):
+        self._run(
+            self.controller.network_access,
+            on_result=self.dashboard.set_network_access,
+            on_error=lambda _message: None,
+        )
+
+    def _poll_network(self):
+        if self.busy or self.stack.currentWidget() is not self.pages[self.dashboard]:
+            return
+
+        previous = self.dashboard.network_access
+
+        def completed(status):
+            self.dashboard.set_network_access(status)
+            if (
+                status.trusted
+                and status.lan_ip
+                and previous is not None
+                and previous.lan_ip != status.lan_ip
+            ):
+                self._run(
+                    self.controller.reconcile_network,
+                    on_result=self.dashboard.set_network_access,
+                    on_error=self._show_error,
+                )
+
+        self._run(
+            self.controller.network_access,
+            on_result=completed,
+            on_error=lambda _message: None,
+        )
+
+    def _enable_school_network(self):
+        status = self.dashboard.network_access
+        network_name = (
+            (status.network_name or status.interface_alias)
+            if status is not None
+            else None
+        ) or "this network"
+        if QMessageBox.question(
+            self,
+            "Enable school network access",
+            f"Windows currently marks {network_name} as Public. WEAVE can mark only this network as Private so student and staff computers on the same LAN can reach the CBT server. Continue only if this is a trusted school network.",
+        ) != QMessageBox.Yes:
+            return
+
+        def completed(updated):
+            self.dashboard.set_network_access(updated)
+            self._refresh_health()
+
+        self._run(
+            self.controller.enable_school_network,
+            on_result=completed,
+        )
 
     def _restart_server(self):
         if QMessageBox.question(self, "Restart server", "Restarting interrupts connected staff and students. Continue only when no exam is in progress.") != QMessageBox.Yes:
@@ -270,10 +341,10 @@ class MainWindow(QMainWindow):
                 raise RuntimeError("An examination is active. Close it before restarting the server.")
             self.controller.deployment.restart()
             return self.controller.health.wait_until_healthy(timeout_seconds=120)
-        self._run(restart, on_result=lambda snapshot: self.dashboard.set_health(snapshot, self.controller.platform.lan_ip()))
+        self._run(restart, on_result=lambda snapshot: (self.dashboard.set_health(snapshot, self.controller.platform.lan_ip()), self._refresh_network_access()))
 
     def _repair(self):
-        self._run(self.controller.repair, on_result=lambda snapshot: self.dashboard.set_health(snapshot, self.controller.platform.lan_ip()))
+        self._run(self.controller.repair, on_result=lambda snapshot: (self.dashboard.set_health(snapshot, self.controller.platform.lan_ip()), self._refresh_network_access()))
 
     def _check_updates(self):
         def completed(release):
