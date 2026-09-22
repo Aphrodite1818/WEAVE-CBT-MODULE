@@ -5,7 +5,12 @@ from __future__ import annotations
 import subprocess
 import sys
 
-from ..constants import RUNONCE_VALUE_NAME, STARTUP_TASK_NAME, UPDATE_CHECK_TASK_NAME
+from ..constants import (
+    NETWORK_RECONCILE_TASK_NAME,
+    RUNONCE_VALUE_NAME,
+    STARTUP_TASK_NAME,
+    UPDATE_CHECK_TASK_NAME,
+)
 
 
 class WindowsStartupService:
@@ -28,9 +33,18 @@ class WindowsStartupService:
         identity = ["/RU", user, "/IT"]
         self._run(["schtasks", "/Create", "/F", "/RL", "HIGHEST", *identity, "/SC", "ONLOGON", "/TN", STARTUP_TASK_NAME, "/TR", self._manager_command("--startup")])
         self._run(["schtasks", "/Create", "/F", "/RL", "HIGHEST", *identity, "/SC", "DAILY", "/ST", "12:00", "/TN", UPDATE_CHECK_TASK_NAME, "/TR", self._manager_command("--check-updates")])
+        # Re-read the host LAN regularly so a DHCP address, Wi-Fi, or Ethernet
+        # change does not leave WEAVE forwarding bound to an obsolete address.
+        # Public networks are never trusted here; the GUI still requires an
+        # explicit administrator approval before changing them to Private.
+        self._run(["schtasks", "/Create", "/F", "/RL", "HIGHEST", *identity, "/SC", "MINUTE", "/MO", "5", "/TN", NETWORK_RECONCILE_TASK_NAME, "/TR", self._manager_command("--reconcile-network")])
 
     def remove_tasks(self) -> None:
-        for name in (STARTUP_TASK_NAME, UPDATE_CHECK_TASK_NAME):
+        for name in (
+            STARTUP_TASK_NAME,
+            UPDATE_CHECK_TASK_NAME,
+            NETWORK_RECONCILE_TASK_NAME,
+        ):
             self._run(["schtasks", "/Delete", "/F", "/TN", name], check=False)
 
     def register_resume_after_reboot(self) -> None:
