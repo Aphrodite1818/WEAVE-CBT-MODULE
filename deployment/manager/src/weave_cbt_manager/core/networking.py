@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import ipaddress
 import json
 import logging
@@ -12,6 +13,33 @@ from ..runtime.base import RuntimeProvider
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class NetworkAccessStatus:
+    """Describe whether Windows currently permits classroom LAN access."""
+
+    lan_ip: str | None
+    network_name: str | None
+    interface_alias: str | None
+    interface_index: int | None
+    category: str
+
+    @property
+    def connected(self) -> bool:
+        return self.lan_ip is not None
+
+    @property
+    def trusted(self) -> bool:
+        return self.category.casefold() in {
+            "private",
+            "domain",
+            "domainauthenticated",
+        }
+
+    @property
+    def requires_approval(self) -> bool:
+        return self.category.casefold() == "public"
 
 
 class WindowsNetworkingService:
@@ -37,9 +65,10 @@ class WindowsNetworkingService:
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError("School network setup timed out.") from exc
         if result.returncode:
+            detail = (result.stderr or result.stdout).strip()
             raise RuntimeError(
-                "School network setup failed: "
-                + (result.stderr or result.stdout).strip()
+                "School network setup failed"
+                + (f": {detail}" if detail else ".")
             )
         return result.stdout
 
@@ -208,6 +237,92 @@ class WindowsNetworkingService:
                 f"listenport={self.WEB_PORT}",
             ]
         )
+
+    def inspect_access(self, lan_ip: str | None) -> NetworkAccessStatus:
+        """Read the Windows profile that owns the current LAN address.
+
+        Profile inspection is deliberately read-only. A Public network remains
+        Public until an administrator explicitly approves it for classroom use.
+        """
+
+        if not lan_ip:
+            return NetworkAccessStatus(None, None, None, None, "Disconnected")
+
+        address = str(ipaddress.IPv4Address(lan_ip))
+        command = (
+            "$ErrorActionPreference='Stop'; "
+            f"$ip=Get-NetIPAddress -AddressFamily IPv4 -IPAddress '{address}' "
+            "-ErrorAction Stop | Select-Object -First 1; "
+            "if ($null -eq $ip) { throw 'No Windows adapter owns the WEAVE LAN address.' }; "
+            "$profile=Get-NetConnectionProfile -InterfaceIndex $ip.InterfaceIndex "
+            "-ErrorAction Stop; "
+            "[pscustomobject]@{"
+            "network_name=[string]$profile.Name;"
+            "interface_alias=[string]$profile.InterfaceAlias;"
+            "interface_index=[int]$profile.InterfaceIndex;"
+            "category=[string]$profile.NetworkCategory"
+            "} | ConvertTo-Json -Compress"
+        )
+        try:
+            output = self._run(
+                [
+                    "powershell.exe",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    command,
+                ]
+            )
+            payload = json.loads(output.lstrip("\ufeff").strip())
+            interface_index = int(payload["interface_index"])
+            if interface_index <= 0:
+                raise ValueError("invalid interface index")
+            return NetworkAccessStatus(
+                lan_ip=address,
+                network_name=str(payload.get("network_name") or "") or None,
+                interface_alias=str(payload.get("interface_alias") or "") or None,
+                interface_index=interface_index,
+                category=str(payload.get("category") or "Unknown"),
+            )
+        except (RuntimeError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+            logger.exception(
+                "Could not determine the Windows network profile for %s.", address
+            )
+            return NetworkAccessStatus(address, None, None, None, "Unknown")
+
+    def approve_current_network(
+        self, status: NetworkAccessStatus
+    ) -> NetworkAccessStatus:
+        """Mark one explicitly approved Public Windows network as Private."""
+
+        if not status.connected or status.interface_index is None:
+            raise RuntimeError("No connected school network is available to approve.")
+        if status.trusted:
+            return status
+        if not status.requires_approval:
+            raise RuntimeError(
+                "Windows could not identify the current network profile. "
+                "Reconnect to the school network and try again."
+            )
+
+        self._run(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "$ErrorActionPreference='Stop'; "
+                f"Set-NetConnectionProfile -InterfaceIndex {status.interface_index} "
+                "-NetworkCategory Private",
+            ]
+        )
+        updated = self.inspect_access(status.lan_ip)
+        if not updated.trusted:
+            raise RuntimeError(
+                "Windows did not mark the selected school network as Private. "
+                "Reconnect to the network and try again."
+            )
+        return updated
 
     def configure(self, lan_ip: str | None) -> None:
         saved = self._saved_state()
