@@ -15,6 +15,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--first-run", action="store_true")
     parser.add_argument("--startup", action="store_true")
     parser.add_argument("--check-updates", action="store_true")
+    parser.add_argument("--reconcile-network", action="store_true")
     parser.add_argument("--uninstall-keep-data", action="store_true")
     parser.add_argument("--purge-data", action="store_true")
     parser.add_argument(
@@ -67,7 +68,7 @@ def main() -> int:
     lock = QLockFile(str(state_file().with_suffix(".lock")))
     lock.setStaleLockTime(0)
     if not lock.tryLock(0):
-        if not any((args.startup, args.check_updates, args.uninstall_keep_data, args.purge_data)):
+        if not any((args.startup, args.check_updates, args.reconcile_network, args.uninstall_keep_data, args.purge_data)):
             from PySide6.QtWidgets import QApplication, QMessageBox
             application = QApplication.instance() or QApplication([])
             QMessageBox.information(None, "Weave CBT", "The manager is already running. Open its existing window and wait for any current operation to finish.")
@@ -83,6 +84,9 @@ def main() -> int:
             return 0
         if args.check_updates:
             controller.check_updates()
+            return 0
+        if args.reconcile_network:
+            controller.reconcile_network()
             return 0
         if args.uninstall_keep_data:
             controller.uninstall_keep_data()
