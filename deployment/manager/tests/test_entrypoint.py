@@ -26,6 +26,14 @@ def test_parser_recognizes_self_test() -> None:
     assert arguments.startup is False
 
 
+def test_parser_recognizes_network_reconcile() -> None:
+    arguments = manager_entry._parser().parse_args(["--reconcile-network"])
+
+    assert arguments.reconcile_network is True
+    assert arguments.startup is False
+    assert arguments.check_updates is False
+
+
 def test_development_build_uses_acceptance_disk_floor() -> None:
     controller = ManagerController()
 
