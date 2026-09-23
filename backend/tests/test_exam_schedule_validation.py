@@ -27,12 +27,12 @@ def create_payload(**overrides):
 
 
 def test_create_rejects_past_scheduled_start() -> None:
-    with pytest.raises(ValidationError, match="scheduled_start_at cannot be in the past"):
+    with pytest.raises(ValidationError, match="scheduled_start_at must be in the future"):
         ExamCreate(**create_payload(scheduled_start_at=datetime.now(UTC) - timedelta(hours=1)))
 
 
 def test_create_rejects_past_latest_normal_start() -> None:
-    with pytest.raises(ValidationError, match="latest_normal_start_at cannot be in the past"):
+    with pytest.raises(ValidationError, match="latest_normal_start_at must be in the future"):
         ExamCreate(
             **create_payload(
                 scheduled_start_at=datetime.now(UTC) + timedelta(hours=1),
@@ -44,6 +44,15 @@ def test_create_rejects_past_latest_normal_start() -> None:
 def test_create_rejects_naive_schedule_timestamp() -> None:
     with pytest.raises(ValidationError, match="scheduled_start_at must include a timezone"):
         ExamCreate(**create_payload(scheduled_start_at=datetime.now()))
+
+
+def test_create_rejects_latest_start_without_scheduled_start() -> None:
+    with pytest.raises(ValidationError, match="latest_normal_start_at requires scheduled_start_at"):
+        ExamCreate(
+            **create_payload(
+                latest_normal_start_at=datetime.now(UTC) + timedelta(hours=2),
+            )
+        )
 
 
 def test_create_allows_unscheduled_draft() -> None:
@@ -66,10 +75,19 @@ def test_create_allows_future_schedule_window() -> None:
 
 
 def test_update_rejects_past_scheduled_start() -> None:
-    with pytest.raises(ValidationError, match="scheduled_start_at cannot be in the past"):
+    with pytest.raises(ValidationError, match="scheduled_start_at must be in the future"):
         ExamUpdate(
             expected_authoring_version=2,
             scheduled_start_at=datetime.now(UTC) - timedelta(minutes=1),
+        )
+
+
+def test_update_rejects_explicit_latest_start_without_scheduled_start() -> None:
+    with pytest.raises(ValidationError, match="latest_normal_start_at requires scheduled_start_at"):
+        ExamUpdate(
+            expected_authoring_version=2,
+            scheduled_start_at=None,
+            latest_normal_start_at=datetime.now(UTC) + timedelta(hours=2),
         )
 
 
