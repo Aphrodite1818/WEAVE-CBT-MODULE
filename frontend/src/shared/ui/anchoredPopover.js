@@ -11,7 +11,8 @@ function clamp(value, min, max) {
  * left, and only overlap the trigger horizontally when neither side can fit.
  *
  * The vertical position stays visually anchored to the trigger and is clamped
- * inside the viewport. The popover itself owns scrolling through maxHeight.
+ * inside the viewport. The popover owns its own scrolling when content is
+ * taller than the available viewport height.
  */
 export function getAnchoredPopoverPosition(trigger, options = {}) {
   if (!trigger || typeof window === 'undefined') {
@@ -21,6 +22,7 @@ export function getAnchoredPopoverPosition(trigger, options = {}) {
         position: 'fixed',
         left: DEFAULT_VIEWPORT_PADDING,
         top: DEFAULT_VIEWPORT_PADDING,
+        zIndex: 1250,
       },
     }
   }
@@ -70,8 +72,12 @@ export function getAnchoredPopoverPosition(trigger, options = {}) {
     placement,
     style: {
       position: 'fixed',
+      boxSizing: 'border-box',
       width,
       maxHeight,
+      overflowY: 'auto',
+      overscrollBehavior: 'contain',
+      zIndex: 1250,
       left,
       top,
       right: 'auto',
