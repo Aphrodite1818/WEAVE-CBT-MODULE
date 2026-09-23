@@ -485,7 +485,6 @@ export function QuestionPreview({ gateway, questionId, selectedBank, questionTyp
     <aside className="question-preview-card question-preview-card--page" aria-label="Student question preview">
       <div className="question-preview-card__heading"><div><span>Student view</span><StatusBadge tone={previewTone}>{previewLabel}</StatusBadge></div><small>{selectedBank?.name || 'Question bank'}</small></div>
       <div className="premium-exam-content question-builder-student-preview">
-        <div className="premium-question-header"><h2>Question 1 of 1</h2></div>
         {instruction.trim() && <p className="question-preview-instruction"><FormattedText text={instruction} /></p>}
         <div className="premium-question-prompt"><FormattedText text={prompt} placeholder="Your question will appear here as you type." /></div>
         {(questionImageFile || (questionImageAssetId && !removeQuestionImage)) && (
