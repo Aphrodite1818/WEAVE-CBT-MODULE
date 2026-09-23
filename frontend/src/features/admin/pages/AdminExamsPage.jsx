@@ -3,6 +3,7 @@ import { ExamLifecycleFilter } from '../../../shared/exams/ExamLifecycleFilter'
 import { examStatuses } from '../../../shared/exams/examPermissions'
 import { useAuthoringResultReviews } from '../../../shared/exams/useAuthoringResultReviews'
 import { currentExamRevisions } from '../../../shared/exams/examLineage'
+import { getAnchoredPopoverPosition } from '../../../shared/ui/anchoredPopover'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
@@ -21,8 +22,6 @@ import { Icon } from '../../../shared/icons/Icon'
 import { Notice, SelectControl } from '../../../shared/ui'
 
 const PAGE_SIZE = 12
-const POPOVER_WIDTH = 330
-const VIEWPORT_GAP = 12
 const OPERATIONS_STATUSES = new Set(['sealed', 'active', 'suspended', 'closing', 'cancelling', 'closed', 'cancelled'])
 
 export function AdminExamsPage({ adminData, gateway, onNavigate }) {
@@ -121,7 +120,7 @@ export function AdminExamsPage({ adminData, gateway, onNavigate }) {
       closeMenu()
       return
     }
-    setMenuPosition(getPopoverPosition(trigger))
+    setMenuPosition(getAnchoredPopoverPosition(trigger, { width: 330, maxHeight: 440 }).style)
     setMenuExamId(exam.id)
   }
 
@@ -214,7 +213,7 @@ export function AdminExamsPage({ adminData, gateway, onNavigate }) {
             onOpen={() => onNavigate('exam-history', { selectedExamId: exam.id })}
             onEdit={exam.status === 'draft' ? () => onNavigate('create-exam', { selectedExamId: exam.id }) : undefined}
           >
-            <div className="teacher-exam-lifecycle" ref={menuExamId === exam.id ? menuRef : undefined}>
+            <div className="teacher-exam-lifecycle">
               <button
                 className="teacher-exam-lifecycle__trigger"
                 type="button"
@@ -372,19 +371,6 @@ function authoringCopy(action) {
 
 function preparationLabel(status) {
   return titleCase(status)
-}
-
-function getPopoverPosition(trigger) {
-  const rect = trigger.getBoundingClientRect()
-  const width = Math.min(POPOVER_WIDTH, Math.max(260, window.innerWidth - VIEWPORT_GAP * 2))
-  const left = Math.max(VIEWPORT_GAP, Math.min(rect.right - width, window.innerWidth - width - VIEWPORT_GAP))
-  const below = Math.max(0, window.innerHeight - rect.bottom - VIEWPORT_GAP)
-  const above = Math.max(0, rect.top - VIEWPORT_GAP)
-  const placeAbove = below < 300 && above > below
-  const maxHeight = Math.max(220, Math.min(520, placeAbove ? above : below))
-  return placeAbove
-    ? { position: 'fixed', width, left, maxHeight, bottom: window.innerHeight - rect.top + 8, top: 'auto', right: 'auto' }
-    : { position: 'fixed', width, left, maxHeight, top: rect.bottom + 8, bottom: 'auto', right: 'auto' }
 }
 
 function titleCase(value) {
