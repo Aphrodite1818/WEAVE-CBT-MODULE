@@ -981,28 +981,20 @@ class ExamService(
         if exam is None:
             raise ExamNotFound("Examination does not exist")
         latest = await cls._latest_revision_in_lineage(db, exam)
-        if latest.status != ExamStatus.CLOSED:
-            revision = await super().create_revision(db, actor=actor, exam_id=exam_id)
-            revision.folder_color = latest.folder_color
-            revision.lead_teacher_id = getattr(latest, "lead_teacher_id", None)
-            revision.lead_assigned_by_actor_id = actor.id
-            revision.lead_assigned_at = datetime.now(UTC)
-            revision.scheduled_start_at = None
-            revision.latest_normal_start_at = None
-            try:
-                revision = await ExamRepository.save_exam(db, revision)
-                await db.commit()
-            except IntegrityError as exc:
-                await db.rollback()
-                raise ValueError(
-                    "The examination revision lead could not be preserved"
-                ) from exc
-            return revision
 
-        if not await ExamExecutionService.results_are_voided(db, exam_id=latest.id):
+        if latest.status == ExamStatus.CLOSED:
+            if not await ExamExecutionService.results_are_voided(db, exam_id=latest.id):
+                raise ExamStateError(
+                    "A CLOSED examination can only be revised after its results are voided"
+                )
+        elif latest.status not in {ExamStatus.SEALED, ExamStatus.CANCELLED}:
             raise ExamStateError(
-                "A CLOSED examination can only be revised after its results are voided"
+                "A new revision can only be created from the latest SEALED "
+                "or CANCELLED examination revision, or a CLOSED revision with VOIDED results"
             )
+
+        # Every replacement is a new sitting. Preserve the paper configuration
+        # and lineage, but require its timetable to be chosen deliberately.
         return await cls._create_voided_closed_revision(
             db,
             actor=actor,
