@@ -34,6 +34,27 @@ class TimetableIntervalTests(unittest.TestCase):
             )
         )
 
+    def test_planned_end_uses_latest_normal_start_when_present(self):
+        latest = self.start + timedelta(minutes=20)
+        self.assertEqual(
+            ExamTimetableService.planned_end_at(
+                scheduled_start_at=self.start,
+                latest_normal_start_at=latest,
+                duration_minutes=60,
+            ),
+            self.start + timedelta(hours=1, minutes=20),
+        )
+
+    def test_planned_end_falls_back_to_scheduled_start(self):
+        self.assertEqual(
+            ExamTimetableService.planned_end_at(
+                scheduled_start_at=self.start,
+                latest_normal_start_at=None,
+                duration_minutes=60,
+            ),
+            self.start + timedelta(hours=1),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
