@@ -38,6 +38,8 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
     ? findSubjectScope(teacherData.subjects, editingExam?.curriculumSubjectId)
     : null
   const initialSchemeId = editingExam?.assessmentSchemeId || teacherData.assessmentSchemes[0]?.id || ''
+  const initialScheduledStartAt = toDateTimeLocal(editingExam?.scheduledStartAt)
+  const initialLatestNormalStartAt = toDateTimeLocal(editingExam?.latestNormalStartAt)
 
   const [leadTeacherId, setLeadTeacherId] = useState(editingExam?.leadTeacherId || '')
   const [leadTeacherName, setLeadTeacherName] = useState(
@@ -60,8 +62,8 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
   const [instructions, setInstructions] = useState(editingExam?.instructions || '')
   const [shuffleQuestions, setShuffleQuestions] = useState(editingExam?.shuffleQuestions !== false)
   const [shuffleOptions, setShuffleOptions] = useState(editingExam?.shuffleOptions !== false)
-  const [scheduledStartAt, setScheduledStartAt] = useState(toDateTimeLocal(editingExam?.scheduledStartAt))
-  const [latestNormalStartAt, setLatestNormalStartAt] = useState(toDateTimeLocal(editingExam?.latestNormalStartAt))
+  const [scheduledStartAt, setScheduledStartAt] = useState(initialScheduledStartAt)
+  const [latestNormalStartAt, setLatestNormalStartAt] = useState(initialLatestNormalStartAt)
   const [manualSelection, setManualSelection] = useState({ bankId: '', ids: [] })
   const manualQuestionIds = manualSelection.bankId === bankId ? manualSelection.ids : []
   const [questionSaving, setQuestionSaving] = useState(false)
@@ -256,8 +258,12 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
           duration_minutes: Number(durationMinutes),
           shuffle_questions: shuffleQuestions,
           shuffle_options: shuffleOptions,
-          scheduled_start_at: toIsoOrNull(scheduledStartAt),
-          latest_normal_start_at: toIsoOrNull(latestNormalStartAt),
+          ...(scheduledStartAt !== initialScheduledStartAt
+            ? { scheduled_start_at: toIsoOrNull(scheduledStartAt) }
+            : {}),
+          ...(latestNormalStartAt !== initialLatestNormalStartAt
+            ? { latest_normal_start_at: toIsoOrNull(latestNormalStartAt) }
+            : {}),
         })
 
         if (questionConfigurationChanged) {
