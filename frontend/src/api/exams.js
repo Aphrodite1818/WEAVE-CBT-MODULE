@@ -44,6 +44,14 @@ export function configureExamQuestions(examId, payload) {
   })
 }
 
+export function saveExamQuestionAuthoring(examId, payload) {
+  return weaveRequest(`/exams/${examId}/questions/authoring`, {
+    method: 'PUT',
+    body: payload,
+    successMessage: 'Question setup saved.',
+  })
+}
+
 export function submitExam(examId, expectedAuthoringVersion = 1) {
   return weaveRequest(`/exams/${examId}/submit`, {
     method: 'POST',
