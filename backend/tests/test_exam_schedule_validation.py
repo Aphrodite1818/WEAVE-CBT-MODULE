@@ -1,0 +1,83 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
+
+import pytest
+from pydantic import ValidationError
+
+from app.domains.exams.schemas import ExamCreate, ExamUpdate
+
+
+def create_payload(**overrides):
+    payload = {
+        "session_id": uuid4(),
+        "term_id": uuid4(),
+        "curriculum_subject_id": uuid4(),
+        "assessment_scheme_id": uuid4(),
+        "assessment_component_id": uuid4(),
+        "question_bank_id": uuid4(),
+        "question_selection_mode": "random",
+        "question_count": 10,
+        "title": "English CA1",
+        "duration_minutes": 45,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_create_rejects_past_scheduled_start() -> None:
+    with pytest.raises(ValidationError, match="scheduled_start_at cannot be in the past"):
+        ExamCreate(**create_payload(scheduled_start_at=datetime.now(UTC) - timedelta(hours=1)))
+
+
+def test_create_rejects_past_latest_normal_start() -> None:
+    with pytest.raises(ValidationError, match="latest_normal_start_at cannot be in the past"):
+        ExamCreate(
+            **create_payload(
+                scheduled_start_at=datetime.now(UTC) + timedelta(hours=1),
+                latest_normal_start_at=datetime.now(UTC) - timedelta(minutes=5),
+            )
+        )
+
+
+def test_create_rejects_naive_schedule_timestamp() -> None:
+    with pytest.raises(ValidationError, match="scheduled_start_at must include a timezone"):
+        ExamCreate(**create_payload(scheduled_start_at=datetime.now()))
+
+
+def test_create_allows_unscheduled_draft() -> None:
+    exam = ExamCreate(**create_payload())
+    assert exam.scheduled_start_at is None
+    assert exam.latest_normal_start_at is None
+
+
+def test_create_allows_future_schedule_window() -> None:
+    scheduled = datetime.now(UTC) + timedelta(hours=2)
+    latest = scheduled + timedelta(minutes=20)
+    exam = ExamCreate(
+        **create_payload(
+            scheduled_start_at=scheduled,
+            latest_normal_start_at=latest,
+        )
+    )
+    assert exam.scheduled_start_at == scheduled
+    assert exam.latest_normal_start_at == latest
+
+
+def test_update_rejects_past_scheduled_start() -> None:
+    with pytest.raises(ValidationError, match="scheduled_start_at cannot be in the past"):
+        ExamUpdate(
+            expected_authoring_version=2,
+            scheduled_start_at=datetime.now(UTC) - timedelta(minutes=1),
+        )
+
+
+def test_update_allows_clearing_schedule() -> None:
+    update = ExamUpdate(
+        expected_authoring_version=2,
+        scheduled_start_at=None,
+        latest_normal_start_at=None,
+    )
+    assert update.scheduled_start_at is None
+    assert update.latest_normal_start_at is None
