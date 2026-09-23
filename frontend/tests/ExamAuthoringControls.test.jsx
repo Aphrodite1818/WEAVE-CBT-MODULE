@@ -1,5 +1,5 @@
 ﻿import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ExamDateTimePicker } from '../src/shared/exams/ExamDateTimePicker'
 import { buildDestructiveQuestionConfigurationWarning } from '../src/shared/exams/ExamAuthoringPage'
 import { ManualQuestionPicker } from '../src/shared/exams/ManualQuestionPicker'
@@ -10,6 +10,15 @@ beforeAll(() => {
 })
 
 describe('Exam date and time picker', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-23T06:00:00'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('keeps changes pending until apply and preserves the local date/time value', () => {
     const onChange = vi.fn()
     render(<ExamDateTimePicker label="Scheduled start" value="2026-09-23T10:15" onChange={onChange} />)
@@ -33,6 +42,12 @@ describe('Exam date and time picker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Latest normal start' }))
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
     expect(onChange).toHaveBeenCalledWith('')
+  })
+
+  it('clearly flags an existing authoring time after it has elapsed', () => {
+    render(<ExamDateTimePicker label="Scheduled start" value="2026-09-23T05:30" onChange={vi.fn()} />)
+    expect(screen.getByRole('alert')).toHaveTextContent(/time has elapsed/i)
+    expect(screen.getByRole('button', { name: 'Scheduled start' })).toHaveClass('is-overdue')
   })
 })
 
