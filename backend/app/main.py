@@ -22,6 +22,7 @@ from app.domains.branding.router import router as branding_router
 from app.domains.candidates.makeup_router import router as makeup_router
 from app.domains.candidates.router import router as candidates_router
 from app.domains.exams.execution_router import router as exam_execution_router
+from app.domains.exams.question_authoring_router import router as exam_question_authoring_router
 from app.domains.exams.read_router import router as exam_read_router
 from app.domains.exams.router import router as exams_router
 from app.domains.exams.timetable_router import router as timetable_router
@@ -115,6 +116,7 @@ for router in (
     # read route. Starlette resolves routes in declaration order, so endpoints such
     # as /exams/lead-candidates and /exams/invigilators/available must be seen first.
     exams_router,
+    exam_question_authoring_router,
     exam_read_router,
     exam_execution_router,
     timetable_router,
