@@ -1,0 +1,434 @@
+/*
+ * Shared staff dashboard shell polish.
+ *
+ * This file intentionally loads after the feature/dashboard styles so the
+ * admin and teacher workspaces share the same navigation chrome without
+ * changing their routing or feature behaviour.
+ */
+
+.teacher-shell {
+  --dashboard-sidebar-width: 220px;
+  --dashboard-header-center-offset: 110px;
+}
+
+.teacher-shell--collapsed {
+  --dashboard-sidebar-width: 76px;
+  --dashboard-header-center-offset: 38px;
+  grid-template-columns: 76px minmax(0, 1fr);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Sidebar                                                                    */
+/* -------------------------------------------------------------------------- */
+
+.teacher-sidebar {
+  gap: 22px;
+  padding: 24px 14px 26px;
+}
+
+.teacher-sidebar__header {
+  min-height: 42px;
+}
+
+/*
+ * The server identity belongs to the top header. Keep the existing DOM/source
+ * of truth, but lift the label into the centre of the shared dashboard header.
+ */
+.teacher-shell .teacher-sidebar .school-card small {
+  position: fixed;
+  top: 14px;
+  left: calc(50vw + var(--dashboard-header-center-offset));
+  z-index: 72;
+  min-width: 0;
+  max-width: min(360px, 34vw);
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  overflow: hidden;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 999px;
+  background: rgb(var(--color-surface));
+  color: rgb(var(--color-text));
+  padding: 0 13px;
+  font-size: 12px;
+  font-weight: 720;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 7px 20px rgb(var(--color-primary) / .07);
+  transform: translateX(-50%);
+}
+
+.teacher-shell .teacher-sidebar .school-card small::before {
+  content: 'CBT SERVER';
+  flex: 0 0 auto;
+  border-right: 1px solid rgb(var(--color-border));
+  padding-right: 9px;
+  color: rgb(var(--color-text-muted));
+  font-size: 8px;
+  font-weight: 820;
+  letter-spacing: .09em;
+}
+
+.teacher-sidebar .school-card strong {
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.teacher-sidebar nav {
+  gap: 7px;
+}
+
+.teacher-sidebar nav button {
+  min-height: 48px;
+  gap: 11px;
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 13px;
+  transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+}
+
+.teacher-sidebar nav button.active,
+.teacher-sidebar nav button:hover {
+  background: rgb(var(--color-on-primary) / .11);
+  box-shadow: inset 0 0 0 1px rgb(var(--color-on-primary) / .055);
+}
+
+/* Move the collapse control into the header edge rather than stacking it with
+ * the school identity inside the sidebar. The button remains the same control
+ * and preserves its existing behaviour/accessibility contract. */
+.teacher-shell .dashboard-sidebar-toggle {
+  position: fixed;
+  top: 15px;
+  left: calc(var(--dashboard-sidebar-width) + 18px);
+  z-index: 74;
+  width: 38px;
+  height: 38px;
+  flex-basis: 38px;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 10px;
+  background: rgb(var(--color-surface));
+  color: rgb(var(--color-primary));
+  box-shadow: 0 7px 20px rgb(var(--color-primary) / .08);
+  transition: left .22s ease, background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.teacher-shell .dashboard-sidebar-toggle:hover {
+  border-color: rgb(var(--color-primary) / .28);
+  background: rgb(var(--color-primary-soft));
+  box-shadow: 0 9px 22px rgb(var(--color-primary) / .11);
+}
+
+.teacher-shell .dashboard-sidebar-toggle:active {
+  transform: translateY(1px);
+}
+
+.teacher-shell .dashboard-sidebar-toggle:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px rgb(var(--color-primary) / .14), 0 7px 20px rgb(var(--color-primary) / .08);
+}
+
+/* Deliberate compact rail: no miniature school card, no stacked toggle. */
+.teacher-shell--collapsed .teacher-sidebar {
+  padding-inline: 13px;
+  gap: 18px;
+}
+
+.teacher-shell--collapsed .teacher-sidebar__header {
+  min-height: 0;
+  height: 0;
+  margin: 0;
+}
+
+.teacher-shell--collapsed .teacher-sidebar .school-card {
+  min-height: 0;
+  height: 0;
+  overflow: visible;
+}
+
+.teacher-shell--collapsed .teacher-sidebar .school-card > span,
+.teacher-shell--collapsed .teacher-sidebar .school-card strong {
+  display: none;
+}
+
+/* The parent cannot be display:none because its server label is visually
+ * promoted into the fixed header above. */
+.teacher-shell--collapsed .teacher-sidebar .school-card div {
+  display: contents;
+}
+
+.teacher-shell--collapsed .teacher-sidebar nav {
+  gap: 8px;
+}
+
+.teacher-shell--collapsed .teacher-sidebar nav button {
+  width: 48px;
+  min-height: 48px;
+  justify-content: center;
+  align-self: center;
+  gap: 0;
+  padding: 0;
+  border-radius: 11px;
+}
+
+.teacher-shell--collapsed .teacher-sidebar nav button.active {
+  background: rgb(var(--color-on-primary) / .14);
+  box-shadow: inset 0 0 0 1px rgb(var(--color-on-primary) / .08);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Header                                                                     */
+/* -------------------------------------------------------------------------- */
+
+.teacher-topbar {
+  min-height: 66px;
+  padding-left: 76px;
+  padding-right: clamp(24px, 3vw, 36px);
+}
+
+.teacher-topbar .dashboard-school-identity {
+  min-width: 0;
+}
+
+.teacher-topbar .dashboard-school-identity strong {
+  max-width: min(280px, 26vw);
+}
+
+/* Keep the account anchored to the far right while the server badge occupies
+ * the visual centre of the header. */
+.teacher-topbar__actions {
+  margin-left: auto;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Administrator hierarchy                                                    */
+/* -------------------------------------------------------------------------- */
+
+.admin-sidebar-nav {
+  gap: 6px;
+}
+
+.admin-nav-group {
+  gap: 2px;
+}
+
+.admin-sidebar-nav .admin-nav-link,
+.admin-sidebar-nav .admin-nav-group__trigger {
+  min-height: 48px;
+  gap: 11px;
+  border-radius: 10px;
+  padding: 0 12px;
+}
+
+.admin-sidebar .admin-sidebar-nav .admin-nav-group__trigger.active {
+  background: rgb(var(--color-on-primary) / .055);
+}
+
+.admin-nav-group__children {
+  gap: 2px;
+  margin: 1px 0 5px 12px;
+  border-left: 0;
+  padding: 2px 0 3px 8px;
+}
+
+.admin-sidebar-nav .admin-nav-child {
+  min-height: 38px;
+  gap: 9px;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: rgb(var(--color-on-primary) / .68);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+/* Remove the line-and-dot treatment that made nested navigation visually busy.
+ * A short active indicator is enough to preserve hierarchy. */
+.admin-nav-child__rail {
+  display: none;
+}
+
+.admin-sidebar .admin-sidebar-nav .admin-nav-child.active {
+  background: rgb(var(--color-on-primary) / .10);
+  color: rgb(var(--color-on-primary));
+}
+
+.admin-sidebar .admin-sidebar-nav .admin-nav-child.active::before {
+  content: '';
+  position: absolute;
+  left: 1px;
+  width: 3px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgb(var(--color-on-primary) / .72);
+}
+
+.admin-sidebar-nav .admin-nav-link[aria-current='page']::after {
+  width: 4px;
+  height: 4px;
+  flex-basis: 4px;
+  opacity: .75;
+}
+
+.admin-shell--collapsed .admin-nav-group,
+.admin-shell--collapsed .admin-sidebar-nav .admin-nav-link,
+.admin-shell--collapsed .admin-sidebar-nav .admin-nav-group__trigger {
+  width: 48px;
+  justify-self: center;
+}
+
+.admin-shell--collapsed .admin-nav-group__trigger > .icon:last-child,
+.admin-shell--collapsed .admin-nav-group__children {
+  display: none !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Responsive                                                                 */
+/* -------------------------------------------------------------------------- */
+
+@media (max-width: 1120px) {
+  .teacher-shell,
+  .teacher-shell--collapsed {
+    --dashboard-sidebar-width: 76px;
+    --dashboard-header-center-offset: 38px;
+    grid-template-columns: 76px minmax(0, 1fr);
+  }
+
+  .teacher-sidebar {
+    padding-inline: 13px;
+    gap: 18px;
+  }
+
+  .teacher-sidebar__header {
+    min-height: 0;
+    height: 0;
+  }
+
+  .teacher-sidebar .school-card {
+    min-height: 0;
+    height: 0;
+    overflow: visible;
+  }
+
+  .teacher-sidebar .school-card > span,
+  .teacher-sidebar .school-card strong {
+    display: none;
+  }
+
+  .teacher-sidebar .school-card div {
+    display: contents;
+  }
+
+  .teacher-sidebar nav {
+    gap: 8px;
+  }
+
+  .teacher-sidebar nav button,
+  .admin-sidebar-nav .admin-nav-link,
+  .admin-sidebar-nav .admin-nav-group__trigger {
+    width: 48px;
+    min-height: 48px;
+    justify-content: center;
+    justify-self: center;
+    padding: 0;
+  }
+
+  .teacher-topbar {
+    padding-left: 74px;
+  }
+
+  .teacher-topbar .dashboard-school-identity strong {
+    max-width: 220px;
+  }
+}
+
+@media (max-width: 840px) {
+  .teacher-shell .teacher-sidebar .school-card small {
+    max-width: 230px;
+  }
+
+  .teacher-topbar .dashboard-school-identity strong {
+    max-width: 190px;
+  }
+
+  .dashboard-account__trigger {
+    max-width: 220px;
+  }
+}
+
+@media (max-width: 760px) {
+  /* The product already changes to a horizontal mobile navigation at this
+   * breakpoint. Return the promoted controls to normal flow there rather than
+   * forcing desktop chrome onto the mobile shell. */
+  .teacher-shell,
+  .teacher-shell--collapsed {
+    --dashboard-sidebar-width: 0px;
+    --dashboard-header-center-offset: 0px;
+  }
+
+  .teacher-shell .dashboard-sidebar-toggle {
+    position: static;
+    width: 38px;
+    height: 38px;
+    flex-basis: 38px;
+    border-color: rgb(var(--color-on-primary) / .24);
+    background: rgb(var(--color-on-primary) / .14);
+    color: rgb(var(--color-on-primary));
+    box-shadow: none;
+  }
+
+  .teacher-sidebar__header,
+  .teacher-shell--collapsed .teacher-sidebar__header {
+    min-height: 42px;
+    height: auto;
+  }
+
+  .teacher-sidebar .school-card,
+  .teacher-shell--collapsed .teacher-sidebar .school-card {
+    height: auto;
+    min-height: 0;
+  }
+
+  .teacher-sidebar .school-card > span,
+  .teacher-shell--collapsed .teacher-sidebar .school-card > span {
+    display: grid;
+  }
+
+  .teacher-sidebar .school-card div,
+  .teacher-shell--collapsed .teacher-sidebar .school-card div {
+    display: grid;
+  }
+
+  .teacher-sidebar .school-card strong,
+  .teacher-shell--collapsed .teacher-sidebar .school-card strong {
+    display: block;
+  }
+
+  .teacher-shell .teacher-sidebar .school-card small {
+    position: static;
+    width: auto;
+    max-width: 180px;
+    height: auto;
+    display: block;
+    overflow: hidden;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: rgb(var(--color-on-primary) / .72);
+    padding: 0;
+    font-size: 10px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    box-shadow: none;
+    transform: none;
+  }
+
+  .teacher-shell .teacher-sidebar .school-card small::before {
+    content: none;
+  }
+
+  .teacher-topbar {
+    padding: 14px 16px;
+  }
+}
