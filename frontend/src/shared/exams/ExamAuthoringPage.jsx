@@ -34,7 +34,10 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
     actor?.role === 'teacher' &&
     teacherData.assignments.some((assignment) => assignment.curriculumSubjectId === editingExam.curriculumSubjectId),
   )
-  const initialSubject = findSubjectScope(teacherData.subjects, editingExam?.curriculumSubjectId) || teacherData.subjects[0] || null
+  const initialSubject = editing
+    ? findSubjectScope(teacherData.subjects, editingExam?.curriculumSubjectId)
+    : null
+  const initialSchemeId = editingExam?.assessmentSchemeId || teacherData.assessmentSchemes[0]?.id || ''
 
   const [leadTeacherId, setLeadTeacherId] = useState(editingExam?.leadTeacherId || '')
   const [leadTeacherName, setLeadTeacherName] = useState(
@@ -46,11 +49,11 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
   const [leadSaving, setLeadSaving] = useState(false)
   const [leadMessage, setLeadMessage] = useState('')
   const [title, setTitle] = useState(editingExam?.title || '')
-  const [levelId, setLevelId] = useState(initialSubject?.academicLevelId || '')
-  const [subjectId, setSubjectId] = useState(initialSubject?.id || '')
-  const [schemeId, setSchemeId] = useState(editingExam?.assessmentSchemeId || teacherData.assessmentSchemes[0]?.id || '')
-  const [componentId, setComponentId] = useState(editingExam?.assessmentComponentId || teacherData.assessmentComponents.find((item) => item.schemeId === schemeId)?.id || '')
-  const [bankId, setBankId] = useState(editingExam?.questionBankId || teacherData.banks.find((item) => item.curriculumSubjectId === initialSubject?.id)?.id || '')
+  const [levelId, setLevelId] = useState(editing ? initialSubject?.academicLevelId || '' : '')
+  const [subjectId, setSubjectId] = useState(editing ? initialSubject?.id || '' : '')
+  const [schemeId, setSchemeId] = useState(initialSchemeId)
+  const [componentId, setComponentId] = useState(editing ? editingExam?.assessmentComponentId || '' : '')
+  const [bankId, setBankId] = useState(editing ? editingExam?.questionBankId || '' : '')
   const [selectionMode, setSelectionMode] = useState(editingExam?.selectionMode || 'random')
   const [questionCount, setQuestionCount] = useState(editingExam?.questionCount || 20)
   const [durationMinutes, setDurationMinutes] = useState(editingExam?.durationMinutes || 45)
@@ -66,14 +69,15 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
   const [error, setError] = useState('')
   const [duplicateScope, setDuplicateScope] = useState(null)
   const currentScope = { termId: teacherData.term?.id, curriculumSubjectId: subjectId, assessmentComponentId: componentId }
-  const existingScopeExam = !editing ? teacherData.exams.find((exam) =>
+  const hasChosenAssessmentScope = Boolean(!editing && currentScope.termId && subjectId && componentId)
+  const existingScopeExam = hasChosenAssessmentScope ? teacherData.exams.find((exam) =>
     exam.termId === currentScope.termId && exam.curriculumSubjectId === subjectId && exam.assessmentComponentId === componentId,
   ) : null
   const existingExam = existingScopeExam ? examRevisionHistory(teacherData.exams, existingScopeExam)[0] : null
-  const recoveryExamId = existingExam?.id || (
+  const recoveryExamId = hasChosenAssessmentScope ? existingExam?.id || (
     duplicateScope?.termId === currentScope.termId && duplicateScope?.curriculumSubjectId === subjectId && duplicateScope?.assessmentComponentId === componentId
       ? duplicateScope.id : null
-  )
+  ) : null
   const openExam = (id) => dispatch({ type: 'staff', patch: { section: 'exam-history', selectedExamId: id, examAuthoringNotice: '' } })
 
   const levels = useMemo(() => buildAcademicLevels(teacherData.subjects), [teacherData.subjects])
@@ -125,22 +129,37 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
     setLeadTeacherName('Administrator')
   }
 
+  const resetDuplicateRecovery = () => {
+    setDuplicateScope(null)
+    setError('')
+  }
+
   const changeLevel = (nextLevelId) => {
-    const firstSubject = listSubjectsForLevel(teacherData.subjects, nextLevelId)[0] || null
     setLevelId(nextLevelId)
-    setSubjectId(firstSubject?.id || '')
-    setBankId(firstSubject ? listBanksForSubject(teacherData.banks, firstSubject.id)[0]?.id || '' : '')
+    setSubjectId('')
+    setBankId('')
     resetLead()
     setManualSelection({ bankId: '', ids: [] })
-    setError('')
+    resetDuplicateRecovery()
   }
 
   const changeSubject = (nextSubjectId) => {
     setSubjectId(nextSubjectId)
-    setBankId(listBanksForSubject(teacherData.banks, nextSubjectId)[0]?.id || '')
+    setBankId('')
     resetLead()
     setManualSelection({ bankId: '', ids: [] })
-    setError('')
+    resetDuplicateRecovery()
+  }
+
+  const changeScheme = (nextSchemeId) => {
+    setSchemeId(nextSchemeId)
+    setComponentId('')
+    resetDuplicateRecovery()
+  }
+
+  const changeComponent = (nextComponentId) => {
+    setComponentId(nextComponentId)
+    resetDuplicateRecovery()
   }
 
   const leaveForm = () => dispatch({
@@ -212,11 +231,16 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
             setError(`Question count cannot be lower than the ${selections.length} questions already selected for this paper.`)
             return
           }
-          const destructiveQuestionChange = selectionMode !== 'manual' || bankId !== editingExam.questionBankId
-          if (destructiveQuestionChange && selections.length) {
-            const confirmed = typeof window !== 'undefined' && window.confirm(
-              `This change will remove ${selections.length} manually selected question${selections.length === 1 ? '' : 's'} from this draft. Continue?`,
-            )
+
+          const changingToRandom = selectionMode === 'random'
+          const changingBank = bankId !== editingExam.questionBankId
+          if ((changingToRandom || changingBank) && selections.length) {
+            const warning = buildDestructiveQuestionConfigurationWarning({
+              selections,
+              changingToRandom,
+              changingBank,
+            })
+            const confirmed = typeof window !== 'undefined' && window.confirm(warning)
             if (!confirmed) return
             clearExistingManualSelections = true
           }
@@ -315,14 +339,21 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
     }
   }
 
-  const canSave = Boolean(
+  const hasAuthoringContext = Boolean(
     teacherData.session?.id &&
-      teacherData.term?.id &&
+    teacherData.term?.id &&
+    levels.length &&
+    teacherData.assessmentSchemes.length,
+  )
+  const canSave = Boolean(
+    hasAuthoringContext &&
       levelId &&
       selectedSubject?.academicLevelId === levelId &&
-      teacherData.assessmentSchemes.length &&
-      selectedBank?.curriculumSubjectId === subjectId &&
-      components.length,
+      schemeId &&
+      componentId &&
+      components.some((component) => component.id === componentId) &&
+      bankId &&
+      selectedBank?.curriculumSubjectId === subjectId,
   )
 
   if (selectedExamId && !editingExam && teacherData.loading) {
@@ -403,8 +434,8 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
       {editing && <button type="button" className="teacher-secondary-action" disabled={saving || leadSaving || questionSaving} onClick={() => openExam(editingExam.id)}>View revision history</button>}
       {teacherData.error && <Notice tone="danger">{teacherData.error}</Notice>}
       {teacherData.warning && <Notice tone="warning">{teacherData.warning}</Notice>}
-      {!canSave && !teacherData.loading && !readOnly && (
-        <Notice tone="warning">A current session, term, academic level, subject, assessment component and matching question bank are required to create an exam.</Notice>
+      {!hasAuthoringContext && !teacherData.loading && !readOnly && (
+        <Notice tone="warning">A current session, term, academic level and assessment scheme are required to author an exam.</Notice>
       )}
       {readOnly && <Notice>{manualContributor
         ? 'This draft is coordinated by its lead author. You can add questions to this manual paper and remove questions you contributed, but paper configuration remains read-only.'
@@ -444,10 +475,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
                 label="Assessment scheme"
                 value={schemeId}
                 options={teacherData.assessmentSchemes.map((scheme) => ({ value: scheme.id, label: scheme.name }))}
-                onChange={(value) => {
-                  setSchemeId(value)
-                  setComponentId(teacherData.assessmentComponents.find((item) => item.schemeId === value)?.id || '')
-                }}
+                onChange={changeScheme}
                 disabled={readOnly}
                 placeholder="Choose scheme"
               />
@@ -457,9 +485,9 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
                 label="Assessment component"
                 value={componentId}
                 options={components.map((component) => ({ value: component.id, label: component.name, description: `${component.maximumScore} marks` }))}
-                onChange={setComponentId}
+                onChange={changeComponent}
                 disabled={readOnly || !components.length}
-                placeholder="Choose component"
+                placeholder={schemeId ? 'Choose component' : 'Choose a scheme first'}
               />
             </FieldSelect>
             <div className="exam-paper-options">
@@ -505,7 +533,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
 
           <ExamSection number="2" title="Questions & delivery" description="Choose your question source and how students take the paper." kind="questions">
             <FieldSelect label="Question bank *">
-              <SelectControl label="Question bank" value={bankId} options={subjectBanks.map((bank) => ({ value: bank.id, label: bank.name, description: `${bank.activeQuestionCount ?? bank.count ?? 0} active questions` }))} onChange={(value) => { setBankId(value); setManualSelection({ bankId: value, ids: [] }) }} disabled={!subjectBanks.length || readOnly} placeholder={subjectId ? 'Choose bank' : 'Choose a subject first'} />
+              <SelectControl label="Question bank" value={bankId} options={subjectBanks.map((bank) => ({ value: bank.id, label: bank.name, description: `${bank.activeQuestionCount ?? bank.count ?? 0} active questions` }))} onChange={(value) => { setBankId(value); setManualSelection({ bankId: value, ids: [] }); setError('') }} disabled={!subjectBanks.length || readOnly} placeholder={subjectId ? 'Choose bank' : 'Choose a subject first'} />
             </FieldSelect>
             <label className="teacher-exam-field">
               <span>Number of questions <em>*</em></span>
@@ -662,6 +690,46 @@ function SummaryRow({ label, value, helper }) {
       <div><strong>{value}</strong>{helper && <small>{helper}</small>}</div>
     </div>
   )
+}
+
+export function buildDestructiveQuestionConfigurationWarning({ selections = [], changingToRandom = false, changingBank = false }) {
+  const questionCount = selections.length
+  const contributorCount = new Set(
+    selections
+      .map((selection) => selection.added_by_actor_id)
+      .filter(Boolean)
+      .map(String),
+  ).size
+  const questionText = `${questionCount} manually selected question${questionCount === 1 ? '' : 's'}`
+  const contributorText = contributorCount
+    ? ` from ${contributorCount} contributor${contributorCount === 1 ? '' : 's'}`
+    : ''
+
+  if (changingToRandom) {
+    return [
+      'Switch to Random Selection?',
+      '',
+      `${questionText}${contributorText} will be removed from this draft.`,
+      '',
+      'The questions themselves will remain in the question bank, but their selection for this examination cannot be restored automatically.',
+      '',
+      'Continue?',
+    ].join('\n')
+  }
+
+  if (changingBank) {
+    return [
+      'Change Question Bank?',
+      '',
+      `${questionText}${contributorText} will be removed from this draft because they belong to the current question bank.`,
+      '',
+      'The questions themselves will remain in the question bank, but their selection for this examination cannot be restored automatically.',
+      '',
+      'Continue?',
+    ].join('\n')
+  }
+
+  return ''
 }
 
 function formatDateTime(value) {
