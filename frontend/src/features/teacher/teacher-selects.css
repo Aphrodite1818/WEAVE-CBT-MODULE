@@ -131,3 +131,16 @@ body.teacher-dashboard-active::-webkit-scrollbar { width: 0; height: 0; display:
 .teacher-question-lifecycle__card > button.teacher-question-lifecycle__delete:hover:not(:disabled) { border-color: rgb(220 38 38 / .3); background: rgb(254 226 226); }
 .teacher-question-lifecycle__card > button.teacher-question-lifecycle__delete strong { color: rgb(185 28 28); }
 .teacher-question-lifecycle__card > button.teacher-question-lifecycle__delete small { color: rgb(153 27 27 / .82); }
+
+.question-builder-page .question-instruction-trigger {
+  height: 49px;
+  min-height: 49px;
+  padding: 0 14px;
+  gap: 8px;
+}
+
+.question-builder-page .question-instruction-trigger__icon {
+  width: 30px;
+  height: 30px;
+  flex-basis: 30px;
+}
