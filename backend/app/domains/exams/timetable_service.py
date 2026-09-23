@@ -33,6 +33,18 @@ class ExamTimetableService:
         return a_start < b_end and b_start < a_end
 
     @staticmethod
+    def planned_end_at(
+        *,
+        scheduled_start_at: datetime,
+        latest_normal_start_at: datetime | None,
+        duration_minutes: int,
+    ) -> datetime:
+        """Return the latest normal finish implied by the authoring schedule."""
+
+        candidate_start = latest_normal_start_at or scheduled_start_at
+        return candidate_start + timedelta(minutes=duration_minutes)
+
+    @staticmethod
     async def level_id(db: AsyncSession, curriculum_subject_id: UUID) -> UUID:
         value = await db.scalar(
             select(Curriculum.academic_level_id)
@@ -96,6 +108,7 @@ class ExamTimetableService:
         term_id: UUID,
         curriculum_subject_id: UUID,
         scheduled_start_at: datetime | None,
+        latest_normal_start_at: datetime | None = None,
         duration_minutes: int,
         exclude_exam_id: UUID | None = None,
     ) -> None:
@@ -105,7 +118,11 @@ class ExamTimetableService:
         await cls.acquire_level_lock(
             db, session_id=session_id, term_id=term_id, level_id=level_id
         )
-        proposed_end = scheduled_start_at + timedelta(minutes=duration_minutes)
+        proposed_end = cls.planned_end_at(
+            scheduled_start_at=scheduled_start_at,
+            latest_normal_start_at=latest_normal_start_at,
+            duration_minutes=duration_minutes,
+        )
         rows = await cls.list_leaf_exams(
             db,
             session_id=session_id,
@@ -125,7 +142,11 @@ class ExamTimetableService:
         for row in rows:
             if row.scheduled_start_at is None:
                 continue
-            row_end = row.scheduled_start_at + timedelta(minutes=row.duration_minutes)
+            row_end = cls.planned_end_at(
+                scheduled_start_at=row.scheduled_start_at,
+                latest_normal_start_at=row.latest_normal_start_at,
+                duration_minutes=row.duration_minutes,
+            )
             if cls.intervals_overlap(
                 scheduled_start_at, proposed_end, row.scheduled_start_at, row_end
             ):
