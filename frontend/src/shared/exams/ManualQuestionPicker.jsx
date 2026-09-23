@@ -17,6 +17,7 @@ export function ManualQuestionPicker({
   canManageAllSelections = false,
   deferManagedSelections = false,
   ignorePersistedSelections = false,
+  managedSelectionReady = false,
 }) {
   const [resource, setResource] = useState({ loading: true, questions: [], selections: [], version: null, error: '' })
   const [query, setQuery] = useState('')
@@ -52,9 +53,11 @@ export function ManualQuestionPicker({
       persistStagedAdditions(contributionStorageKey, restored)
 
       if (managedDraftMode) {
-        const nextManagedIds = ignorePersistedSelections
-          ? []
-          : selections.map((row) => row.question_id)
+        const nextManagedIds = managedSelectionReady
+          ? selectedIds
+          : ignorePersistedSelections
+            ? []
+            : selections.map((row) => row.question_id)
         setManagedIds(nextManagedIds)
         onChange?.(nextManagedIds)
       }
@@ -64,6 +67,8 @@ export function ManualQuestionPicker({
       if (!cancelled) setResource((previous) => ({ ...previous, loading: false, error: error.userMessage || 'Could not load the question bank. Please retry.' }))
     })
     return () => { cancelled = true }
+    // selectedIds/managedSelectionReady intentionally seed a mounted picker once;
+    // parent onChange updates them and must not restart the resource load.
   }, [bankId, contributionMode, contributionStorageKey, examId, gateway, ignorePersistedSelections, managedDraftMode, retry])
 
   const persistedIds = examId ? resource.selections.map((row) => row.question_id) : []
