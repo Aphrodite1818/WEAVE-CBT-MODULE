@@ -35,8 +35,8 @@ function makeExam(overrides = {}) {
     authoringVersion: 2,
     revisionNumber: 1,
     leadTeacherId: 'teacher-a',
-    scheduledStartAt: '2026-09-23T19:00:00.000Z',
-    latestNormalStartAt: '2026-09-23T19:14:00.000Z',
+    scheduledStartAt: '2026-10-01T19:00:00.000Z',
+    latestNormalStartAt: '2026-10-01T19:14:00.000Z',
     createdAt: '2026-09-23T18:00:00.000Z',
     updatedAt: '2026-09-23T18:30:00.000Z',
     ...overrides,
@@ -74,6 +74,39 @@ function makeTeacherData(exam, assignmentTeacherId = 'teacher-b') {
     error: '',
     warning: '',
     refresh: vi.fn().mockResolvedValue(undefined),
+  }
+}
+
+function question(id, prompt) {
+  return {
+    id,
+    prompt,
+    instruction: '',
+    question_type: 'multiple_choice',
+    is_active: true,
+    author_name: 'Teacher B',
+    image_asset_id: null,
+    options: [],
+  }
+}
+
+function managedQuestionGateway({ selections = [], questions = [] } = {}) {
+  const updateExam = vi.fn().mockResolvedValue({ authoring_version: 3 })
+  const saveExamQuestionAuthoring = vi.fn().mockResolvedValue({ authoring_version: 4 })
+  return {
+    updateExam,
+    saveExamQuestionAuthoring,
+    gateway: {
+      exams: {
+        updateExam,
+        saveExamQuestionAuthoring,
+        listManualQuestions: vi.fn().mockResolvedValue(selections),
+        getExam: vi.fn().mockResolvedValue({ authoring_version: 2 }),
+      },
+      questions: {
+        listQuestionsForBank: vi.fn().mockResolvedValue(questions),
+      },
+    },
   }
 }
 
@@ -120,14 +153,13 @@ describe('shared examination collaboration guidance', () => {
 })
 
 describe('exam question configuration saves', () => {
-  it('does not resend an unchanged historical schedule when only question configuration changes', async () => {
+  it('does not resend an unchanged schedule and saves the resulting question setup atomically', async () => {
     const exam = makeExam({
       selectionMode: 'random',
       leadTeacherId: 'teacher-b',
     })
     const teacherData = makeTeacherData(exam, 'teacher-b')
-    const updateExam = vi.fn().mockResolvedValue({ authoring_version: 3 })
-    const configureExamQuestions = vi.fn().mockResolvedValue({ authoring_version: 4 })
+    const { gateway, updateExam, saveExamQuestionAuthoring } = managedQuestionGateway()
     const dispatch = vi.fn()
 
     render(
@@ -135,24 +167,92 @@ describe('exam question configuration saves', () => {
         state={{ ...state, staff: { selectedExamId: 'exam-1' } }}
         dispatch={dispatch}
         teacherData={teacherData}
-        gateway={{
-          exams: { updateExam, configureExamQuestions },
-          questions: {},
-        }}
+        gateway={gateway}
       />,
     )
 
     fireEvent.click(screen.getByRole('radio', { name: /manual selection/i }))
-    fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+    const saveButton = screen.getByRole('button', { name: /save changes/i })
+    await waitFor(() => expect(saveButton).toBeEnabled())
+    fireEvent.click(saveButton)
 
     await waitFor(() => expect(updateExam).toHaveBeenCalledTimes(1))
     const [, payload] = updateExam.mock.calls[0]
     expect(payload).not.toHaveProperty('scheduled_start_at')
     expect(payload).not.toHaveProperty('latest_normal_start_at')
 
-    await waitFor(() => expect(configureExamQuestions).toHaveBeenCalledWith('exam-1', expect.objectContaining({
+    await waitFor(() => expect(saveExamQuestionAuthoring).toHaveBeenCalledWith('exam-1', {
+      question_bank_id: 'bank-1',
       question_selection_mode: 'manual',
+      question_count: 20,
+      manual_question_ids: [],
       expected_authoring_version: 3,
-    })))
+    }))
+  })
+
+  it('lets a manager increase the question count and stage the extra manual picks before saving', async () => {
+    const exam = makeExam({
+      selectionMode: 'manual',
+      questionCount: 3,
+      leadTeacherId: 'teacher-b',
+    })
+    const questionRows = [
+      question('question-1', 'Question one'),
+      question('question-2', 'Question two'),
+      question('question-3', 'Question three'),
+      question('question-4', 'Question four'),
+      question('question-5', 'Question five'),
+    ]
+    const selections = questionRows.slice(0, 3).map((row, index) => ({
+      question_id: row.id,
+      added_by_actor_id: 'actor-original',
+      position: index + 1,
+    }))
+    const teacherData = makeTeacherData(exam, 'teacher-b')
+    const { gateway, saveExamQuestionAuthoring } = managedQuestionGateway({
+      selections,
+      questions: questionRows,
+    })
+
+    render(
+      <ExamAuthoringPage
+        state={{ ...state, staff: { selectedExamId: 'exam-1' } }}
+        dispatch={vi.fn()}
+        teacherData={teacherData}
+        gateway={gateway}
+      />,
+    )
+
+    await screen.findByRole('button', { name: 'Remove question from exam: Question one' })
+    fireEvent.change(screen.getByRole('spinbutton', { name: /number of questions/i }), {
+      target: { value: '5' },
+    })
+
+    const fourth = screen.getByRole('checkbox', { name: 'Select question: Question four' })
+    const fifth = screen.getByRole('checkbox', { name: 'Select question: Question five' })
+    expect(fourth).toBeEnabled()
+    expect(fifth).toBeEnabled()
+
+    fireEvent.click(fourth)
+    fireEvent.click(fifth)
+
+    expect(saveExamQuestionAuthoring).not.toHaveBeenCalled()
+    expect(screen.getByText('5 / 5 selected')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => expect(saveExamQuestionAuthoring).toHaveBeenCalledWith('exam-1', {
+      question_bank_id: 'bank-1',
+      question_selection_mode: 'manual',
+      question_count: 5,
+      manual_question_ids: [
+        'question-1',
+        'question-2',
+        'question-3',
+        'question-4',
+        'question-5',
+      ],
+      expected_authoring_version: 3,
+    }))
   })
 })
