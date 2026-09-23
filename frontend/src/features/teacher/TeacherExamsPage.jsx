@@ -1,6 +1,7 @@
 import { buildAcademicLevels } from '../../shared/academics/authoringScope'
 import { ExamLifecycleFilter } from '../../shared/exams/ExamLifecycleFilter'
 import { currentExamRevisions } from '../../shared/exams/examLineage'
+import { getAnchoredPopoverPosition } from '../../shared/ui/anchoredPopover'
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ExamCard, ExamViewToggle } from '../../shared/exams/ExamCard';
 import { canManageExam, examStatuses } from '../../shared/exams/examPermissions';
@@ -17,8 +18,6 @@ import { Notice, SelectControl } from "../../shared/ui";
 
 const PAGE_SIZE = 12;
 const EXAM_TABS = examStatuses;
-const POPOVER_WIDTH = 320;
-const VIEWPORT_GAP = 12;
 
 export function TeacherExamsPage({ state, dispatch, teacherData, gateway }) {
   const [view, setView] = useState("grid");
@@ -122,7 +121,7 @@ export function TeacherExamsPage({ state, dispatch, teacherData, gateway }) {
       closeMenu();
       return;
     }
-    setMenuPosition(getPopoverPosition(trigger));
+    setMenuPosition(getAnchoredPopoverPosition(trigger, { width: 320, maxHeight: 400 }).style);
     setMenuExamId(exam.id);
   };
 
@@ -273,10 +272,7 @@ export function TeacherExamsPage({ state, dispatch, teacherData, gateway }) {
           const canManageDraft = canManageExam(exam, actor, teacherData.assignments);
           return (
             <ExamCard key={exam.id} exam={exam} onOpen={() => dispatch({ type: 'staff', patch: { section: 'exam-history', selectedExamId: exam.id } })} onEdit={canManageDraft ? () => openEdit(exam) : undefined}>
-                <div
-                  className="teacher-exam-lifecycle"
-                  ref={menuExamId === exam.id ? menuRef : undefined}
-                >
+                <div className="teacher-exam-lifecycle">
                   <button
                     className="teacher-exam-lifecycle__trigger"
                     type="button"
@@ -542,45 +538,6 @@ function getLifecycleConfirmation(action) {
   };
 }
 
-function getPopoverPosition(trigger) {
-  const rect = trigger.getBoundingClientRect();
-  const width = Math.min(
-    POPOVER_WIDTH,
-    window.innerWidth - VIEWPORT_GAP * 2,
-  );
-  const left = Math.max(
-    VIEWPORT_GAP,
-    Math.min(
-      rect.right - width,
-      window.innerWidth - width - VIEWPORT_GAP,
-    ),
-  );
-  const below = window.innerHeight - rect.bottom - VIEWPORT_GAP;
-  const above = rect.top - VIEWPORT_GAP;
-  const placeAbove = below < 250 && above > below;
-  const maxHeight = Math.max(
-    190,
-    Math.min(380, placeAbove ? above : below),
-  );
-
-  return placeAbove
-    ? {
-        width,
-        left,
-        maxHeight,
-        bottom: window.innerHeight - rect.top + 8,
-        top: "auto",
-      }
-    : {
-        width,
-        left,
-        maxHeight,
-        top: rect.bottom + 8,
-        bottom: "auto",
-      };
-}
-
 
 export const ExamsPage = TeacherExamsPage;
-
 
