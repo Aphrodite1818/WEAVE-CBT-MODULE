@@ -60,6 +60,33 @@ describe('manual examination contribution drafts', () => {
     window.localStorage.clear()
   })
 
+  it('removes an unsaved pick locally and restores its empty checkbox', async () => {
+    const gateway = makeGateway()
+    renderContributor(gateway)
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select question: What is 2 + 2?' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove question from exam: What is 2 + 2?' }))
+    expect(screen.getByRole('checkbox', { name: 'Select question: What is 2 + 2?' })).not.toBeChecked()
+    expect(gateway.exams.removeManualQuestion).not.toHaveBeenCalled()
+    expect(window.localStorage.getItem('weave-cbt:manual-contribution:exam-1:actor-b:bank-1')).toBeNull()
+  })
+
+  it('keeps another contributor selection locked and removes only the current contributor selection', async () => {
+    const gateway = makeGateway()
+    gateway.exams.listManualQuestions.mockResolvedValue([
+      { question_id: 'question-1', added_by_actor_id: 'actor-a' },
+      { question_id: 'question-2', added_by_actor_id: 'actor-b' },
+    ])
+    gateway.exams.removeManualQuestion.mockResolvedValue({ authoring_version: 8 })
+    renderContributor(gateway)
+    const locked = await screen.findByRole('checkbox', { name: 'Selected by another contributor: What is 2 + 2?' })
+    expect(locked).toBeChecked()
+    expect(locked).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Remove question from exam: What is 2 + 2?' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove question from exam: What is 3 + 3?' }))
+    await waitFor(() => expect(gateway.exams.removeManualQuestion).toHaveBeenCalledWith('exam-1', 'question-2', 7))
+    expect(await screen.findByRole('checkbox', { name: 'Select question: What is 3 + 3?' })).not.toBeChecked()
+  })
+
   it('keeps new contributor picks in local storage until Save contribution is used', async () => {
     const gateway = makeGateway()
     const onSaved = vi.fn().mockResolvedValue(undefined)
@@ -77,8 +104,8 @@ describe('manual examination contribution drafts', () => {
     firstRender.unmount()
 
     renderContributor(gateway, onSaved)
-    const restoredQuestion = await screen.findByRole('checkbox', { name: 'Select question: What is 2 + 2?' })
-    expect(restoredQuestion).toBeChecked()
+    const restoredQuestion = await screen.findByRole('button', { name: 'Remove question from exam: What is 2 + 2?' })
+    expect(restoredQuestion).toBeEnabled()
     expect(screen.getByText(/not saved yet/i)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /save contribution/i }))

@@ -297,13 +297,16 @@
 .exam-manual-picker > .exam-section-note { margin-top: 12px; }
 .exam-manual-question { padding: 12px; border: 1px solid rgb(var(--color-border)); border-radius: 8px; background: rgb(var(--color-surface)); }
 .exam-manual-question.is-selected { border-color: rgb(var(--color-primary) / .45); }
-.exam-manual-question > label { display: flex; align-items: start; gap: 10px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; cursor: pointer; }
+.exam-manual-question__heading { display: flex; align-items: start; flex-wrap: wrap; gap: 8px 16px; }
+.exam-manual-question__author { margin-left: auto; max-width: 100%; overflow-wrap: anywhere; text-align: right; font-size: 12px; line-height: 1.5; color: rgb(var(--color-text-muted)); }
+.exam-manual-question__content { flex: 1 1 240px; min-width: 0; display: flex; align-items: start; gap: 10px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.exam-manual-question__remove { display: inline-grid; place-items: center; flex: 0 0 20px; width: 20px; height: 22px; min-height: 0; margin: 0 -2px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: rgb(var(--color-text-muted)); cursor: pointer; }
+.exam-manual-question__remove:hover:not(:disabled) { color: #b91c1c; background: #fef2f2; }
+.exam-manual-question__remove:focus-visible { outline: 2px solid rgb(var(--color-primary)); outline-offset: 2px; }
+.exam-manual-question__remove:disabled { opacity: .45; cursor: not-allowed; }
 .exam-manual-question input[type="checkbox"] { width: 16px; height: 16px; min-height: 16px; flex-shrink: 0; margin-top: 3px; accent-color: rgb(var(--color-primary)); }
 .exam-manual-question small { display: block; font-size: 11px; color: rgb(var(--color-text-muted)); margin-top: 4px; }
-.exam-manual-question details { margin: 8px 0 0 26px; font-size: 12px; line-height: 1.5; }
-.exam-manual-question summary { color: rgb(var(--color-primary)); cursor: pointer; }
-.exam-manual-question li { padding: 4px 0; }
-.exam-manual-question img { display: block; max-width: 100%; max-height: 180px; object-fit: contain; margin: 8px 0; }
+.exam-manual-question__preview { display: inline-flex; margin: 8px 0 0 26px; font-size: 12px; line-height: 1.5; }
 .exam-manual-picker__error { color: #b42323; font-size: 12px; line-height: 1.5; padding-block: 8px; }
 
 .exam-authoring-actions {

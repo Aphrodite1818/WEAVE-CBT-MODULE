@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { AdminQuestionBanksPage } from '../src/features/admin/pages/AdminQuestionBanks'
 
@@ -16,6 +16,7 @@ function adminData() {
         description: 'First year English questions',
         status: 'Ready',
         count: 4,
+        canDelete: false,
         activeQuestionCount: 3,
       },
       {
@@ -29,6 +30,7 @@ function adminData() {
         description: null,
         status: 'Archived',
         count: 0,
+        canDelete: true,
         activeQuestionCount: 0,
       },
     ],
@@ -69,6 +71,14 @@ function adminData() {
 }
 
 describe('Admin question bank workspace', () => {
+  it.each([false, undefined])('hides delete for an empty bank when eligibility is %s', (canDelete) => {
+    const data = adminData()
+    data.banks[1].canDelete = canDelete
+    render(<AdminQuestionBanksPage adminData={data} gateway={{ questions: {} }} onNavigate={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /manage jss1 mathematics archive/i }))
+    expect(screen.queryByRole('menuitem', { name: /delete empty bank/i })).not.toBeInTheDocument()
+  })
+
   it('shows all school banks and exposes admin bank lifecycle actions', async () => {
     const data = adminData()
     const gateway = {
@@ -95,6 +105,7 @@ describe('Admin question bank workspace', () => {
     expect(screen.getByRole('button', { name: /create bank/i })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /manage jss1 english/i }))
+    expect(screen.queryByRole('menuitem', { name: /delete empty bank/i })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('menuitem', { name: /archive bank/i }))
     expect(screen.getByRole('alertdialog')).toHaveTextContent(/archive this question bank/i)
     fireEvent.click(screen.getByRole('button', { name: /^archive bank$/i }))
@@ -142,7 +153,7 @@ describe('Admin question bank workspace', () => {
     fireEvent.click(screen.getByRole('option', { name: /Basic Science/i }))
 
     fireEvent.change(screen.getByPlaceholderText(/jss2 basic science/i), { target: { value: 'JSS2 Basic Science Bank' } })
-    fireEvent.click(screen.getByRole('button', { name: /^create bank$/i }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^create bank$/i }))
 
     await waitFor(() => expect(gateway.questions.createQuestionBank).toHaveBeenCalledWith(
       'subject-3',

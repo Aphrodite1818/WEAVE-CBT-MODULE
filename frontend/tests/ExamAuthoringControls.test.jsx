@@ -58,13 +58,23 @@ const questions = [
 ]
 
 describe('Manual question picker', () => {
+  it('opens the full preview without changing the manual selection', async () => {
+    const onPreview = vi.fn()
+    const onChange = vi.fn()
+    render(<ManualQuestionPicker bankId="bank" exam={{ questionCount: 1 }} selectedIds={['q1']} onChange={onChange} onPreview={onPreview} gateway={{ questions: { listQuestionsForBank: vi.fn().mockResolvedValue(questions) } }} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview question: First question' }))
+    expect(onPreview).toHaveBeenCalledWith('q1', expect.any(HTMLButtonElement))
+    expect(onChange).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /Remove question from exam: First question/ })).toBeEnabled()
+  })
+
   it('limits new selections to the requested count and excludes archived questions', async () => {
     const onChange = vi.fn()
     render(<ManualQuestionPicker bankId="bank" exam={{ questionCount: 1 }} selectedIds={['q1']} onChange={onChange} gateway={{ questions: { listQuestionsForBank: vi.fn().mockResolvedValue(questions) } }} />)
-    expect(await screen.findByRole('checkbox', { name: /First question/ })).toBeChecked()
+    expect(await screen.findByRole('button', { name: /Remove question from exam: First question/ })).toBeEnabled()
     expect(screen.getByRole('checkbox', { name: /Second question/ })).toBeDisabled()
     expect(screen.queryByRole('checkbox', { name: /Archived question/ })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('checkbox', { name: /First question/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Remove question from exam: First question/ }))
     expect(onChange).toHaveBeenCalledWith([])
   })
 
@@ -73,7 +83,7 @@ describe('Manual question picker', () => {
     const addManualQuestions = vi.fn().mockResolvedValue({ authoring_version: 9 })
     const onSaved = vi.fn().mockResolvedValue(undefined)
     render(<ManualQuestionPicker bankId="bank" exam={{ id: 'exam', questionCount: 1 }} selectedIds={[]} canManageAllSelections onBusyChange={vi.fn()} onSaved={onSaved} gateway={{ questions: { listQuestionsForBank: vi.fn().mockResolvedValue(questions) }, exams: { getExam: vi.fn().mockResolvedValue({ authoring_version: 7 }), listManualQuestions: vi.fn().mockResolvedValue([{ question_id: 'q1' }]), removeManualQuestion, addManualQuestions } }} />)
-    fireEvent.click(await screen.findByRole('checkbox', { name: /First question/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Remove question from exam: First question/ }))
     await waitFor(() => expect(removeManualQuestion).toHaveBeenCalledWith('exam', 'q1', 7))
     await waitFor(() => expect(screen.getByRole('checkbox', { name: /Second question/ })).toBeEnabled())
     fireEvent.click(screen.getByRole('checkbox', { name: /Second question/ }))

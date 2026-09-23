@@ -29,25 +29,35 @@ export function TeacherQuestionsPage({ state, dispatch, teacherData, gateway }) 
     }
   }, [state.staff.selectedBankId, teacherData.banks])
 
-  const counts = useMemo(() => ({
-    all: teacherData.questions.length,
-    single: teacherData.questions.filter((question) => question.type === 'Single choice').length,
-    multiple: teacherData.questions.filter((question) => question.type === 'Multiple choice').length,
-    archived: teacherData.questions.filter((question) => question.status === 'Archived').length,
-  }), [teacherData.questions])
-
-  const filtered = useMemo(() => {
+  const scopedQuestions = useMemo(() => {
     const needle = query.trim().toLowerCase()
     return teacherData.questions.filter((question) => {
       if (bankId !== 'all' && question.bankId !== bankId) return false
-      if (tab === 'single' && question.type !== 'Single choice') return false
-      if (tab === 'multiple' && question.type !== 'Multiple choice') return false
-      if (tab === 'archived' && question.status !== 'Archived') return false
-      if (tab !== 'archived' && tab !== 'all' && question.status === 'Archived') return false
-      if (!needle) return true
-      return `${question.prompt} ${question.bankName} ${question.type}`.toLowerCase().includes(needle)
+      return !needle || `${question.prompt} ${question.bankName} ${question.type}`.toLowerCase().includes(needle)
     })
-  }, [bankId, query, tab, teacherData.questions])
+  }, [bankId, query, teacherData.questions])
+
+  const counts = useMemo(() => ({
+    all: scopedQuestions.length,
+    single: scopedQuestions.filter((question) => question.type === 'Single choice' && question.status !== 'Archived').length,
+    multiple: scopedQuestions.filter((question) => question.type === 'Multiple choice' && question.status !== 'Archived').length,
+    archived: scopedQuestions.filter((question) => question.status === 'Archived').length,
+  }), [scopedQuestions])
+
+  const filtered = useMemo(() => scopedQuestions.filter((question) => {
+    if (tab === 'single') return question.type === 'Single choice' && question.status !== 'Archived'
+    if (tab === 'multiple') return question.type === 'Multiple choice' && question.status !== 'Archived'
+    if (tab === 'archived') return question.status === 'Archived'
+    return true
+  }), [scopedQuestions, tab])
+
+  const bankQuestionCounts = useMemo(() => {
+    const totals = new Map()
+    for (const question of teacherData.questions) {
+      totals.set(question.bankId, (totals.get(question.bankId) || 0) + 1)
+    }
+    return totals
+  }, [teacherData.questions])
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const visibleQuestions = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -132,6 +142,7 @@ export function TeacherQuestionsPage({ state, dispatch, teacherData, gateway }) 
   }
 
   const requestLifecycleAction = (question, action) => {
+    if (action === 'delete' && question.canDelete !== true) return
     closeLifecycle()
     setLifecycleModalError('')
     setPendingLifecycleAction({ question, action })
@@ -162,7 +173,7 @@ export function TeacherQuestionsPage({ state, dispatch, teacherData, gateway }) 
   }
 
   const lifecycleConfirmation = pendingLifecycleAction ? getLifecycleConfirmationCopy(pendingLifecycleAction.action) : null
-  const bankOptions = [{ value: 'all', label: 'All question banks' }, ...teacherData.banks.map((bank) => ({ value: bank.id, label: bank.name, description: `${bank.count || 0} questions` }))]
+  const bankOptions = [{ value: 'all', label: 'All question banks' }, ...teacherData.banks.map((bank) => ({ value: bank.id, label: bank.name, description: `${bankQuestionCounts.get(bank.id) || 0} questions` }))]
 
   return (
     <div className="teacher-reference-page teacher-questions-page">
@@ -231,9 +242,9 @@ export function TeacherQuestionsPage({ state, dispatch, teacherData, gateway }) 
                       {question.status === 'Archived' ? <RiRefreshLine size={18} /> : <RiArchiveLine size={18} />}
                       <span><strong>{question.status === 'Archived' ? 'Reactivate question' : 'Archive question'}</strong><small>{question.status === 'Archived' ? 'Make it available for authoring again.' : 'Hide it from active authoring.'}</small></span>
                     </button>
-                    <button type="button" className="teacher-question-lifecycle__delete" onClick={() => requestLifecycleAction(question, 'delete')}>
+                    {question.canDelete === true && (<button type="button" className="teacher-question-lifecycle__delete" onClick={() => requestLifecycleAction(question, 'delete')}>
                       <RiDeleteBinLine size={18} /><span><strong>Delete permanently</strong><small>Only unused questions can be deleted. Used questions must be archived.</small></span>
-                    </button>
+                    </button>)}
                   </div>,
                   document.body,
                 )}

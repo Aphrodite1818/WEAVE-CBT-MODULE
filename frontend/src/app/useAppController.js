@@ -2,30 +2,9 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { appReducer, createInitialState } from "./state/appState";
 
+import { parseStaffPath, pathForStaffState, staffPatchFromRoute, staffSectionForRole } from "./staffNavigation";
+
 const NAV_STATE_KEY = "weave.cbt.navigation";
-const teacherSections = new Set([
-  "overview",
-  "question-banks",
-  "bank-detail",
-  "questions",
-  "create-question",
-  "edit-question",
-  "preview-question",
-  "exams",
-  "exam-history",
-  "create-exam",
-]);
-const adminSections = new Set([
-  "dashboard",
-  "exams",
-  "exam-history",
-  "question-banks",
-  "students",
-  "invigilators",
-  "results",
-  "reports",
-  "settings",
-]);
 const setupViews = new Set([
   "welcome",
   "pairing-code",
@@ -74,8 +53,9 @@ export function useAppController({ application = "combined", gateway } = {}) {
     createInitialState,
   );
   const pairPending = useRef(false);
+  const bootPending = useRef(true);
   const stateRef = useRef(state);
-  const locationPathRef = useRef(location.pathname);
+  const locationPathRef = useRef(location.pathname + location.search);
   const navigateRef = useRef(navigate);
 
   useEffect(() => {
@@ -83,8 +63,8 @@ export function useAppController({ application = "combined", gateway } = {}) {
   }, [state]);
 
   useEffect(() => {
-    locationPathRef.current = location.pathname;
-  }, [location.pathname]);
+    locationPathRef.current = location.pathname + location.search;
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     navigateRef.current = navigate;
@@ -146,6 +126,7 @@ export function useAppController({ application = "combined", gateway } = {}) {
 
   const boot = useCallback(
     async (signal) => {
+      bootPending.current = true;
       rawDispatch({ type: "bootStart" });
       gateway.branding
         .getBranding({ signal })
@@ -196,6 +177,8 @@ export function useAppController({ application = "combined", gateway } = {}) {
               error.userMessage || "Weave could not reach the local backend.",
           });
         }
+      } finally {
+        if (!signal?.aborted) bootPending.current = false;
       }
     },
     [application, gateway, restoreSession],
@@ -208,7 +191,7 @@ export function useAppController({ application = "combined", gateway } = {}) {
   }, [boot]);
 
   useEffect(() => {
-    if (state.installation.loading) return;
+    if (state.installation.loading || bootPending.current) return;
     if (!state.installation.configured) {
       if (application === "student") {
         rawDispatch({ type: "view", view: "student-unavailable" });
@@ -217,7 +200,7 @@ export function useAppController({ application = "combined", gateway } = {}) {
         return;
       }
 
-      const route = routeFromPath(location.pathname, application);
+      const route = routeFromPath(location.pathname + location.search, application);
       if (setupViews.has(route.view)) {
         rawDispatch({ type: "view", view: route.view });
         return;
@@ -227,7 +210,7 @@ export function useAppController({ application = "combined", gateway } = {}) {
       return;
     }
 
-    const route = routeFromPath(location.pathname, application);
+    const route = routeFromPath(location.pathname + location.search, application);
     if (setupViews.has(route.view)) {
       rawDispatch({ type: "view", view: "landing" });
       navigate("/", { replace: true });
@@ -237,6 +220,7 @@ export function useAppController({ application = "combined", gateway } = {}) {
   }, [
     application,
     location.pathname,
+    location.search,
     navigate,
     state.installation.configured,
     state.installation.loading,
@@ -417,13 +401,17 @@ export function useAppController({ application = "combined", gateway } = {}) {
       sessionType: state.session?.type,
       role: state.session?.role,
       staffSection: state.staff.section,
+      selectedQuestionId: state.staff.selectedQuestionId,
+      selectedExamId: state.staff.selectedExamId,
+      selectedBankId: state.staff.selectedBankId,
+      questionPreviewOrigin: state.staff.questionPreviewOrigin,
       examStage: state.exam.stage,
     });
   }, [
     state.view,
     state.session?.type,
     state.session?.role,
-    state.staff.section,
+    state.staff,
     state.exam.stage,
   ]);
 
@@ -490,20 +478,9 @@ async function restoreStaffSession(
         savedNavigation?.staffSection,
       );
       dispatch({ type: "authSuccess", session, view: "staff" });
-      const selectedQuestionId =
-        section === "preview-question" || section === "edit-question"
-          ? savedNavigation?.selectedQuestionId
-          : null;
-      const selectedExamId = section === "exam-history" ? savedNavigation?.selectedExamId : null;
-      dispatch({ type: "staff", patch: { section, selectedQuestionId, selectedExamId } });
-      let targetPath = `/teacher/${section}`;
-      if (section === "preview-question" && selectedQuestionId)
-        targetPath = `/teacher/questions/${encodeURIComponent(selectedQuestionId)}/preview`;
-      if (section === "edit-question" && selectedQuestionId)
-        targetPath = `/teacher/questions/${encodeURIComponent(selectedQuestionId)}/edit`;
-      if (section === "exam-history" && selectedExamId)
-        targetPath = `/teacher/exams/${encodeURIComponent(selectedExamId)}/history`;
-      navigate(targetPath, { replace: true });
+      const staff = staffPatchFromRoute({ ...savedNavigation, role: session.role, staffSection: section });
+      dispatch({ type: "staff", patch: staff });
+      navigate(pathForStaffState({ session, staff }), { replace: true });
       return true;
     }
     if (session.role === "admin") {
@@ -512,18 +489,15 @@ async function restoreStaffSession(
         savedNavigation?.staffSection,
       );
       dispatch({ type: "authSuccess", session, view: "sync-check" });
-      const selectedExamId = section === "exam-history" ? savedNavigation?.selectedExamId : null;
-      dispatch({ type: "staff", patch: { section, selectedExamId } });
+      const staff = staffPatchFromRoute({ ...savedNavigation, role: session.role, staffSection: section });
+      dispatch({ type: "staff", patch: staff });
       dispatch({ type: "syncChecking" });
-      navigate("/sync/check", { replace: true });
       try {
         const status = await gateway.sync.getSyncStatus();
         dispatch({ type: "syncStatus", status });
         navigate(
           status.bootstrap_completed_at
-            ? section === "exam-history" && selectedExamId
-              ? `/admin/exams/${encodeURIComponent(selectedExamId)}/history`
-              : `/admin/${section}`
+            ? pathForStaffState({ session, staff })
             : "/sync/initial",
           { replace: true },
         );
@@ -544,12 +518,6 @@ async function restoreStaffSession(
     gateway.auth.clearStaffSession();
     return false;
   }
-}
-
-function staffSectionForRole(role, section) {
-  if (role === "teacher" && teacherSections.has(section)) return section;
-  if (role === "admin" && adminSections.has(section)) return section;
-  return role === "admin" ? "dashboard" : "overview";
 }
 
 function routeFromPath(pathname, application = "combined") {
@@ -578,7 +546,7 @@ function routeFromPath(pathname, application = "combined") {
 }
 
 function routeFromPathUnchecked(pathname) {
-  const path = normalizePath(pathname);
+  const path = normalizePath(pathname.split("?")[0]);
   if (path === "/") return { view: "landing" };
   if (path === "/student/login") return { view: "student-login" };
   if (path === "/staff/login") return { view: "staff-login" };
@@ -603,58 +571,8 @@ function routeFromPathUnchecked(pathname) {
       examStage: "active",
       requiresAuth: true,
     };
-  const examHistoryMatch = path.match(/^\/(admin|teacher)\/exams\/([^/]+)\/history$/);
-  if (examHistoryMatch) {
-    return {
-      view: "staff", sessionType: "staff", role: examHistoryMatch[1],
-      staffSection: "exam-history", selectedExamId: decodeURIComponent(examHistoryMatch[2]),
-      requiresAuth: true,
-    };
-  }
-  const questionPreviewMatch = path.match(
-    /^\/teacher\/questions\/([^/]+)\/preview$/,
-  );
-  if (questionPreviewMatch) {
-    return {
-      view: "staff",
-      sessionType: "staff",
-      role: "teacher",
-      staffSection: "preview-question",
-      selectedQuestionId: decodeURIComponent(questionPreviewMatch[1]),
-      requiresAuth: true,
-    };
-  }
-  const questionEditMatch = path.match(/^\/teacher\/questions\/([^/]+)\/edit$/);
-  if (questionEditMatch) {
-    return {
-      view: "staff",
-      sessionType: "staff",
-      role: "teacher",
-      staffSection: "edit-question",
-      selectedQuestionId: decodeURIComponent(questionEditMatch[1]),
-      requiresAuth: true,
-    };
-  }
-  if (path.startsWith("/teacher")) {
-    const section = path.split("/")[2] || "overview";
-    return {
-      view: "staff",
-      sessionType: "staff",
-      role: "teacher",
-      staffSection: teacherSections.has(section) ? section : "overview",
-      requiresAuth: true,
-    };
-  }
-  if (path.startsWith("/admin")) {
-    const section = path.split("/")[2] || "dashboard";
-    return {
-      view: "staff",
-      sessionType: "staff",
-      role: "admin",
-      staffSection: adminSections.has(section) ? section : "dashboard",
-      requiresAuth: true,
-    };
-  }
+  const staffRoute = parseStaffPath(pathname);
+  if (staffRoute) return staffRoute;
   return { view: "landing" };
 }
 
@@ -666,6 +584,8 @@ function routeToNavigation(route) {
     staffSection: route.staffSection,
     selectedQuestionId: route.selectedQuestionId,
     selectedExamId: route.selectedExamId,
+    selectedBankId: route.selectedBankId,
+    questionPreviewOrigin: route.questionPreviewOrigin,
     examStage: route.examStage,
   };
 }
@@ -684,11 +604,7 @@ function applyRouteToState(route, state, dispatch, navigate) {
       dispatch({ type: "authSuccess", session: state.session, view: "staff" });
       dispatch({
         type: "staff",
-        patch: {
-          section: staffSectionForRole(state.session.role, route.staffSection),
-          selectedQuestionId: route.selectedQuestionId || null,
-          ...(route.staffSection === "exam-history" ? { selectedExamId: route.selectedExamId || null } : {}),
-        },
+        patch: staffPatchFromRoute(route),
       });
       return;
     }
@@ -776,29 +692,6 @@ function pathForView(view, application = "combined") {
   return null;
 }
 
-function pathForStaffState(state) {
-  if (state.staff.section === "exam-history" && state.staff.selectedExamId) {
-    const role = state.session?.role === "admin" ? "admin" : "teacher";
-    return `/${role}/exams/${encodeURIComponent(state.staff.selectedExamId)}/history`;
-  }
-  if (state.session?.role === "admin") {
-    const section =
-      state.staff.section === "overview"
-        ? "dashboard"
-        : staffSectionForRole("admin", state.staff.section);
-    return `/admin/${section}`;
-  }
-  if (state.session?.role === "teacher") {
-    const section = staffSectionForRole("teacher", state.staff.section);
-    if (section === "preview-question" && state.staff.selectedQuestionId)
-      return `/teacher/questions/${encodeURIComponent(state.staff.selectedQuestionId)}/preview`;
-    if (section === "edit-question" && state.staff.selectedQuestionId)
-      return `/teacher/questions/${encodeURIComponent(state.staff.selectedQuestionId)}/edit`;
-    return `/teacher/${section}`;
-  }
-  return null;
-}
-
 function normalizePath(pathname) {
   const path = pathname || "/";
   if (path.length > 1 && path.endsWith("/")) return path.slice(0, -1);
@@ -820,6 +713,9 @@ function persistNavigationState({
   role,
   staffSection,
   selectedQuestionId,
+  selectedExamId,
+  selectedBankId,
+  questionPreviewOrigin,
   examStage,
 }) {
   if (sessionType === "staff" && view === "staff") {
@@ -829,6 +725,9 @@ function persistNavigationState({
         sessionType: "staff",
         role,
         staffSection,
+        selectedExamId,
+        selectedBankId,
+        questionPreviewOrigin,
         selectedQuestionId:
           staffSection === "preview-question" ||
           staffSection === "edit-question"

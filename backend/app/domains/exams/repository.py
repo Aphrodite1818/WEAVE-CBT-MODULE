@@ -376,6 +376,30 @@ class ExamRepository:
         await db.flush()
 
     @staticmethod
+    async def list_referenced_question_ids(
+        db: AsyncSession, question_ids: Sequence[UUID],
+    ) -> set[UUID]:
+        if not question_ids:
+            return set()
+        query = select(ExamQuestion.source_question_id).where(
+            ExamQuestion.source_question_id.in_(question_ids)
+        ).union(select(ExamQuestionSelection.question_id).where(
+            ExamQuestionSelection.question_id.in_(question_ids)
+        ))
+        return set((await db.execute(query)).scalars().all())
+
+    @staticmethod
+    async def list_referenced_bank_ids(
+        db: AsyncSession, bank_ids: Sequence[UUID],
+    ) -> set[UUID]:
+        if not bank_ids:
+            return set()
+        query = select(Exam.question_bank_id).where(
+            Exam.question_bank_id.in_(bank_ids)
+        ).distinct()
+        return set((await db.execute(query)).scalars().all())
+
+    @staticmethod
     async def is_source_question_referenced(
         db: AsyncSession,
         question_id: UUID,

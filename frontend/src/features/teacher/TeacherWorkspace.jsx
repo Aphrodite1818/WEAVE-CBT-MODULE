@@ -41,7 +41,8 @@ export function TeacherWorkspace({
 
   const workspaceDispatch = useCallback((action) => {
     if (action?.type === "staff" && action.patch?.section === "preview-question") {
-      const origin = state.staff.section === "bank-detail" ? "bank-detail" : "questions";
+      const origin = state.staff.section === "create-exam" ? "create-exam"
+        : state.staff.section === "bank-detail" ? "bank-detail" : "questions";
       dispatch({
         ...action,
         patch: { ...action.patch, questionPreviewOrigin: origin },
@@ -114,13 +115,16 @@ export function TeacherWorkspace({
         />
       )}
       {state.staff.section === "exam-history" && <ExamHistoryPage state={state} dispatch={workspaceDispatch} teacherData={teacherData} gateway={gateway} />}
-      {state.staff.section === "create-exam" && (
-        <ExamAuthoringPage
-          state={state}
-          dispatch={workspaceDispatch}
-          teacherData={teacherData}
-          gateway={gateway}
-        />
+      {(state.staff.section === "create-exam" || (state.staff.section === "preview-question" && state.staff.questionPreviewOrigin === "create-exam")) && (
+        <div hidden={state.staff.section !== "create-exam"}>
+          <ExamAuthoringPage
+            active={state.staff.section === "create-exam"}
+            state={state}
+            dispatch={workspaceDispatch}
+            teacherData={teacherData}
+            gateway={gateway}
+          />
+        </div>
       )}
     </TeacherLayout>
   );
@@ -329,6 +333,7 @@ function normalizeQuestion(question, bank) {
     version: question.version,
     options: question.options,
     bankName: bank.name,
+    canDelete: question.can_delete === true,
     createdByActorId: question.created_by_actor_id,
     lastEditedByActorId: question.last_edited_by_actor_id,
   };

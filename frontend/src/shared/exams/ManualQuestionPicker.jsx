@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { RiSearchLine } from '@remixicon/react'
+import { RiDeleteBinLine, RiSearchLine } from '@remixicon/react'
 import { Notice } from '../ui'
 import { FormattedText } from '../ui/FormattedText'
 
@@ -9,6 +9,7 @@ export function ManualQuestionPicker({
   gateway,
   selectedIds,
   onChange,
+  onPreview,
   disabled,
   onBusyChange,
   onSaved,
@@ -19,7 +20,6 @@ export function ManualQuestionPicker({
   const [query, setQuery] = useState('')
   const [selectedOnly, setSelectedOnly] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [previews, setPreviews] = useState({})
   const [retry, setRetry] = useState(0)
   const [stagedAddIds, setStagedAddIds] = useState([])
   const examId = exam?.id
@@ -166,15 +166,18 @@ export function ManualQuestionPicker({
         {visible.map((question) => {
           const selectionLocked = selected.has(question.id) && !canRemoveSelectedQuestion(question.id)
           return <div key={question.id} className={`exam-manual-question${selected.has(question.id) ? ' is-selected' : ''}`}>
-            <label>
-              <input type="checkbox" aria-label={`Select question: ${question.prompt}`} checked={selected.has(question.id)} disabled={disabled || busy || Boolean(resource.error) || selectionLocked || (!selected.has(question.id) && (!question.is_active || ids.length >= limit))} onChange={() => toggle(question.id)} />
-              <div><FormattedText text={question.prompt} /><small>{question.question_type.replaceAll('_', ' ')}{!question.is_active ? ' · Archived — remove before submission' : ''}{staged.has(question.id) ? ' · Not saved yet' : ''}</small></div>
-            </label>
-            <details onToggle={(event) => { const open = event.currentTarget.open; setPreviews((previous) => ({ ...previous, [question.id]: open })) }}><summary>Preview question</summary>
-              {question.instruction && <FormattedText text={question.instruction} />}
-              {previews[question.id] && question.image_asset_id && <QuestionImage gateway={gateway} questionId={question.id} />}
-              <ol>{question.options.map((option) => <li key={option.id}><FormattedText text={option.text} />{option.is_correct && <small>Correct answer</small>}{previews[question.id] && option.image_asset_id && <QuestionImage gateway={gateway} questionId={question.id} optionId={option.id} />}</li>)}</ol>
-            </details>
+            <div className="exam-manual-question__heading">
+              <div className="exam-manual-question__content">
+                {selected.has(question.id) && !selectionLocked ? (
+                  <button type="button" className="exam-manual-question__remove" aria-label={`Remove question from exam: ${question.prompt}`} title="Remove from this exam" disabled={disabled || busy || Boolean(resource.error)} onClick={() => toggle(question.id)}><RiDeleteBinLine size={16} aria-hidden="true" /></button>
+                ) : (
+                  <input type="checkbox" aria-label={selectionLocked ? `Selected by another contributor: ${question.prompt}` : `Select question: ${question.prompt}`} title={selectionLocked ? 'Only the contributor, lead author or admin can remove this selection.' : 'Add to this exam'} checked={selected.has(question.id)} disabled={disabled || busy || Boolean(resource.error) || selectionLocked || (!question.is_active || ids.length >= limit)} onChange={() => toggle(question.id)} />
+                )}
+                <div><FormattedText text={question.prompt} /><small>{question.question_type.replaceAll('_', ' ')}{!question.is_active ? ' · Archived — remove before submission' : ''}{staged.has(question.id) ? ' · Not saved yet' : ''}</small></div>
+              </div>
+              <span className="exam-manual-question__author">{question.author_name || 'Unknown author'}</span>
+            </div>
+            <button type="button" className="exam-text-action exam-manual-question__preview" disabled={busy || !onPreview} onClick={(event) => onPreview(question.id, event.currentTarget)} aria-label={`Preview question: ${question.prompt}`}>Preview question</button>
           </div>
         })}
         {!visible.length && <p>{resource.questions.length ? 'No questions match this view.' : 'This bank has no available questions.'}</p>}
@@ -215,20 +218,4 @@ function persistStagedAdditions(storageKey, questionIds) {
   } catch {
     // Local storage is only a resilience layer. The in-memory draft still works for this page visit.
   }
-}
-
-function QuestionImage({ gateway, questionId, optionId }) {
-  const [url, setUrl] = useState('')
-  const [failed, setFailed] = useState(false)
-  useEffect(() => {
-    let cancelled = false
-    let objectUrl
-    const request = optionId ? gateway.questions.getQuestionOptionImage(questionId, optionId) : gateway.questions.getQuestionImage(questionId)
-    request.then((blob) => {
-      if (!cancelled) { objectUrl = URL.createObjectURL(blob); setUrl(objectUrl) }
-    }).catch(() => { if (!cancelled) setFailed(true) })
-    return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl) }
-  }, [gateway, questionId, optionId])
-  if (failed) return <p role="status">Image could not be loaded.</p>
-  return url ? <img src={url} alt={optionId ? 'Answer option illustration' : 'Question illustration'} /> : <span>Loading image…</span>
 }

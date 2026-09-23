@@ -11,9 +11,42 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.academics.repository import AcademicRepository
 from app.domains.auth.models import LocalActor
-from app.domains.questions.models import Question
+from app.domains.exams.repository import ExamRepository
+from app.domains.questions.models import Question, QuestionBank
 from app.domains.questions.repository import QuestionRepository
-from app.domains.questions.schemas import QuestionOptionResponse, QuestionResponse
+from app.domains.questions.schemas import (
+    QuestionBankResponse,
+    QuestionOptionResponse,
+    QuestionResponse,
+)
+
+
+async def build_question_bank_responses(
+    db: AsyncSession,
+    banks: Sequence[QuestionBank],
+    *,
+    request_actor: LocalActor,
+) -> list[QuestionBankResponse]:
+    blocked_ids: set[UUID] = set()
+    is_admin = request_actor.role == "admin"
+    if is_admin and banks:
+        bank_ids = [bank.id for bank in banks]
+        blocked_ids = await QuestionRepository.list_nonempty_bank_ids(db, bank_ids)
+        blocked_ids |= await ExamRepository.list_referenced_bank_ids(db, bank_ids)
+    return [
+        QuestionBankResponse.model_validate(bank).model_copy(
+            update={"can_delete": is_admin and bank.id not in blocked_ids}
+        )
+        for bank in banks
+    ]
+
+
+def _can_delete_question(question: Question, actor: LocalActor | None, referenced_ids: set[UUID]) -> bool:
+    return bool(
+        actor
+        and (actor.role == "admin" or (actor.role == "teacher" and actor.id == question.created_by_actor_id))
+        and question.id not in referenced_ids
+    )
 
 
 def _membership_uuid(actor: LocalActor) -> UUID | None:
@@ -109,6 +142,7 @@ async def build_question_response(
         [question.created_by_actor_id],
         request_actor=request_actor,
     )
+    referenced_ids = await ExamRepository.list_referenced_question_ids(db, [question.id])
     return QuestionResponse(
         id=question.id,
         bank_id=question.bank_id,
@@ -120,6 +154,7 @@ async def build_question_response(
         created_by_actor_id=question.created_by_actor_id,
         author_name=author_names.get(question.created_by_actor_id, "Unknown author"),
         last_edited_by_actor_id=question.last_edited_by_actor_id,
+        can_delete=_can_delete_question(question, request_actor, referenced_ids),
         is_active=question.is_active,
         options=[QuestionOptionResponse.model_validate(option) for option in options],
     )
@@ -144,6 +179,8 @@ async def build_question_responses(
         request_actor=request_actor,
     )
 
+    referenced_ids = await ExamRepository.list_referenced_question_ids(db, [question.id for question in questions])
+
     grouped: dict[UUID, list[QuestionOptionResponse]] = defaultdict(list)
     for option in options:
         grouped[option.question_id].append(
@@ -164,6 +201,7 @@ async def build_question_responses(
                 question.created_by_actor_id, "Unknown author"
             ),
             last_edited_by_actor_id=question.last_edited_by_actor_id,
+            can_delete=_can_delete_question(question, request_actor, referenced_ids),
             is_active=question.is_active,
             options=grouped[question.id],
         )

@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, HTTPException, Response, status
 
 from app.core.database import DbSession
 from app.core.exceptions import AcademicAuthorizationError, AcademicScopeError
 from app.domains.auth.dependencies import CurrentLocalActor, CurrentLocalAdmin
 from app.domains.media.service import MediaService
 from app.domains.questions.response_builder import (
+    build_question_bank_responses,
     build_question_response,
     build_question_responses,
 )
@@ -22,7 +23,6 @@ from app.domains.questions.schemas import (
     SingleChoiceQuestionCreate,
 )
 from app.domains.questions.service import QuestionService
-
 
 router = APIRouter(
     prefix="/questions",
@@ -86,7 +86,7 @@ async def create_question_bank(
     except (AcademicAuthorizationError, AcademicScopeError, ValueError) as exc:
         raise _domain_http_error(exc) from exc
 
-    return QuestionBankResponse.model_validate(bank)
+    return (await build_question_bank_responses(db, [bank], request_actor=actor))[0]
 
 
 @router.get(
@@ -105,7 +105,7 @@ async def list_authorable_question_banks(
     except (AcademicAuthorizationError, AcademicScopeError, ValueError) as exc:
         raise _domain_http_error(exc) from exc
 
-    return [QuestionBankResponse.model_validate(bank) for bank in banks]
+    return await build_question_bank_responses(db, banks, request_actor=actor)
 
 
 @router.get(
@@ -115,8 +115,8 @@ async def list_authorable_question_banks(
 async def list_admin_question_banks(
     db: DbSession,
     actor: CurrentLocalAdmin,
-    curriculum_subject_id: UUID | None = Query(default=None),
-    include_archived: bool = Query(default=False),
+    curriculum_subject_id: UUID | None = None,
+    include_archived: bool = False,
 ) -> list[QuestionBankResponse]:
     """Admin management list; archived banks remain discoverable for reactivation."""
 
@@ -130,7 +130,7 @@ async def list_admin_question_banks(
     except (AcademicAuthorizationError, AcademicScopeError, ValueError) as exc:
         raise _domain_http_error(exc) from exc
 
-    return [QuestionBankResponse.model_validate(bank) for bank in banks]
+    return await build_question_bank_responses(db, banks, request_actor=actor)
 
 
 @router.patch(
@@ -153,7 +153,7 @@ async def update_question_bank(
     except (AcademicAuthorizationError, AcademicScopeError, ValueError) as exc:
         raise _domain_http_error(exc) from exc
 
-    return QuestionBankResponse.model_validate(bank)
+    return (await build_question_bank_responses(db, [bank], request_actor=actor))[0]
 
 
 @router.post(
@@ -174,7 +174,7 @@ async def archive_question_bank(
     except (AcademicAuthorizationError, AcademicScopeError, ValueError) as exc:
         raise _domain_http_error(exc) from exc
 
-    return QuestionBankResponse.model_validate(bank)
+    return (await build_question_bank_responses(db, [bank], request_actor=actor))[0]
 
 
 @router.post(
@@ -195,7 +195,7 @@ async def reactivate_question_bank(
     except (AcademicAuthorizationError, AcademicScopeError, ValueError) as exc:
         raise _domain_http_error(exc) from exc
 
-    return QuestionBankResponse.model_validate(bank)
+    return (await build_question_bank_responses(db, [bank], request_actor=actor))[0]
 
 
 @router.delete(
@@ -275,7 +275,7 @@ async def list_questions_for_bank(
     bank_id: UUID,
     db: DbSession,
     actor: CurrentLocalActor,
-    include_archived: bool = Query(default=False),
+    include_archived: bool = False,
 ) -> list[QuestionResponse]:
     try:
         questions = await QuestionService.list_actor_questions_for_bank(

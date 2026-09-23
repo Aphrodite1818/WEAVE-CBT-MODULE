@@ -28,8 +28,12 @@ export function AdminQuestionBanksPage({ adminData, gateway, onNavigate, createR
   useEffect(() => {
     if (!createRequested) return
     setEditor({ mode: 'create', bank: null })
-    onCreateHandled?.()
-  }, [createRequested, onCreateHandled])
+  }, [createRequested])
+
+  const closeEditor = () => {
+    setEditor(null)
+    if (createRequested) onCreateHandled?.()
+  }
 
   const closeMenu = () => {
     setMenuBankId(null)
@@ -72,6 +76,7 @@ export function AdminQuestionBanksPage({ adminData, gateway, onNavigate, createR
   }
 
   const requestLifecycle = (bank, action) => {
+    if (action === 'delete' && bank.canDelete !== true) return
     closeMenu()
     setError('')
     setPendingAction({ bank, action })
@@ -143,7 +148,7 @@ export function AdminQuestionBanksPage({ adminData, gateway, onNavigate, createR
                       {bank.status === 'Archived' ? <RiRefreshLine size={17} /> : <RiArchiveLine size={17} />}
                       <span><strong>{bank.status === 'Archived' ? 'Reactivate bank' : 'Archive bank'}</strong><small>{bank.status === 'Archived' ? 'Return it to active authoring.' : 'Keep its history but stop authoring.'}</small></span>
                     </button>
-                    <button type="button" role="menuitem" className="is-danger" disabled={bank.count > 0} onClick={() => requestLifecycle(bank, 'delete')}><RiDeleteBinLine size={17} /><span><strong>Delete empty bank</strong><small>{bank.count > 0 ? 'Banks containing questions cannot be deleted.' : 'Permanently remove this empty bank.'}</small></span></button>
+                    {bank.canDelete === true && (<button type="button" role="menuitem" className="is-danger" onClick={() => requestLifecycle(bank, 'delete')}><RiDeleteBinLine size={17} /><span><strong>Delete empty bank</strong><small>Permanently remove this empty bank.</small></span></button>)}
                   </div>,
                   document.body,
                 )}
@@ -169,7 +174,7 @@ export function AdminQuestionBanksPage({ adminData, gateway, onNavigate, createR
         <div className="teacher-reference-empty teacher-reference-empty--compact"><div><strong>No matching banks</strong><p>Try a different bank, level, or subject name.</p></div></div>
       )}
 
-      {editor && <BankEditorModal editor={editor} subjects={adminData.subjects} gateway={gateway} onClose={() => setEditor(null)} onSaved={async () => { setEditor(null); await adminData.refresh() }} />}
+      {editor && <BankEditorModal editor={editor} subjects={adminData.subjects} gateway={gateway} onClose={closeEditor} onSaved={async () => { closeEditor(); await adminData.refresh() }} />}
       {pendingAction && <BankLifecycleModal pending={pendingAction} busy={busy} error={error} onCancel={() => { if (!busy) { setPendingAction(null); setError('') } }} onConfirm={confirmLifecycle} />}
     </div>
   )

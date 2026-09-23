@@ -66,7 +66,7 @@ const adminNav = [
 
 export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [workspaceView, setWorkspaceView] = useState(() => topLevelView(state.staff.section))
+  const workspaceView = topLevelView(state.staff.section)
   const [openGroup, setOpenGroup] = useState(() => groupForView(topLevelView(state.staff.section)))
   const adminData = useAdminData(gateway)
   const activeAuthoringData = useMemo(() => ({
@@ -90,16 +90,6 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
     }
   }, [])
 
-  useEffect(() => {
-    const next = topLevelView(state.staff.section)
-    if (state.staff.section === 'exam-history') setWorkspaceView('exam-history')
-    if (state.staff.section === 'dashboard' || state.staff.section === 'students' || placeholderViews.has(state.staff.section)) setWorkspaceView(next)
-    if (state.staff.section === 'question-banks' && !bankViews.has(workspaceView)) setWorkspaceView('question-banks')
-    if (state.staff.section === 'exams' && (!examViews.has(workspaceView) || workspaceView === 'exam-history')) setWorkspaceView('exams')
-    if (state.staff.section === 'roster' && !rosterViews.has(workspaceView)) setWorkspaceView('roster')
-    if (state.staff.section === 'operations' && !operationViews.has(workspaceView)) setWorkspaceView('operations')
-    if (state.staff.section === 'results' && !resultViews.has(workspaceView)) setWorkspaceView('results')
-  }, [state.staff.section, workspaceView])
 
   useEffect(() => {
     const activeGroup = groupForView(workspaceView)
@@ -108,22 +98,10 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
   }, [workspaceView])
 
   const navigate = useCallback((view, patch = {}) => {
-    const parentSection = view === 'exam-history' ? 'exam-history' : bankViews.has(view)
-      ? 'question-banks'
-      : examViews.has(view)
-        ? 'exams'
-        : rosterViews.has(view)
-          ? 'roster'
-          : operationViews.has(view)
-            ? 'operations'
-            : resultViews.has(view)
-              ? 'results'
-              : view
     const previewPatch = view === 'preview-question'
-      ? { questionPreviewOrigin: workspaceView === 'bank-detail' ? 'bank-detail' : 'questions' }
+      ? { questionPreviewOrigin: workspaceView === 'create-exam' ? 'create-exam' : workspaceView === 'bank-detail' ? 'bank-detail' : 'questions' }
       : {}
-    setWorkspaceView(view)
-    dispatch({ type: 'staff', patch: { section: parentSection, ...previewPatch, ...patch } })
+    dispatch({ type: 'staff', patch: { section: view, ...previewPatch, ...patch } })
   }, [dispatch, workspaceView])
 
   const workspaceDispatch = useCallback((action) => {
@@ -235,7 +213,7 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
         <div className="teacher-content admin-content">
           {workspaceView === 'dashboard' && <AdminOverview state={state} adminData={adminData} onNavigate={navigate} />}
           {(workspaceView === 'question-banks' || workspaceView === 'create-bank') && (
-            <AdminQuestionBanksPage adminData={adminData} gateway={gateway} onNavigate={navigate} createRequested={workspaceView === 'create-bank'} onCreateHandled={() => setWorkspaceView('question-banks')} />
+            <AdminQuestionBanksPage adminData={adminData} gateway={gateway} onNavigate={navigate} createRequested={workspaceView === 'create-bank'} onCreateHandled={() => navigate('question-banks')} />
           )}
           {workspaceView === 'bank-detail' && <AdminBankDetailPage state={state} adminData={adminData} onNavigate={navigate} />}
           {workspaceView === 'questions' && <AdminQuestionsPage state={state} dispatch={workspaceDispatch} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
@@ -244,7 +222,11 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
           {workspaceView === 'edit-question' && <QuestionBuilder key={state.staff.selectedQuestionId || 'admin-question-editor'} mode="edit" state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
           {workspaceView === 'exams' && <AdminExamsPage state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
           {workspaceView === 'exam-history' && <ExamHistoryPage state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
-          {workspaceView === 'create-exam' && <ExamAuthoringPage state={state} dispatch={workspaceDispatch} teacherData={examFormData} gateway={gateway} />}
+          {(workspaceView === 'create-exam' || (workspaceView === 'preview-question' && state.staff.questionPreviewOrigin === 'create-exam')) && (
+            <div hidden={workspaceView !== 'create-exam'}>
+              <ExamAuthoringPage active={workspaceView === 'create-exam'} state={state} dispatch={workspaceDispatch} teacherData={examFormData} gateway={gateway} />
+            </div>
+          )}
           {workspaceView === 'roster' && <AdminRostersPage adminData={adminData} onNavigate={navigate} />}
           {workspaceView === 'roster-detail' && <AdminRosterDetailPage state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
           {workspaceView === 'operations' && <ExamOperations adminData={adminData} onNavigate={navigate} />}

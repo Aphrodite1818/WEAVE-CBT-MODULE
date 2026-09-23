@@ -12,13 +12,20 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from app.domains.academics.repository import AcademicRepository  # noqa: E402
-from app.domains.questions.models import Question, QuestionType  # noqa: E402
-from app.domains.questions.repository import QuestionRepository  # noqa: E402
-from app.domains.questions.response_builder import (  # noqa: E402
+from app.domains.academics.repository import AcademicRepository
+from app.domains.exams.repository import ExamRepository
+from app.domains.questions.models import (
+    Question,
+    QuestionBank,
+    QuestionType,
+)
+from app.domains.questions.repository import QuestionRepository
+from app.domains.questions.response_builder import (
+    build_question_bank_responses,
     build_question_response,
     build_question_responses,
 )
+from app.domains.questions.service import QuestionService
 
 
 class _ScalarRows:
@@ -48,6 +55,60 @@ def _question(*, author_id):
 
 
 class QuestionAuthorResponseTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        for repository, method in [
+            (ExamRepository, "list_referenced_question_ids"),
+            (ExamRepository, "list_referenced_bank_ids"),
+            (QuestionRepository, "list_nonempty_bank_ids"),
+        ]:
+            patcher = patch.object(repository, method, new=AsyncMock(return_value=set()))
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    async def test_delete_bank_rechecks_exam_references_before_mutation(self):
+        actor = SimpleNamespace(id=uuid4(), role="admin", is_active=True)
+        bank = SimpleNamespace(id=uuid4())
+        db = SimpleNamespace(commit=AsyncMock())
+        ExamRepository.list_referenced_bank_ids.return_value = {bank.id}
+        with (
+            patch.object(QuestionRepository, "get_bank_by_id", new=AsyncMock(return_value=bank)),
+            patch.object(QuestionRepository, "count_questions_for_bank", new=AsyncMock(return_value=0)),
+            patch.object(QuestionRepository, "delete_bank", new=AsyncMock()) as delete,
+            self.assertRaisesRegex(ValueError, "used by an exam"),
+        ):
+            await QuestionService.delete_empty_question_bank(db, actor=actor, bank_id=bank.id)
+        delete.assert_not_awaited()
+        db.commit.assert_not_awaited()
+
+    async def test_delete_eligibility_respects_authorship_and_exam_references(self):
+        teacher = SimpleNamespace(id=uuid4(), role="teacher")
+        own = _question(author_id=teacher.id)
+        used = _question(author_id=teacher.id)
+        other = _question(author_id=uuid4())
+        questions = [own, used, other]
+        ExamRepository.list_referenced_question_ids.return_value = {used.id}
+        with (
+            patch.object(QuestionRepository, "list_options_for_questions", new=AsyncMock(return_value=[])),
+            patch("app.domains.questions.response_builder._load_author_names", new=AsyncMock(return_value={})),
+        ):
+            responses = await build_question_responses(object(), questions, request_actor=teacher)
+            self.assertEqual([row.can_delete for row in responses], [True, False, False])
+            admin = SimpleNamespace(id=uuid4(), role="admin")
+            responses = await build_question_responses(object(), questions, request_actor=admin)
+            self.assertEqual([row.can_delete for row in responses], [True, False, True])
+
+    async def test_only_empty_unreferenced_banks_are_deletable_by_admin(self):
+        actor = SimpleNamespace(id=uuid4(), role="admin")
+        banks = [QuestionBank(id=uuid4(), curriculum_subject_id=uuid4(), name="Bank", description=None,
+                              created_by_actor_id=actor.id, is_active=True) for _ in range(3)]
+        QuestionRepository.list_nonempty_bank_ids.return_value = {banks[1].id}
+        ExamRepository.list_referenced_bank_ids.return_value = {banks[2].id}
+        responses = await build_question_bank_responses(object(), banks, request_actor=actor)
+        self.assertEqual([row.can_delete for row in responses], [True, False, False])
+        actor.role = "teacher"
+        responses = await build_question_bank_responses(object(), banks, request_actor=actor)
+        self.assertEqual([row.can_delete for row in responses], [False, False, False])
+
     async def test_teacher_question_prefers_current_academic_name(self) -> None:
         membership_id = uuid4()
         teacher = SimpleNamespace(

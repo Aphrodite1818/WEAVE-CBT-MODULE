@@ -104,6 +104,7 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
   }
 
   const requestLifecycleAction = (question, action) => {
+    if (action === 'delete' && question.canDelete !== true) return
     closeLifecycle()
     setLifecycleModalError('')
     setPendingLifecycleAction({ question, action })
@@ -273,7 +274,7 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
                         <small>{question.status === 'Archived' ? 'Make it available for authoring again.' : 'Hide it from active authoring.'}</small>
                       </span>
                     </button>
-                    <button
+                    {question.canDelete === true && (<button
                       type="button"
                       className="teacher-question-lifecycle__delete"
                       onClick={() => requestLifecycleAction(question, 'delete')}
@@ -283,7 +284,7 @@ export function QuestionsPage({ dispatch, teacherData, gateway }) {
                         <strong>Delete permanently</strong>
                         <small>Only unused questions can be deleted. Used questions must be archived.</small>
                       </span>
-                    </button>
+                    </button>)}
                   </div>
                 )}
               </div>

@@ -166,6 +166,7 @@ function normalizeBank(bank, questions, subjectByCurriculum) {
     status: bank.is_active ? 'Ready' : 'Archived',
     count: bankQuestions.length,
     activeQuestionCount: bankQuestions.filter((question) => question.status === 'Ready').length,
+    canDelete: bank.can_delete === true,
     createdByActorId: bank.created_by_actor_id,
   }
 }
@@ -184,6 +185,7 @@ function normalizeQuestion(question, bank) {
     version: question.version,
     options: question.options,
     bankName: bank.name,
+    canDelete: question.can_delete === true,
     createdByActorId: question.created_by_actor_id,
     lastEditedByActorId: question.last_edited_by_actor_id,
   }

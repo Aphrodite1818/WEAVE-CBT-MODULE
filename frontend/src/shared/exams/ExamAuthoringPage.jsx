@@ -1,5 +1,5 @@
 import { examRevisionHistory, loadAllExams } from './examLineage'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { RiCheckLine, RiCheckboxCircleFill, RiCheckboxBlankCircleLine } from '@remixicon/react'
 import { buildAcademicLevels, findSubjectScope, humanizeAcademicCategory, listBanksForSubject, listSubjectsForLevel } from '../academics/authoringScope'
 import { Icon } from '../icons/Icon'
@@ -18,7 +18,14 @@ export function ExamAuthoringPage(props) {
   return <ExamAuthoringForm key={props.state?.staff?.selectedExamId || 'new'} {...props} />
 }
 
-function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
+function ExamAuthoringForm({ state, dispatch, teacherData, gateway, active = true }) {
+  const previewTriggerRef = useRef(null)
+  useEffect(() => {
+    if (active && previewTriggerRef.current) {
+      previewTriggerRef.current.focus()
+      previewTriggerRef.current = null
+    }
+  }, [active])
   const selectedExamId = state?.staff?.selectedExamId || null
   const editingExam = selectedExamId
     ? teacherData.exams.find((exam) => exam.id === selectedExamId)
@@ -601,6 +608,13 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
                 gateway={gateway}
                 selectedIds={manualQuestionIds}
                 onChange={(ids) => setManualSelection({ bankId, ids })}
+                onPreview={(questionId, trigger) => {
+                  previewTriggerRef.current = trigger
+                  dispatch({
+                    type: 'staff',
+                    patch: { section: 'preview-question', selectedQuestionId: questionId, questionPreviewOrigin: 'create-exam' },
+                  })
+                }}
                 disabled={!canManageManualSelections || questionConfigurationChanged || saving || leadSaving || questionSaving}
                 actorId={actor?.id}
                 canManageAllSelections={canManageConfiguration}

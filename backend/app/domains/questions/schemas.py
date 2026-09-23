@@ -10,7 +10,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domains.questions.models import QuestionType
 
-
 MAX_BANK_DESCRIPTION_LENGTH = 4_000
 MAX_QUESTION_PROMPT_LENGTH = 20_000
 MAX_QUESTION_INSTRUCTION_LENGTH = 10_000
@@ -48,6 +47,7 @@ class QuestionBankResponse(OutputBase):
     description: str | None
     created_by_actor_id: UUID
     is_active: bool
+    can_delete: bool = False
 
 
 class QuestionOptionCreate(InputBase):
@@ -56,7 +56,7 @@ class QuestionOptionCreate(InputBase):
     is_correct: bool = False
 
     @model_validator(mode="after")
-    def require_content(self) -> "QuestionOptionCreate":
+    def require_content(self) -> QuestionOptionCreate:
         if not self.text and self.image_asset_id is None:
             raise ValueError("An answer option must include text, an image, or both")
         return self
@@ -123,4 +123,5 @@ class QuestionResponse(OutputBase):
     author_name: str
     last_edited_by_actor_id: UUID | None
     is_active: bool
+    can_delete: bool = False
     options: list[QuestionOptionResponse] = Field(default_factory=list)

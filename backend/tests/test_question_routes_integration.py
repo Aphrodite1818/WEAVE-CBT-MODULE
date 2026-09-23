@@ -12,27 +12,36 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from fastapi import FastAPI  # noqa: E402
-from starlette.testclient import TestClient  # noqa: E402
+from fastapi import FastAPI
+from starlette.testclient import TestClient
 
-from app.core.database import get_database_session  # noqa: E402
-from app.domains.auth.dependencies import get_current_local_actor  # noqa: E402
-from app.domains.media.models import MediaAsset  # noqa: E402
-from app.domains.media.router import router as media_router  # noqa: E402
-from app.domains.media.service import MediaContent, MediaService  # noqa: E402
-from app.domains.questions.models import (  # noqa: E402
+from app.core.database import get_database_session
+from app.domains.auth.dependencies import get_current_local_actor
+from app.domains.exams.repository import ExamRepository
+from app.domains.media.models import MediaAsset
+from app.domains.media.router import router as media_router
+from app.domains.media.service import MediaContent, MediaService
+from app.domains.questions.models import (
     Question,
     QuestionBank,
     QuestionOption,
     QuestionType,
 )
-from app.domains.questions.repository import QuestionRepository  # noqa: E402
-from app.domains.questions.router import router as questions_router  # noqa: E402
-from app.domains.questions.service import QuestionService  # noqa: E402
+from app.domains.questions.repository import QuestionRepository
+from app.domains.questions.router import router as questions_router
+from app.domains.questions.service import QuestionService
 
 
 class QuestionRouteIntegrationTests(unittest.TestCase):
     def setUp(self) -> None:
+        for repository, method in [
+            (ExamRepository, "list_referenced_question_ids"),
+            (ExamRepository, "list_referenced_bank_ids"),
+            (QuestionRepository, "list_nonempty_bank_ids"),
+        ]:
+            patcher = patch.object(repository, method, new=AsyncMock(return_value=set()))
+            patcher.start()
+            self.addCleanup(patcher.stop)
         self.db = object()
         self.current_actor = SimpleNamespace(
             id=uuid4(),

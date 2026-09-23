@@ -76,6 +76,7 @@ describe('Teacher question lifecycle deletion', () => {
       type: 'Single choice',
       image: false,
       status: 'Ready',
+      canDelete: true,
       version: 2,
       options: rawQuestion.options,
     }

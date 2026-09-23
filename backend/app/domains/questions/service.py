@@ -481,6 +481,11 @@ class QuestionService:
                 "A question bank containing questions cannot be deleted; archive it instead"
             )
 
+        if await ExamRepository.list_referenced_bank_ids(db, [bank.id]):
+            raise ValueError(
+                "A question bank used by an exam cannot be deleted; archive it instead"
+            )
+
         await QuestionRepository.delete_bank(db, bank)
         await db.commit()
 
