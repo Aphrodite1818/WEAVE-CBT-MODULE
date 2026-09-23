@@ -16,7 +16,10 @@
 }
 .exam-datetime__trigger svg { color: rgb(var(--color-primary)); flex-shrink: 0; }
 .exam-datetime__trigger.has-value { color: rgb(var(--color-text)); }
+.exam-datetime__trigger.is-overdue { border-color: #d92d20; background: rgb(217 45 32 / .04); color: #912018; }
+.exam-datetime__trigger.is-overdue svg { color: #d92d20; }
 .exam-datetime__trigger:disabled { opacity: .6; cursor: default; }
+.exam-datetime__elapsed { margin: 7px 0 0; color: #b42323; font-size: 12px; font-weight: 600; line-height: 1.45; }
 .exam-datetime-dialog {
   width: min(380px, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);
