@@ -152,12 +152,12 @@
 
 /*
  * The sidebar toggle deliberately straddles the boundary between the sidebar,
- * topbar and page content. This keeps the useful "eating into the sidebar"
- * effect without crowding the school brand inside the header.
+ * topbar and page content. Keep only a small overlap so the control still
+ * belongs to the rail without crowding the collapsed school mark.
  */
 .teacher-shell .dashboard-sidebar-toggle {
   position: absolute;
-  left: -19px;
+  left: -8px;
   bottom: -19px;
   z-index: 55;
   width: 38px;
