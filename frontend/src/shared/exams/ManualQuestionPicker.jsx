@@ -15,6 +15,8 @@ export function ManualQuestionPicker({
   onSaved,
   actorId,
   canManageAllSelections = false,
+  deferManagedSelections = false,
+  ignorePersistedSelections = false,
 }) {
   const [resource, setResource] = useState({ loading: true, questions: [], selections: [], version: null, error: '' })
   const [query, setQuery] = useState('')
@@ -22,9 +24,11 @@ export function ManualQuestionPicker({
   const [busy, setBusy] = useState(false)
   const [retry, setRetry] = useState(0)
   const [stagedAddIds, setStagedAddIds] = useState([])
+  const [managedIds, setManagedIds] = useState([])
   const examId = exam?.id
   const limit = Number(exam?.questionCount)
   const contributionMode = Boolean(examId && !canManageAllSelections)
+  const managedDraftMode = Boolean(examId && canManageAllSelections && deferManagedSelections)
   const contributionStorageKey = contributionMode && actorId
     ? `weave-cbt:manual-contribution:${examId}:${actorId}:${bankId}`
     : ''
@@ -46,18 +50,29 @@ export function ManualQuestionPicker({
 
       setStagedAddIds(restored)
       persistStagedAdditions(contributionStorageKey, restored)
+
+      if (managedDraftMode) {
+        const nextManagedIds = ignorePersistedSelections
+          ? []
+          : selections.map((row) => row.question_id)
+        setManagedIds(nextManagedIds)
+        onChange?.(nextManagedIds)
+      }
+
       setResource({ loading: false, questions, selections, version: current?.authoring_version ?? current?.authoringVersion ?? null, error: '' })
     }).catch((error) => {
       if (!cancelled) setResource((previous) => ({ ...previous, loading: false, error: error.userMessage || 'Could not load the question bank. Please retry.' }))
     })
     return () => { cancelled = true }
-  }, [bankId, contributionMode, contributionStorageKey, examId, gateway, retry])
+  }, [bankId, contributionMode, contributionStorageKey, examId, gateway, ignorePersistedSelections, managedDraftMode, retry])
 
   const persistedIds = examId ? resource.selections.map((row) => row.question_id) : []
   const ids = examId
-    ? contributionMode
-      ? [...persistedIds, ...stagedAddIds.filter((questionId) => !persistedIds.includes(questionId))]
-      : persistedIds
+    ? managedDraftMode
+      ? managedIds
+      : contributionMode
+        ? [...persistedIds, ...stagedAddIds.filter((questionId) => !persistedIds.includes(questionId))]
+        : persistedIds
     : selectedIds
   const selected = new Set(ids)
   const staged = new Set(stagedAddIds)
@@ -85,6 +100,15 @@ export function ManualQuestionPicker({
       return
     }
 
+    if (managedDraftMode) {
+      const nextIds = selected.has(questionId)
+        ? ids.filter((id) => id !== questionId)
+        : [...ids, questionId]
+      setManagedIds(nextIds)
+      onChange?.(nextIds)
+      return
+    }
+
     if (contributionMode && staged.has(questionId)) {
       stageAdditions(stagedAddIds.filter((id) => id !== questionId))
       return
@@ -102,7 +126,7 @@ export function ManualQuestionPicker({
       const updated = removing
         ? await gateway.exams.removeManualQuestion(examId, questionId, resource.version)
         : await gateway.exams.addManualQuestions(examId, [questionId], resource.version)
-      // Lead/admin mutations and removals of already-saved contributor questions are committed immediately.
+      // Legacy/immediate management paths and persisted contributor removals commit here.
       setResource((previous) => ({
         ...previous,
         version: updated.authoring_version ?? updated.authoringVersion ?? previous.version,
@@ -153,9 +177,11 @@ export function ManualQuestionPicker({
   return (
     <div className="exam-manual-picker" aria-busy={resource.loading || busy}>
       <div className="exam-manual-picker__heading"><div><h3>Choose questions</h3><p>{examId
-        ? contributionMode
-          ? 'New picks are kept on this device until you save your contribution. Removing one of your already-saved questions is applied immediately.'
-          : 'Changes to this selection are saved immediately.'
+        ? managedDraftMode
+          ? 'Selection changes stay in this form and are saved together with the examination.'
+          : contributionMode
+            ? 'New picks are kept on this device until you save your contribution. Removing one of your already-saved questions is applied immediately.'
+            : 'Changes to this selection are saved immediately.'
         : 'Your selected questions will be added when you create the draft.'}</p></div><strong>{ids.length} / {limit} selected</strong></div>
       <div className="exam-manual-picker__tools">
         <label className="teacher-search-control"><RiSearchLine size={17} /><input aria-label="Search bank questions" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search this question bank" /></label>
@@ -192,7 +218,7 @@ export function ManualQuestionPicker({
           </button>
         </div>
       )}
-      <p className="exam-section-note">Select {limit} questions before submitting the paper for review. {selectionOverLimit ? 'Remove the extra staged selections to match the question count.' : ''}</p>
+      <p className="exam-section-note">Select {limit} questions before submitting the paper for review. {selectionOverLimit ? 'Remove the extra selections to match the question count.' : ''}</p>
     </div>
   )
 }
