@@ -656,17 +656,43 @@ class ExamService(
         *,
         actor: LocalActor,
         exam_id: UUID,
+        expected_authoring_version: int = 1,
     ) -> Exam:
         exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id, lock=True)
         if exam is None:
             raise ExamNotFound("Examination does not exist")
+        if exam.status != ExamStatus.DRAFT:
+            raise ExamStateError("Only examinations in DRAFT state can be submitted")
+        cls._require_expected_authoring_version(exam, expected_authoring_version)
+        cls._require_lead_or_admin(actor, exam)
+        await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+            db,
+            actor=actor,
+            curriculum_subject_id=exam.curriculum_subject_id,
+            academic_term_id=exam.term_id,
+        )
         cls._require_authoring_schedule(
             scheduled_start_at=exam.scheduled_start_at,
             latest_normal_start_at=exam.latest_normal_start_at,
             require_scheduled=True,
             action="submitting it for review",
         )
-        return await super().submit_exam(db, actor=actor, exam_id=exam_id)
+        await ExamTimetableService.require_planned_slot_available(
+            db,
+            session_id=exam.session_id,
+            term_id=exam.term_id,
+            curriculum_subject_id=exam.curriculum_subject_id,
+            scheduled_start_at=exam.scheduled_start_at,
+            latest_normal_start_at=exam.latest_normal_start_at,
+            duration_minutes=exam.duration_minutes,
+            exclude_exam_id=exam.id,
+        )
+        return await super().submit_exam(
+            db,
+            actor=actor,
+            exam_id=exam_id,
+            expected_authoring_version=expected_authoring_version,
+        )
 
     @classmethod
     async def remove_manual_question(
@@ -745,6 +771,9 @@ class ExamService(
         exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id, lock=True)
         if exam is None:
             raise ExamNotFound("Examination does not exist")
+        if exam.status != ExamStatus.SUBMITTED:
+            raise ExamStateError("Only examinations in SUBMITTED state can be sealed")
+        cls._require_admin(actor)
         cls._require_authoring_schedule(
             scheduled_start_at=exam.scheduled_start_at,
             latest_normal_start_at=exam.latest_normal_start_at,
