@@ -1,3 +1,4 @@
+import { ToastHost } from '../shared/ui/ToastHost'
 import { StudentLoginPage } from '../features/auth/StudentLoginPage'
 import { LandingPage } from '../features/landing/LandingPage'
 import { StudentWorkspace } from '../features/student/StudentWorkspace'
@@ -48,6 +49,7 @@ export default function StudentApp() {
           returnToSignIn={signOut}
         />
       )}
+      <ToastHost />
     </div>
   )
 }

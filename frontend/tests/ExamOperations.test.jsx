@@ -1,3 +1,4 @@
+import { ToastHost } from '../src/shared/ui/ToastHost'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { ExamOperations, ExamOperationsDetail } from '../src/features/admin/pages/ExamOperations'
@@ -145,6 +146,7 @@ describe('Admin exam operations workspace', () => {
   })
 
   it('requires an audit reason before suspending a live examination', async () => {
+    render(<ToastHost />)
     const exam = makeExam({ status: 'active', statusLabel: 'Active' })
     const data = makeAdminData([exam])
     const gateway = makeGateway()
@@ -162,7 +164,7 @@ describe('Admin exam operations workspace', () => {
     const dialog = screen.getByRole('alertdialog')
     fireEvent.click(within(dialog).getByRole('button', { name: /^suspend examination$/i }))
 
-    expect(within(dialog).getByText(/enter a reason before continuing/i)).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(/enter a reason before continuing/i)
     expect(gateway.exams.suspendExam).not.toHaveBeenCalled()
 
     fireEvent.change(within(dialog).getByRole('textbox', { name: /reason/i }), { target: { value: 'Network interruption' } })

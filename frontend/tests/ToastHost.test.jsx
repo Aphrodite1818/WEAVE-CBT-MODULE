@@ -1,7 +1,9 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { weaveRequest } from '../src/api/client'
 import { ToastHost } from '../src/shared/ui/ToastHost'
+import { Notice } from '../src/shared/ui'
+import { toastBus } from '../src/shared/ui/useToast'
 
 function response({ status = 200, body = '{}' } = {}) {
   return {
@@ -14,6 +16,8 @@ function response({ status = 200, body = '{}' } = {}) {
 
 describe('shared toast confirmations', () => {
   afterEach(() => {
+    act(() => toastBus.clear())
+    vi.useRealTimers()
     vi.unstubAllGlobals()
   })
 
@@ -45,4 +49,57 @@ describe('shared toast confirmations', () => {
 
     expect(screen.getByText('Unused question deleted.')).toBeInTheDocument()
   })
+  it('routes notices into the shared host even when they mount before it', () => {
+    const { container } = render(<><Notice tone="danger">Duplicate examination.</Notice><ToastHost /></>)
+    expect(screen.getByRole('alert')).toHaveTextContent('Duplicate examination.')
+    expect(container.querySelector('.notice')).toBeNull()
+    expect(container.querySelector('.weave-toast--error')).toBeInTheDocument()
+  })
+
+  it('auto-dismisses errors after four seconds without resurrecting them on unrelated renders', () => {
+    vi.useFakeTimers()
+    const view = render(<><Notice tone="danger">Failed to save.</Notice><ToastHost /></>)
+    act(() => vi.advanceTimersByTime(3999))
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(1))
+    expect(screen.getByRole('alert')).toHaveClass('is-leaving')
+    act(() => vi.advanceTimersByTime(200))
+    view.rerender(<><Notice tone="danger">Failed to save.</Notice><ToastHost /></>)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    view.rerender(<><Notice tone="danger">A different error.</Notice><ToastHost /></>)
+    expect(screen.getByRole('alert')).toHaveTextContent('A different error.')
+  })
+
+  it('deduplicates messages and removes scoped notices when the page unmounts', () => {
+    const view = render(<><Notice tone="warning">Unavailable.</Notice><Notice tone="warning">Unavailable.</Notice><ToastHost /></>)
+    expect(screen.getAllByText('Unavailable.')).toHaveLength(1)
+    view.rerender(<ToastHost />)
+    expect(screen.queryByText('Unavailable.')).not.toBeInTheDocument()
+  })
+
+  it('does not restart an existing success timer when another notification arrives', () => {
+    vi.useFakeTimers()
+    render(<ToastHost />)
+    act(() => toastBus.success('First save.'))
+    act(() => vi.advanceTimersByTime(3000))
+    act(() => toastBus.success('Second save.'))
+    act(() => vi.advanceTimersByTime(1000))
+    act(() => vi.advanceTimersByTime(200))
+    expect(screen.queryByText('First save.')).not.toBeInTheDocument()
+    expect(screen.getByText('Second save.')).toBeInTheDocument()
+  })
+
+  it('pauses dismissal while a notification is being read', () => {
+    vi.useFakeTimers()
+    render(<ToastHost />)
+    act(() => toastBus.success('Saved.'))
+    fireEvent.mouseEnter(screen.getByRole('status'))
+    act(() => vi.advanceTimersByTime(10000))
+    expect(screen.getByText('Saved.')).toBeInTheDocument()
+    fireEvent.mouseLeave(screen.getByRole('status'))
+    act(() => vi.advanceTimersByTime(4000))
+    act(() => vi.advanceTimersByTime(200))
+    expect(screen.queryByText('Saved.')).not.toBeInTheDocument()
+  })
+
 })

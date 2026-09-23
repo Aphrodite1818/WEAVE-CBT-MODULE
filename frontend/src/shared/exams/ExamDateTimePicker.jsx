@@ -1,0 +1,88 @@
+﻿import { useId, useRef, useState } from 'react'
+import { RiCalendarLine, RiArrowLeftSLine, RiArrowRightSLine, RiCloseLine, RiTimeLine } from '@remixicon/react'
+import { SelectControl } from '../ui'
+import './exam-date-time-picker.css'
+
+const pad = (value) => String(value).padStart(2, '0')
+const dateKey = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+const dateLabel = (date) => date.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
+const timeOptions = (count) => Array.from({ length: count }, (_, value) => ({ value: pad(value), label: pad(value) }))
+const HOURS = timeOptions(24)
+const MINUTES = timeOptions(60)
+
+export function ExamDateTimePicker({ label, value, onChange, min = '', disabled = false }) {
+  const dialogRef = useRef(null)
+  const headingId = useId()
+  const helpId = useId()
+  const [draft, setDraft] = useState('')
+  const [month, setMonth] = useState(() => new Date())
+  const [opened, setOpened] = useState(false)
+  const selectedDate = draft.slice(0, 10)
+  const hours = draft.slice(11, 13) || '09'
+  const minutes = draft.slice(14, 16) || '00'
+  const tooEarly = Boolean(min && draft && draft < min)
+  const firstDay = new Date(month.getFullYear(), month.getMonth(), 1).getDay()
+  const dayCount = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()
+  const today = dateKey(new Date())
+
+  const open = () => {
+    const initial = value || min || `${today}T09:00`
+    setDraft(initial)
+    setMonth(new Date(`${initial.slice(0, 10)}T12:00`))
+    setOpened(true)
+    dialogRef.current.showModal()
+  }
+  const close = () => dialogRef.current.close()
+  const changeTime = (hour, minute) => setDraft(`${selectedDate}T${hour}:${minute}`)
+  const moveMonth = (offset) => setMonth(new Date(month.getFullYear(), month.getMonth() + offset, 1))
+
+  return (
+    <div className="teacher-exam-field exam-datetime">
+      <span>{label} <small>(optional)</small></span>
+      <button type="button" className={`exam-datetime__trigger${value ? ' has-value' : ''}`} aria-label={label} aria-haspopup="dialog" disabled={disabled} onClick={open}>
+        <RiCalendarLine size={18} aria-hidden="true" />
+        <span>{value ? new Date(value).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Choose date & time'}</span>
+      </button>
+      <dialog ref={dialogRef} className="exam-datetime-dialog" aria-labelledby={headingId} onClose={() => setOpened(false)} onClick={(event) => {
+        if (event.target !== event.currentTarget) return
+        const rect = event.currentTarget.getBoundingClientRect()
+        if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) close()
+      }}>
+        {opened && <>
+          <header className="exam-datetime-dialog__heading">
+            <div><h2 id={headingId}>{label}</h2><p>Choose a date and local time.</p></div>
+            <button type="button" className="exam-datetime__icon-button" aria-label="Close date picker" onClick={close}><RiCloseLine size={20} /></button>
+          </header>
+          <div className="exam-calendar__navigation">
+            <button type="button" className="exam-datetime__icon-button" aria-label="Previous month" onClick={() => moveMonth(-1)}><RiArrowLeftSLine size={20} /></button>
+            <strong aria-live="polite">{month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</strong>
+            <button type="button" className="exam-datetime__icon-button" aria-label="Next month" onClick={() => moveMonth(1)}><RiArrowRightSLine size={20} /></button>
+          </div>
+          <div className="exam-calendar" role="group" aria-label="Choose date">
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => <span className="exam-calendar__weekday" key={day} aria-hidden="true">{day}</span>)}
+            {Array.from({ length: firstDay }, (_, index) => <span key={`empty-${index}`} />)}
+            {Array.from({ length: dayCount }, (_, index) => {
+              const date = new Date(month.getFullYear(), month.getMonth(), index + 1, 12)
+              const key = dateKey(date)
+              return <button type="button" key={key} aria-label={dateLabel(date)} aria-pressed={selectedDate === key} aria-current={today === key ? 'date' : undefined} disabled={Boolean(min && key < min.slice(0, 10))} onClick={() => setDraft(`${key}T${hours}:${minutes}`)}>{index + 1}</button>
+            })}
+          </div>
+          <div className="exam-datetime__time">
+            <span><RiTimeLine size={18} aria-hidden="true" /> Time <small>24-hour</small></span>
+            <SelectControl label={`${label} hour`} value={hours} options={HOURS} onChange={(hour) => changeTime(hour, minutes)} />
+            <span aria-hidden="true">:</span>
+            <SelectControl label={`${label} minute`} value={minutes} options={MINUTES} onChange={(minute) => changeTime(hours, minute)} />
+          </div>
+          <p id={helpId} className={`exam-datetime__hint${tooEarly ? ' is-error' : ''}`} role={tooEarly ? 'alert' : undefined}>
+            {tooEarly ? 'Choose a time on or after the scheduled start.' : 'Times use this device’s local timezone.'}
+          </p>
+          <footer className="exam-datetime-dialog__actions">
+            <button type="button" className="exam-text-action" onClick={() => { onChange(''); close() }}>Clear</button>
+            <button type="button" className="teacher-secondary-action" onClick={close}>Cancel</button>
+            <button type="button" className="teacher-primary-action" disabled={!draft || tooEarly} aria-describedby={helpId} onClick={() => { onChange(draft); close() }}>Apply</button>
+          </footer>
+        </>}
+      </dialog>
+    </div>
+  )
+}

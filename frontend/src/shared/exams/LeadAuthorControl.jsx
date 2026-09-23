@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { SelectControl } from '../ui'
+import { Notice, SelectControl } from '../ui'
 
 export function LeadAuthorControl({
   gateway,
@@ -84,7 +84,7 @@ export function LeadAuthorControl({
         disabled={disabled || loading || !subjectId || !termId}
       />
       {loading && <small>Loading eligible teachers…</small>}
-      {error && <small className="teacher-exam-field__error" role="status">{error}</small>}
+      {error && <Notice tone="warning">{error}</Notice>}
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { ToastHost } from '../src/shared/ui/ToastHost'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -16,6 +17,7 @@ const gateway = {
 }
 
 function renderWaitingRoom(resolution) {
+  render(<ToastHost />)
   render(
     <StudentWorkspace
       exam={baseExamState}

@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
-import { RiCheckLine, RiCheckboxCircleFill, RiCheckboxBlankCircleLine, RiInformationLine } from '@remixicon/react'
+import { RiCheckLine, RiCheckboxCircleFill, RiCheckboxBlankCircleLine } from '@remixicon/react'
 import { buildAcademicLevels, findSubjectScope, humanizeAcademicCategory, listBanksForSubject, listSubjectsForLevel } from '../academics/authoringScope'
 import { Icon } from '../icons/Icon'
-import { Notice, SelectControl, StatusBadge } from '../ui'
+import { Notice, SelectControl } from '../ui'
 import { ExamFolder } from './ExamCard'
+import { ExamDateTimePicker } from './ExamDateTimePicker'
+import { ManualQuestionPicker } from './ManualQuestionPicker'
 import { LeadAuthorControl } from './LeadAuthorControl'
 import { canManageExam } from './examPermissions'
 import './exam-workspace.css'
@@ -49,6 +51,9 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
   const [shuffleOptions, setShuffleOptions] = useState(editingExam?.shuffleOptions !== false)
   const [scheduledStartAt, setScheduledStartAt] = useState(toDateTimeLocal(editingExam?.scheduledStartAt))
   const [latestNormalStartAt, setLatestNormalStartAt] = useState(toDateTimeLocal(editingExam?.latestNormalStartAt))
+  const [manualSelection, setManualSelection] = useState({ bankId: '', ids: [] })
+  const manualQuestionIds = manualSelection.bankId === bankId ? manualSelection.ids : []
+  const [questionSaving, setQuestionSaving] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -91,6 +96,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
     setSubjectId(firstSubject?.id || '')
     setBankId(firstSubject ? listBanksForSubject(teacherData.banks, firstSubject.id)[0]?.id || '' : '')
     resetLead()
+    setManualSelection({ bankId: '', ids: [] })
     setError('')
   }
 
@@ -98,17 +104,18 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
     setSubjectId(nextSubjectId)
     setBankId(listBanksForSubject(teacherData.banks, nextSubjectId)[0]?.id || '')
     resetLead()
+    setManualSelection({ bankId: '', ids: [] })
     setError('')
   }
 
   const leaveForm = () => dispatch({
     type: 'staff',
-    patch: { section: 'exams', selectedExamId: null },
+    patch: { section: 'exams', selectedExamId: null, examAuthoringNotice: '' },
   })
 
   const saveExam = async (event) => {
     event.preventDefault()
-    if (readOnly || saving || leadSaving) return
+    if (readOnly || saving || leadSaving || questionSaving) return
     setError('')
 
     if (!teacherData.session?.id || !teacherData.term?.id) {
@@ -131,8 +138,16 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
       setError('Question count and duration must both be greater than zero.')
       return
     }
+    if (!editing && selectionMode === 'manual' && manualQuestionIds.length > Number(questionCount)) {
+      setError('Remove extra manual selections or increase the number of questions.')
+      return
+    }
     if (capacityIssue) {
       setError(capacityIssue)
+      return
+    }
+    if ([scheduledStartAt, latestNormalStartAt].some((value) => value && !toIsoOrNull(value))) {
+      setError('Choose a valid date and time for the examination schedule.')
       return
     }
     if (
@@ -161,7 +176,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
           latest_normal_start_at: toIsoOrNull(latestNormalStartAt),
         })
       } else {
-        await gateway.exams.createExam({
+        const createdExam = await gateway.exams.createExam({
           ...(isAdmin ? { lead_teacher_id: leadTeacherId || null } : {}),
           session_id: teacherData.session.id,
           term_id: teacherData.term.id,
@@ -180,6 +195,22 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
           scheduled_start_at: toIsoOrNull(scheduledStartAt),
           latest_normal_start_at: toIsoOrNull(latestNormalStartAt),
         })
+        if (selectionMode === 'manual' && manualQuestionIds.length) {
+          try {
+            await gateway.exams.addManualQuestions(createdExam.id, manualQuestionIds, createdExam.authoring_version)
+          } catch (selectionError) {
+            // Creation committed separately. Continue on that draft so retrying cannot create a duplicate.
+            try {
+              await teacherData.refresh()
+            } finally {
+              dispatch({ type: 'staff', patch: {
+                section: 'create-exam', selectedExamId: createdExam.id,
+                examAuthoringNotice: `The draft was created, but its questions could not be added. ${selectionError.userMessage || 'Choose the questions again below.'}`,
+              } })
+            }
+            return
+          }
+        }
       }
 
       await teacherData.refresh()
@@ -243,9 +274,6 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
     <div className="teacher-reference-page teacher-exam-builder-page exam-authoring-page">
       <header className="teacher-exam-builder-header">
         <div>
-          <button className="teacher-exam-back" type="button" onClick={leaveForm}>
-            <Icon name="back" size={16} /> Back to Examinations
-          </button>
           <div className="teacher-page-title-line">
             <span className="teacher-page-title-icon"><Icon name="exam" size={28} /></span>
             <h1>{readOnly ? 'Examination details' : editing ? 'Edit Examination' : 'Create Examination'}</h1>
@@ -253,16 +281,13 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
           <p>{readOnly ? 'Review the paper and its current examination settings.' : 'Set up the paper, choose a question source and configure delivery.'}</p>
         </div>
         <div className="teacher-exam-builder-header__actions">
-          <button className="teacher-secondary-action" type="button" onClick={leaveForm} disabled={saving || leadSaving}>{readOnly ? 'Back to exams' : 'Cancel'}</button>
-          {!readOnly && (
-            <button className="teacher-primary-action" type="submit" form="exam-authoring-form" disabled={!canSave || saving || leadSaving}>
-              <Icon name="plus" size={17} />
-              {saving ? 'Saving...' : editing ? 'Save changes' : 'Create Draft Exam'}
-            </button>
-          )}
+          <button className="teacher-primary-action" type="button" onClick={leaveForm} disabled={saving || leadSaving || questionSaving}>
+            <Icon name="back" size={17} /> Back to Examinations
+          </button>
         </div>
       </header>
 
+      {state.staff?.examAuthoringNotice && <Notice tone="warning">{state.staff.examAuthoringNotice}</Notice>}
       {error && <Notice tone="danger">{error}</Notice>}
       {teacherData.error && <Notice tone="danger">{teacherData.error}</Notice>}
       {teacherData.warning && <Notice tone="warning">{teacherData.warning}</Notice>}
@@ -272,13 +297,13 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
       {readOnly && <Notice>This paper is {editingExam.statusLabel.toLowerCase()}. Draft metadata can only be edited by its lead author or an administrator.</Notice>}
 
       <form id="exam-authoring-form" className="teacher-exam-builder" onSubmit={saveExam}>
-        <fieldset className="teacher-exam-builder__main" disabled={readOnly || saving || leadSaving}>
-          <ExamSection number="1" title="Paper details" description="Choose the academic level first, then the subject available in that level." kind="paper">
-            <label className="teacher-exam-field">
+        <fieldset className="teacher-exam-builder__main" disabled={readOnly || saving || leadSaving || questionSaving}>
+          <ExamSection number="1" title="Paper details" description="Name the paper and choose its academic context." kind="paper">
+            <label className="teacher-exam-field teacher-exam-field--wide">
               <span>Exam title <em>*</em></span>
               <input aria-label="Exam title" required value={title} maxLength={255} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Computer Studies CA2" />
             </label>
-            <FieldSelect label="Academic level *" helper={!editing && levelId ? 'Only subjects in this level are shown next.' : undefined}>
+            <FieldSelect label="Academic level *" >
               <SelectControl
                 label="Academic level"
                 value={levelId}
@@ -321,9 +346,8 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
                 placeholder="Choose component"
               />
             </FieldSelect>
-          </ExamSection>
-
-          <ExamSection number="2" title="Authoring ownership" description="Coordinate this shared paper." kind="ownership">
+            <div className="exam-paper-options">
+            <div className="exam-paper-options__lead">
             {isAdmin ? (
               <LeadAuthorControl
                 key={`${subjectId}:${editingExam?.termId || teacherData.term?.id}`}
@@ -341,22 +365,17 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
                 <div><small>Lead author</small><strong>{leadName}</strong></div>
               </div>
             )}
-            <p className="exam-ownership-help">
-              <RiInformationLine size={18} />
-              {isAdmin ? 'You may assign an eligible teacher to coordinate authoring.' : 'Teachers share the paper. The lead coordinates its details and submission.'}
-            </p>
             <div className="exam-ownership-status">
-              <StatusBadge tone="info">Shared {editingExam?.statusLabel.toLowerCase() || 'draft'}</StatusBadge>
               {editing && isAdmin && !readOnly && (
                 <button type="button" className="exam-text-action" onClick={saveLead} disabled={leadSaving || leadTeacherId === (editingExam.leadTeacherId || '')}>
                   {leadSaving ? 'Updating...' : 'Update lead'}
                 </button>
               )}
-              {leadMessage && <small role="status">{leadMessage}</small>}
+              {leadMessage && <Notice tone="success">{leadMessage}</Notice>}
             </div>
-          </ExamSection>
-
-          <ExamSection number="3" title="Exam appearance" description="Choose the folder colour shown in examination lists." kind="appearance">
+            </div>
+            <div className="exam-paper-options__colour">
+            <span className="exam-option-label">Folder colour</span>
             <div className="exam-palette" role="group" aria-label="Folder colour">
               {FOLDER_COLORS.map(([name, color]) => (
                 <button key={name} type="button" title={name} aria-label={`${name} folder`} aria-pressed={folderColor === color} style={{ '--swatch': color }} onClick={() => setFolderColor(color)}>
@@ -364,15 +383,13 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
                 </button>
               ))}
             </div>
-            <div className="exam-folder-preview">
-              <ExamFolder color={folderColor} size={52} />
-              <p><strong>Folder colour</strong><small>Saved with this examination.</small></p>
+            </div>
             </div>
           </ExamSection>
 
-          <ExamSection number="4" title="Questions" description="Choose the source and selection method." kind="questions">
-            <FieldSelect label="Question bank *" helper={subjectId ? 'Only banks in the selected level and subject are available.' : undefined}>
-              <SelectControl label="Question bank" value={bankId} options={subjectBanks.map((bank) => ({ value: bank.id, label: bank.name, description: `${bank.activeQuestionCount ?? bank.count ?? 0} active questions` }))} onChange={setBankId} disabled={editing || !subjectBanks.length || readOnly} placeholder={subjectId ? 'Choose bank' : 'Choose a subject first'} />
+          <ExamSection number="2" title="Questions & delivery" description="Choose your question source and how students take the paper." kind="questions">
+            <FieldSelect label="Question bank *">
+              <SelectControl label="Question bank" value={bankId} options={subjectBanks.map((bank) => ({ value: bank.id, label: bank.name, description: `${bank.activeQuestionCount ?? bank.count ?? 0} active questions` }))} onChange={(value) => { setBankId(value); setManualSelection({ bankId: value, ids: [] }) }} disabled={editing || !subjectBanks.length || readOnly} placeholder={subjectId ? 'Choose bank' : 'Choose a subject first'} />
             </FieldSelect>
             <label className="teacher-exam-field">
               <span>Number of questions <em>*</em></span>
@@ -387,11 +404,21 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
                 <SelectionCard value="manual" current={selectionMode} onChange={setSelectionMode} title="Manual selection" description="Choose specific questions." />
               </div>
             </fieldset>
-            {selectionMode === 'manual' && <p className="exam-section-note">Save the draft before adding specific questions. A manual paper cannot be submitted until its questions are selected.</p>}
+            {selectionMode === 'manual' && bankId && (
+              <ManualQuestionPicker
+                key={`${selectedExamId || 'new'}:${bankId}`}
+                bankId={bankId}
+                exam={editingExam || { questionCount }}
+                gateway={gateway}
+                selectedIds={manualQuestionIds}
+                onChange={(ids) => setManualSelection({ bankId, ids })}
+                disabled={readOnly || saving || leadSaving || questionSaving}
+                onBusyChange={setQuestionSaving}
+                onSaved={teacherData.refresh}
+              />
+            )}
             {editing && <p className="exam-section-note">The academic scope and question source are fixed here to preserve existing selections.</p>}
-          </ExamSection>
-
-          <ExamSection number="5" title="Exam settings" description="Configure delivery for students." kind="settings">
+            <div className="exam-delivery-options">
             <label className="teacher-exam-field">
               <span>Duration <em>*</em></span>
               <div className="teacher-exam-input-suffix">
@@ -401,27 +428,31 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
             </label>
             <ToggleSwitch checked={shuffleQuestions} onChange={setShuffleQuestions} label="Shuffle questions" />
             <ToggleSwitch checked={shuffleOptions} onChange={setShuffleOptions} label="Shuffle answer options" />
+            </div>
           </ExamSection>
 
-          <ExamSection number="6" title="Schedule" description="Optional - this can be set later." kind="schedule">
-            <label className="teacher-exam-field">
-              <span>Scheduled start <small>(optional)</small></span>
-              <input aria-label="Scheduled start" type="datetime-local" value={scheduledStartAt} onChange={(event) => setScheduledStartAt(event.target.value)} />
-            </label>
-            <label className="teacher-exam-field">
-              <span>Latest normal start <small>(optional)</small></span>
-              <input aria-label="Latest normal start" type="datetime-local" value={latestNormalStartAt} min={scheduledStartAt || undefined} onChange={(event) => setLatestNormalStartAt(event.target.value)} />
-            </label>
+          <ExamSection number="3" title="Schedule & instructions" description="Optional. Add now or return to these before the exam." kind="schedule">
+            <ExamDateTimePicker label="Scheduled start" value={scheduledStartAt} onChange={setScheduledStartAt} disabled={readOnly || saving || leadSaving || questionSaving} />
+            <ExamDateTimePicker label="Latest normal start" value={latestNormalStartAt} min={scheduledStartAt} onChange={setLatestNormalStartAt} disabled={readOnly || saving || leadSaving || questionSaving} />
             <label className="teacher-exam-field teacher-exam-field--wide">
               <span>Student instructions <small>(optional)</small></span>
               <textarea aria-label="Student instructions" rows="3" value={instructions} onChange={(event) => setInstructions(event.target.value)} placeholder="Instructions students will see before they start." />
             </label>
           </ExamSection>
+          {!readOnly && (
+            <footer className="exam-authoring-actions">
+              <button className="teacher-secondary-action" type="button" onClick={leaveForm} disabled={saving || leadSaving || questionSaving}>Cancel</button>
+              <button className="teacher-primary-action" type="submit" disabled={!canSave || saving || leadSaving || questionSaving}>
+                <Icon name="plus" size={17} />
+                {saving ? 'Saving...' : editing ? 'Save changes' : 'Create Draft Exam'}
+              </button>
+            </footer>
+          )}
         </fieldset>
 
         <aside className="exam-summary" aria-label="Draft examination summary">
           <header><Icon name="exam" size={19} /><div><h2>Exam summary</h2><p>Live preview of your examination.</p></div></header>
-          <div className="exam-summary__preview"><ExamFolder color={folderColor} size={78} /><span className={`exam-status exam-status--${editingExam?.status || 'draft'}`}>{editingExam?.statusLabel || 'Draft'}</span></div>
+          <div className="exam-summary__preview"><ExamFolder color={folderColor} size={54} /><span className={`exam-status exam-status--${editingExam?.status || 'draft'}`}>{editingExam?.statusLabel || 'Draft'}</span></div>
           <h3>{title.trim() || 'Untitled examination'}</h3>
           <p className="exam-summary__context">{selectedLevel?.name || 'Choose level'} &middot; {selectedSubject?.name || 'Choose subject'} &middot; {selectedComponent?.name || 'Choose component'}</p>
           <SummaryRow label="Lead author" value={leadName} />
@@ -438,11 +469,11 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
                     <span>{label}</span>
                   </li>
                 ))}
-                <li><RiCheckboxBlankCircleLine size={17} /><span>Schedule & instructions optional</span></li>
               </ul>
             </div>
           )}
         </aside>
+
       </form>
     </div>
   )

@@ -154,8 +154,34 @@ describe('Teacher exams', () => {
     expect(refresh).toHaveBeenCalled()
     expect(dispatch).toHaveBeenCalledWith({
       type: 'staff',
-      patch: { section: 'exams', selectedExamId: null },
+      patch: { section: 'exams', selectedExamId: null, examAuthoringNotice: '' },
     })
+  })
+
+  it('adds manually chosen bank questions to the new draft using its returned version', async () => {
+    const createExam = vi.fn().mockResolvedValue({ id: 'created-exam', authoring_version: 4 })
+    const addManualQuestions = vi.fn().mockResolvedValue({ authoring_version: 5 })
+    const questions = [{ id: 'question-1', prompt: 'What is two plus two?', question_type: 'single_choice', is_active: true, options: [] }]
+    render(<ExamAuthoringPage state={teacherState} dispatch={vi.fn()} teacherData={teacherData} gateway={{ exams: { createExam, addManualQuestions }, questions: { listQuestionsForBank: vi.fn().mockResolvedValue(questions) } }} />)
+    fireEvent.change(screen.getByLabelText('Exam title'), { target: { value: 'Manual paper' } })
+    fireEvent.click(screen.getByRole('radio', { name: /manual selection/i }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: /two plus two/i }))
+    fireEvent.click(screen.getByRole('button', { name: /create draft exam/i }))
+    await waitFor(() => expect(addManualQuestions).toHaveBeenCalledWith('created-exam', ['question-1'], 4))
+    expect(createExam).toHaveBeenCalledWith(expect.objectContaining({ question_selection_mode: 'manual' }))
+  })
+
+  it('opens the already created draft when adding its manual questions fails', async () => {
+    const dispatch = vi.fn()
+    const createExam = vi.fn().mockResolvedValue({ id: 'created-exam', authoring_version: 1 })
+    const addManualQuestions = vi.fn().mockRejectedValue({ userMessage: 'Question was archived.' })
+    render(<ExamAuthoringPage state={teacherState} dispatch={dispatch} teacherData={teacherData} gateway={{ exams: { createExam, addManualQuestions }, questions: { listQuestionsForBank: vi.fn().mockResolvedValue([{ id: 'question-1', prompt: 'Choose me', question_type: 'single_choice', is_active: true, options: [] }]) } }} />)
+    fireEvent.change(screen.getByLabelText('Exam title'), { target: { value: 'Manual paper' } })
+    fireEvent.click(screen.getByRole('radio', { name: /manual selection/i }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Choose me/i }))
+    fireEvent.click(screen.getByRole('button', { name: /create draft exam/i }))
+    await waitFor(() => expect(dispatch).toHaveBeenCalledWith({ type: 'staff', patch: { section: 'create-exam', selectedExamId: 'created-exam', examAuthoringNotice: expect.stringContaining('Question was archived.') } }))
+    expect(createExam).toHaveBeenCalledTimes(1)
   })
 
   it('filters duplicate subject names by academic level before exam creation', () => {

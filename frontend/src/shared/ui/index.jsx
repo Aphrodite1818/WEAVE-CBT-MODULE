@@ -1,5 +1,6 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { Children, useEffect, useId, useRef, useState } from 'react'
 import { Icon } from '../icons/Icon'
+import { toastBus } from './useToast'
 
 export function WeaveMark({ className = '' }) {
   const rawId = useId().replace(/:/g, '')
@@ -237,7 +238,20 @@ export function FormField({ label, value, onChange, type = 'text', icon, placeho
 }
 
 export function Notice({ tone = 'neutral', children }) {
-  return <p className={`notice ${tone}`}>{children}</p>
+  const id = useId()
+  const message = noticeText(children)
+  const type = tone === 'danger' ? 'error' : tone === 'neutral' ? 'info' : tone
+  useEffect(() => {
+    toastBus.show(message, type, { id })
+    return () => toastBus.remove(id)
+  }, [id, message, type])
+  return null
+}
+
+function noticeText(children) {
+  return Children.toArray(children).map((child) => (
+    typeof child === 'string' || typeof child === 'number' ? String(child) : noticeText(child.props?.children)
+  )).join('')
 }
 
 export function StatusBadge({ children, tone = 'neutral' }) {

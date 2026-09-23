@@ -1,27 +1,43 @@
 import { useCallback } from 'react'
 
 const listeners = new Set()
-
-const emitToast = (toast) => {
-  listeners.forEach((listener) => listener(toast))
-}
+let notifications = []
+const publish = () => listeners.forEach((listener) => listener())
 
 export const toastBus = {
   subscribe(listener) {
     listeners.add(listener)
     return () => listeners.delete(listener)
   },
+  getSnapshot: () => notifications,
+  remove(id) {
+    const next = notifications.filter((toast) => toast.id !== id)
+    if (next.length === notifications.length) return
+    notifications = next
+    publish()
+  },
+  dismiss(id) {
+    const target = notifications.find((toast) => toast.id === id)
+    if (!target) return
+    notifications = notifications.filter((toast) => toast.message !== target.message || toast.type !== target.type)
+    publish()
+  },
+  clear() {
+    notifications = []
+    publish()
+  },
   show(message, type = 'info', options = {}) {
     const normalizedMessage = typeof message === 'string' ? message.trim() : message
     if (!normalizedMessage) return null
-
-    const id = options.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    emitToast({
+    const id = options.id || `${type}:${normalizedMessage}`
+    notifications = [...notifications.filter((toast) => toast.id !== id), {
       id,
       message: normalizedMessage,
       type,
-      duration: options.duration ?? 3200,
-    })
+      duration: options.duration ?? 4000,
+      revision: Date.now(),
+    }]
+    publish()
     return id
   },
   info(message, options) {

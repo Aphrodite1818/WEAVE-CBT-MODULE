@@ -30,7 +30,7 @@ export function ExamCard({ exam, onOpen, onEdit, children }) {
   const folderColor = exam.folderColor || stableFolderColor(exam.id || exam.title)
 
   return (
-    <article className="exam-card">
+    <article className="exam-card" style={{ '--exam-folder-color': folderColor }}>
       <button type="button" className="exam-card__open" aria-label={`Open ${exam.title}`} onClick={onOpen}>
         <ExamFolder color={folderColor} />
         <h2 title={exam.title}>{exam.title}</h2>
@@ -45,7 +45,7 @@ export function ExamCard({ exam, onOpen, onEdit, children }) {
           : 'Not scheduled'}
       </div>
       <div className="exam-card__footer">
-        <span>{exam.questionCount} questions <span>·</span> {exam.durationMinutes} min</span>
+        <span>{exam.questionCount} {exam.questionCount === 1 ? 'question' : 'questions'} <span>·</span> {exam.durationMinutes} min</span>
         {onEdit && <button type="button" onClick={onEdit}><RiEdit2Line size={16} /> Edit</button>}
       </div>
     </article>
