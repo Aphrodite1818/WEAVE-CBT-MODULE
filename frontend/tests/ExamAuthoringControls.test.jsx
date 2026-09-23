@@ -1,6 +1,7 @@
 ﻿import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { ExamDateTimePicker } from '../src/shared/exams/ExamDateTimePicker'
+import { buildDestructiveQuestionConfigurationWarning } from '../src/shared/exams/ExamAuthoringPage'
 import { ManualQuestionPicker } from '../src/shared/exams/ManualQuestionPicker'
 
 beforeAll(() => {
@@ -56,12 +57,33 @@ describe('Manual question picker', () => {
     const removeManualQuestion = vi.fn().mockResolvedValue({ authoring_version: 8 })
     const addManualQuestions = vi.fn().mockResolvedValue({ authoring_version: 9 })
     const onSaved = vi.fn().mockResolvedValue(undefined)
-    render(<ManualQuestionPicker bankId="bank" exam={{ id: 'exam', questionCount: 1 }} selectedIds={[]} onBusyChange={vi.fn()} onSaved={onSaved} gateway={{ questions: { listQuestionsForBank: vi.fn().mockResolvedValue(questions) }, exams: { getExam: vi.fn().mockResolvedValue({ authoring_version: 7 }), listManualQuestions: vi.fn().mockResolvedValue([{ question_id: 'q1' }]), removeManualQuestion, addManualQuestions } }} />)
+    render(<ManualQuestionPicker bankId="bank" exam={{ id: 'exam', questionCount: 1 }} selectedIds={[]} canManageAllSelections onBusyChange={vi.fn()} onSaved={onSaved} gateway={{ questions: { listQuestionsForBank: vi.fn().mockResolvedValue(questions) }, exams: { getExam: vi.fn().mockResolvedValue({ authoring_version: 7 }), listManualQuestions: vi.fn().mockResolvedValue([{ question_id: 'q1' }]), removeManualQuestion, addManualQuestions } }} />)
     fireEvent.click(await screen.findByRole('checkbox', { name: /First question/ }))
     await waitFor(() => expect(removeManualQuestion).toHaveBeenCalledWith('exam', 'q1', 7))
     await waitFor(() => expect(screen.getByRole('checkbox', { name: /Second question/ })).toBeEnabled())
     fireEvent.click(screen.getByRole('checkbox', { name: /Second question/ }))
     await waitFor(() => expect(addManualQuestions).toHaveBeenCalledWith('exam', ['q2'], 8))
     expect(onSaved).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('Destructive question configuration warnings', () => {
+  const selections = [
+    { question_id: 'q1', added_by_actor_id: 'teacher-a' },
+    { question_id: 'q2', added_by_actor_id: 'teacher-b' },
+    { question_id: 'q3', added_by_actor_id: 'teacher-b' },
+  ]
+
+  it('explains the impact of switching a collaborative manual paper to random', () => {
+    const message = buildDestructiveQuestionConfigurationWarning({ selections, changingToRandom: true })
+    expect(message).toContain('Switch to Random Selection?')
+    expect(message).toContain('3 manually selected questions from 2 contributors')
+    expect(message).toContain('cannot be restored automatically')
+  })
+
+  it('explains why changing banks clears the current manual selection', () => {
+    const message = buildDestructiveQuestionConfigurationWarning({ selections, changingBank: true })
+    expect(message).toContain('Change Question Bank?')
+    expect(message).toContain('belong to the current question bank')
   })
 })
