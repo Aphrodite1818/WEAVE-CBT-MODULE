@@ -84,6 +84,18 @@ const teacherState = {
   staff: { selectedExamId: null },
 }
 
+function chooseSelectOption(label, optionName) {
+  fireEvent.click(screen.getByRole('combobox', { name: label }))
+  fireEvent.click(screen.getByRole('option', { name: optionName }))
+}
+
+function completeNewExamContext() {
+  chooseSelectOption(/academic level/i, /JSS1/i)
+  chooseSelectOption(/^subject$/i, /Mathematics/i)
+  chooseSelectOption(/assessment component/i, /CA 1/i)
+  chooseSelectOption(/question bank/i, /Mathematics Bank/i)
+}
+
 describe('Teacher exams', () => {
   it('renders a readable exam collection and opens the create workflow', () => {
     const dispatch = vi.fn()
@@ -111,7 +123,7 @@ describe('Teacher exams', () => {
     })
   })
 
-  it('creates a draft with synchronized academic and delivery settings', async () => {
+  it('starts a fresh exam form without inherited level, subject, component or bank', async () => {
     const dispatch = vi.fn()
     const createExam = vi.fn().mockResolvedValue({ id: 'exam-new' })
     const refresh = vi.fn().mockResolvedValue(undefined)
@@ -125,13 +137,19 @@ describe('Teacher exams', () => {
       />,
     )
 
-    await waitFor(() =>
-      expect(screen.getAllByText('Mathematics Bank').length).toBeGreaterThan(0),
-    )
-    expect(screen.getByRole('combobox', { name: /academic level/i })).toHaveTextContent('JSS1')
+    expect(screen.getByRole('combobox', { name: /academic level/i })).toHaveTextContent('Choose level')
+    expect(screen.getByRole('combobox', { name: /^subject$/i })).toHaveTextContent('Choose a level first')
+    expect(screen.getByRole('combobox', { name: /^subject$/i })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: /assessment scheme/i })).toHaveTextContent('Standard Scheme')
+    expect(screen.getByRole('combobox', { name: /assessment component/i })).toHaveTextContent('Choose component')
+    expect(screen.getByRole('combobox', { name: /question bank/i })).toHaveTextContent('Choose a subject first')
+    expect(screen.getByRole('button', { name: /create draft exam/i })).toBeDisabled()
+
     fireEvent.change(screen.getByLabelText(/exam title/i), {
       target: { value: 'Mathematics Mid Term' },
     })
+    completeNewExamContext()
+    expect(screen.getByRole('button', { name: /create draft exam/i })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: /create draft exam/i }))
 
     await waitFor(() => expect(createExam).toHaveBeenCalledTimes(1))
@@ -164,8 +182,9 @@ describe('Teacher exams', () => {
     const createExam = vi.fn().mockResolvedValue({ id: 'created-exam', authoring_version: 4 })
     const addManualQuestions = vi.fn().mockResolvedValue({ authoring_version: 5 })
     const questions = [{ id: 'question-1', prompt: 'What is two plus two?', question_type: 'single_choice', is_active: true, options: [] }]
-    render(<ExamAuthoringPage state={teacherState} dispatch={vi.fn()} teacherData={teacherData} gateway={{ exams: { createExam, addManualQuestions }, questions: { listQuestionsForBank: vi.fn().mockResolvedValue(questions) } }} />)
+    render(<ExamAuthoringPage state={teacherState} dispatch={vi.fn()} teacherData={{ ...teacherData, exams: [] }} gateway={{ exams: { createExam, addManualQuestions }, questions: { listQuestionsForBank: vi.fn().mockResolvedValue(questions) } }} />)
     fireEvent.change(screen.getByLabelText('Exam title'), { target: { value: 'Manual paper' } })
+    completeNewExamContext()
     fireEvent.click(screen.getByRole('radio', { name: /manual selection/i }))
     fireEvent.click(await screen.findByRole('checkbox', { name: /two plus two/i }))
     fireEvent.click(screen.getByRole('button', { name: /create draft exam/i }))
@@ -177,8 +196,9 @@ describe('Teacher exams', () => {
     const dispatch = vi.fn()
     const createExam = vi.fn().mockResolvedValue({ id: 'created-exam', authoring_version: 1 })
     const addManualQuestions = vi.fn().mockRejectedValue({ userMessage: 'Question was archived.' })
-    render(<ExamAuthoringPage state={teacherState} dispatch={dispatch} teacherData={teacherData} gateway={{ exams: { createExam, addManualQuestions }, questions: { listQuestionsForBank: vi.fn().mockResolvedValue([{ id: 'question-1', prompt: 'Choose me', question_type: 'single_choice', is_active: true, options: [] }]) } }} />)
+    render(<ExamAuthoringPage state={teacherState} dispatch={dispatch} teacherData={{ ...teacherData, exams: [] }} gateway={{ exams: { createExam, addManualQuestions }, questions: { listQuestionsForBank: vi.fn().mockResolvedValue([{ id: 'question-1', prompt: 'Choose me', question_type: 'single_choice', is_active: true, options: [] }]) } }} />)
     fireEvent.change(screen.getByLabelText('Exam title'), { target: { value: 'Manual paper' } })
+    completeNewExamContext()
     fireEvent.click(screen.getByRole('radio', { name: /manual selection/i }))
     fireEvent.click(await screen.findByRole('checkbox', { name: /Choose me/i }))
     fireEvent.click(screen.getByRole('button', { name: /create draft exam/i }))
@@ -186,7 +206,7 @@ describe('Teacher exams', () => {
     expect(createExam).toHaveBeenCalledTimes(1)
   })
 
-  it('filters duplicate subject names by academic level before exam creation', () => {
+  it('resets dependent choices when the academic level or subject changes', () => {
     const scopedData = {
       ...teacherData,
       exams: [],
@@ -246,20 +266,65 @@ describe('Teacher exams', () => {
     )
 
     const levelSelect = screen.getByRole('combobox', { name: /academic level/i })
-    const subjectSelect = screen.getByRole('combobox', { name: /^subject$/i })
-    expect(levelSelect).toHaveTextContent('JSS1')
-    expect(subjectSelect).toHaveTextContent('Mathematics')
+    expect(levelSelect).toHaveTextContent('Choose level')
+    expect(screen.getByRole('combobox', { name: /^subject$/i })).toBeDisabled()
 
     fireEvent.click(levelSelect)
     fireEvent.click(screen.getByRole('option', { name: /JSS2/i }))
 
-    expect(screen.getByRole('combobox', { name: /^subject$/i })).toHaveTextContent('Mathematics')
+    expect(screen.getByRole('combobox', { name: /^subject$/i })).toHaveTextContent('Choose subject')
     fireEvent.click(screen.getByRole('combobox', { name: /^subject$/i }))
     expect(screen.getByRole('option', { name: /Basic Science/i })).toBeInTheDocument()
     expect(screen.getAllByRole('option', { name: /Mathematics/i })).toHaveLength(1)
 
     fireEvent.click(screen.getByRole('option', { name: /Basic Science/i }))
-    expect(screen.getByRole('combobox', { name: /question bank/i })).toHaveTextContent('JSS2 Science Bank')
+    expect(screen.getByRole('combobox', { name: /question bank/i })).toHaveTextContent('Choose bank')
+    fireEvent.click(screen.getByRole('combobox', { name: /question bank/i }))
+    expect(screen.getByRole('option', { name: /JSS2 Science Bank/i })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /^Mathematics Bank/i })).not.toBeInTheDocument()
+  })
+
+  it('requires confirmation before clearing saved manual selections when switching a draft to random', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const updateExam = vi.fn().mockResolvedValue({ authoring_version: 4 })
+    const configureExamQuestions = vi.fn().mockResolvedValue({ authoring_version: 5 })
+    const selections = [
+      { question_id: 'question-1', added_by_actor_id: 'actor-1' },
+      { question_id: 'question-2', added_by_actor_id: 'actor-2' },
+    ]
+    const gateway = {
+      questions: { listQuestionsForBank: vi.fn().mockResolvedValue([]) },
+      exams: {
+        getExam: vi.fn().mockResolvedValue({ authoring_version: 3 }),
+        listManualQuestions: vi.fn().mockResolvedValue(selections),
+        updateExam,
+        configureExamQuestions,
+      },
+    }
+    const editState = { ...teacherState, staff: { selectedExamId: 'exam-1' } }
+
+    render(<ExamAuthoringPage state={editState} dispatch={vi.fn()} teacherData={teacherData} gateway={gateway} />)
+    fireEvent.click(screen.getByRole('radio', { name: /random selection/i }))
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => expect(confirmSpy).toHaveBeenCalledTimes(1))
+    expect(confirmSpy.mock.calls[0][0]).toContain('2 manually selected questions from 2 contributors')
+    expect(updateExam).not.toHaveBeenCalled()
+    expect(configureExamQuestions).not.toHaveBeenCalled()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /save changes/i })).toBeEnabled())
+    confirmSpy.mockReturnValue(true)
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => expect(configureExamQuestions).toHaveBeenCalledWith('exam-1', {
+      question_bank_id: 'bank-1',
+      question_selection_mode: 'random',
+      question_count: 30,
+      clear_existing_manual_selections: true,
+      expected_authoring_version: 4,
+    }))
+    expect(updateExam).toHaveBeenCalledTimes(1)
+    confirmSpy.mockRestore()
   })
 
   it('uses the current authoring version when submitting a draft', async () => {
@@ -289,7 +354,6 @@ describe('Teacher exams', () => {
   })
 })
 
-
 it('opens the latest existing scope regardless of title from creation', () => {
   const dispatch = vi.fn()
   const data = { ...teacherData, exams: [
@@ -297,6 +361,7 @@ it('opens the latest existing scope regardless of title from creation', () => {
     { ...teacherData.exams[0], termId: 'term-1', id: 'revision-2', title: 'Different title', revisionNumber: 2 },
   ] }
   render(<ExamAuthoringPage state={teacherState} dispatch={dispatch} teacherData={data} gateway={{}} />)
+  completeNewExamContext()
   fireEvent.click(screen.getByRole('button', { name: 'Open Existing Examination' }))
   expect(dispatch).toHaveBeenCalledWith({ type: 'staff', patch: { section: 'exam-history', selectedExamId: 'revision-2', examAuthoringNotice: '' } })
 })
@@ -324,6 +389,7 @@ it('recovers a duplicate committed after the create form loaded', async () => {
   } }
   render(<ExamAuthoringPage state={teacherState} dispatch={dispatch} teacherData={data} gateway={gateway} />)
   fireEvent.change(screen.getByRole('textbox', { name: 'Exam title' }), { target: { value: 'A different title' } })
+  completeNewExamContext()
   fireEvent.submit(screen.getByRole('textbox', { name: 'Exam title' }).closest('form'))
   fireEvent.click(await screen.findByRole('button', { name: 'Open Existing Examination' }))
   expect(gateway.exams.listExams).toHaveBeenCalledWith({ term_id: 'term-1', curriculum_subject_id: 'subject-1', assessment_component_id: 'component-1', offset: 0, limit: 200 })
