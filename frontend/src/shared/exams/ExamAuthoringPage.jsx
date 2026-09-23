@@ -26,7 +26,14 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
   const editing = Boolean(editingExam)
   const actor = state.session?.actor
   const isAdmin = actor?.role === 'admin'
-  const readOnly = editing && !canManageExam(editingExam, actor, teacherData.assignments)
+  const canManageConfiguration = !editing || canManageExam(editingExam, actor, teacherData.assignments)
+  const readOnly = editing && !canManageConfiguration
+  const isEligibleTeacherContributor = Boolean(
+    editing &&
+    editingExam?.status === 'draft' &&
+    actor?.role === 'teacher' &&
+    teacherData.assignments.some((assignment) => assignment.curriculumSubjectId === editingExam.curriculumSubjectId),
+  )
   const initialSubject = findSubjectScope(teacherData.subjects, editingExam?.curriculumSubjectId) || teacherData.subjects[0] || null
 
   const [leadTeacherId, setLeadTeacherId] = useState(editingExam?.leadTeacherId || '')
@@ -87,12 +94,28 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
   const selectedSubject = findSubjectScope(teacherData.subjects, subjectId)
   const selectedBank = subjectBanks.find((bank) => bank.id === bankId)
   const selectedComponent = components.find((component) => component.id === componentId)
+  const questionConfigurationChanged = Boolean(
+    editing && (
+      bankId !== editingExam.questionBankId ||
+      selectionMode !== editingExam.selectionMode ||
+      Number(questionCount) !== Number(editingExam.questionCount)
+    ),
+  )
+  const persistedManualDraft = Boolean(editing && editingExam.status === 'draft' && editingExam.selectionMode === 'manual')
+  const canManageManualSelections = Boolean(
+    !editing || (persistedManualDraft && (canManageConfiguration || isEligibleTeacherContributor)),
+  )
+  const showManualPicker = Boolean(
+    selectionMode === 'manual' &&
+    bankId &&
+    (!editing || (editingExam.selectionMode === 'manual' && bankId === editingExam.questionBankId)),
+  )
 
   const activeBankQuestions = Number(selectedBank?.activeQuestionCount ?? selectedBank?.count ?? 0)
   const capacityIssue =
-    !editing &&
     selectionMode === 'random' &&
     selectedBank &&
+    (!editing || questionConfigurationChanged) &&
     Number(questionCount) > activeBankQuestions
       ? `This bank currently has only ${activeBankQuestions} active questions.`
       : ''
@@ -178,7 +201,28 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
     setSaving(true)
     try {
       if (editing) {
-        await gateway.exams.updateExam(editingExam.id, {
+        let clearExistingManualSelections = false
+        if (questionConfigurationChanged && editingExam.selectionMode === 'manual') {
+          const selections = await gateway.exams.listManualQuestions(editingExam.id)
+          if (
+            selectionMode === 'manual' &&
+            bankId === editingExam.questionBankId &&
+            Number(questionCount) < selections.length
+          ) {
+            setError(`Question count cannot be lower than the ${selections.length} questions already selected for this paper.`)
+            return
+          }
+          const destructiveQuestionChange = selectionMode !== 'manual' || bankId !== editingExam.questionBankId
+          if (destructiveQuestionChange && selections.length) {
+            const confirmed = typeof window !== 'undefined' && window.confirm(
+              `This change will remove ${selections.length} manually selected question${selections.length === 1 ? '' : 's'} from this draft. Continue?`,
+            )
+            if (!confirmed) return
+            clearExistingManualSelections = true
+          }
+        }
+
+        const updatedExam = await gateway.exams.updateExam(editingExam.id, {
           expected_authoring_version: editingExam.authoringVersion || 1,
           assessment_scheme_id: schemeId,
           assessment_component_id: componentId,
@@ -191,6 +235,16 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
           scheduled_start_at: toIsoOrNull(scheduledStartAt),
           latest_normal_start_at: toIsoOrNull(latestNormalStartAt),
         })
+
+        if (questionConfigurationChanged) {
+          await gateway.exams.configureExamQuestions(editingExam.id, {
+            question_bank_id: bankId,
+            question_selection_mode: selectionMode,
+            question_count: Number(questionCount),
+            clear_existing_manual_selections: clearExistingManualSelections,
+            expected_authoring_version: updatedExam.authoring_version ?? updatedExam.authoringVersion ?? (editingExam.authoringVersion || 1),
+          })
+        }
       } else {
         const createdExam = await gateway.exams.createExam({
           ...(isAdmin ? { lead_teacher_id: leadTeacherId || null } : {}),
@@ -233,6 +287,13 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
       leaveForm()
     } catch (requestError) {
       setError(requestError.userMessage || `Weave could not ${editing ? 'update' : 'create'} this examination.`)
+      if (editing) {
+        try {
+          await teacherData.refresh()
+        } catch {
+          // Keep the mutation error visible even if the surrounding refresh fails.
+        }
+      }
       if (!editing && requestError.status === 409) {
         // A concurrent creator may have committed after this form loaded.
         try {
@@ -279,7 +340,13 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
     )
   }
 
-  const leadName = isAdmin ? leadTeacherName : actor?.display_name || 'You'
+  const manualContributor = Boolean(readOnly && isEligibleTeacherContributor && editingExam?.selectionMode === 'manual')
+  const randomViewer = Boolean(readOnly && isEligibleTeacherContributor && editingExam?.selectionMode === 'random')
+  const leadName = isAdmin
+    ? leadTeacherName
+    : readOnly
+      ? editingExam?.leadTeacherId ? 'Assigned lead teacher' : 'Administrator'
+      : actor?.display_name || 'You'
   const readiness = [
     ['Exam title added', Boolean(title.trim())],
     ['Academic context', Boolean(levelId && subjectId && schemeId && componentId && teacherData.session?.id && teacherData.term?.id)],
@@ -310,7 +377,13 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
             <span className="teacher-page-title-icon"><Icon name="exam" size={28} /></span>
             <h1>{readOnly ? 'Examination details' : editing ? 'Edit Examination' : 'Create Examination'}</h1>
           </div>
-          <p>{readOnly ? 'Review the paper and its current examination settings.' : 'Set up the paper, choose a question source and configure delivery.'}</p>
+          <p>{manualContributor
+            ? 'Review the lead-managed settings and contribute questions to this manual paper.'
+            : randomViewer
+              ? 'Review the lead-managed settings. Random question selection has no manual contribution step.'
+              : readOnly
+                ? 'Review the paper and its current examination settings.'
+                : 'Set up the paper, choose a question source and configure delivery.'}</p>
         </div>
         <div className="teacher-exam-builder-header__actions">
           <button className="teacher-primary-action" type="button" onClick={leaveForm} disabled={saving || leadSaving || questionSaving}>
@@ -333,14 +406,18 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
       {!canSave && !teacherData.loading && !readOnly && (
         <Notice tone="warning">A current session, term, academic level, subject, assessment component and matching question bank are required to create an exam.</Notice>
       )}
-      {readOnly && <Notice>This paper is {editingExam.statusLabel.toLowerCase()}. Draft metadata can only be edited by its lead author or an administrator.</Notice>}
+      {readOnly && <Notice>{manualContributor
+        ? 'This draft is coordinated by its lead author. You can add questions to this manual paper and remove questions you contributed, but paper configuration remains read-only.'
+        : randomViewer
+          ? 'This draft is coordinated by its lead author. Because it uses random question selection, there are no individual questions for contributors to add, so this paper is view-only for you.'
+          : `This paper is ${editingExam.statusLabel.toLowerCase()}. Draft metadata can only be edited by its lead author or an administrator.`}</Notice>}
 
       <form id="exam-authoring-form" className="teacher-exam-builder" onSubmit={saveExam}>
-        <fieldset className="teacher-exam-builder__main" disabled={readOnly || saving || leadSaving || questionSaving}>
+        <fieldset className="teacher-exam-builder__main" disabled={saving || leadSaving || questionSaving}>
           <ExamSection number="1" title="Paper details" description="Name the paper and choose its academic context." kind="paper">
             <label className="teacher-exam-field teacher-exam-field--wide">
               <span>Exam title <em>*</em></span>
-              <input aria-label="Exam title" required value={title} maxLength={255} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Computer Studies CA2" />
+              <input aria-label="Exam title" required value={title} maxLength={255} disabled={readOnly} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Computer Studies CA2" />
             </label>
             <FieldSelect label="Academic level *" >
               <SelectControl
@@ -400,7 +477,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
               />
             ) : (
               <div className="exam-lead-identity">
-                <span>{(actor?.display_name || 'You').slice(0, 1)}</span>
+                <span>{(leadName || 'L').slice(0, 1)}</span>
                 <div><small>Lead author</small><strong>{leadName}</strong></div>
               </div>
             )}
@@ -417,7 +494,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
             <span className="exam-option-label">Folder colour</span>
             <div className="exam-palette" role="group" aria-label="Folder colour">
               {FOLDER_COLORS.map(([name, color]) => (
-                <button key={name} type="button" title={name} aria-label={`${name} folder`} aria-pressed={folderColor === color} style={{ '--swatch': color }} onClick={() => setFolderColor(color)}>
+                <button key={name} type="button" title={name} aria-label={`${name} folder`} aria-pressed={folderColor === color} disabled={readOnly} style={{ '--swatch': color }} onClick={() => setFolderColor(color)}>
                   {folderColor === color && <RiCheckLine size={18} />}
                 </button>
               ))}
@@ -428,45 +505,53 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
 
           <ExamSection number="2" title="Questions & delivery" description="Choose your question source and how students take the paper." kind="questions">
             <FieldSelect label="Question bank *">
-              <SelectControl label="Question bank" value={bankId} options={subjectBanks.map((bank) => ({ value: bank.id, label: bank.name, description: `${bank.activeQuestionCount ?? bank.count ?? 0} active questions` }))} onChange={(value) => { setBankId(value); setManualSelection({ bankId: value, ids: [] }) }} disabled={editing || !subjectBanks.length || readOnly} placeholder={subjectId ? 'Choose bank' : 'Choose a subject first'} />
+              <SelectControl label="Question bank" value={bankId} options={subjectBanks.map((bank) => ({ value: bank.id, label: bank.name, description: `${bank.activeQuestionCount ?? bank.count ?? 0} active questions` }))} onChange={(value) => { setBankId(value); setManualSelection({ bankId: value, ids: [] }) }} disabled={!subjectBanks.length || readOnly} placeholder={subjectId ? 'Choose bank' : 'Choose a subject first'} />
             </FieldSelect>
             <label className="teacher-exam-field">
               <span>Number of questions <em>*</em></span>
-              <input aria-label="Number of questions" type="number" min="1" required value={questionCount} disabled={editing} onChange={(event) => setQuestionCount(event.target.value)} />
+              <input aria-label="Number of questions" type="number" min="1" required value={questionCount} disabled={readOnly} onChange={(event) => setQuestionCount(event.target.value)} />
               <small>{questionCount || 0} required &middot; <b>{activeBankQuestions} available</b></small>
               {capacityIssue && <small className="teacher-exam-field__error">{capacityIssue}</small>}
             </label>
-            <fieldset className="teacher-exam-selection" disabled={editing || readOnly}>
+            <fieldset className="teacher-exam-selection" disabled={readOnly}>
               <legend>Question selection method</legend>
               <div>
                 <SelectionCard value="random" current={selectionMode} onChange={setSelectionMode} title="Random selection" description="Select from the bank." />
                 <SelectionCard value="manual" current={selectionMode} onChange={setSelectionMode} title="Manual selection" description="Choose specific questions." />
               </div>
             </fieldset>
-            {selectionMode === 'manual' && bankId && (
+            {showManualPicker && (
               <ManualQuestionPicker
                 key={`${selectedExamId || 'new'}:${bankId}`}
                 bankId={bankId}
-                exam={editingExam || { questionCount }}
+                exam={editingExam ? { ...editingExam, questionCount: Number(questionCount) } : { questionCount }}
                 gateway={gateway}
                 selectedIds={manualQuestionIds}
                 onChange={(ids) => setManualSelection({ bankId, ids })}
-                disabled={readOnly || saving || leadSaving || questionSaving}
+                disabled={!canManageManualSelections || questionConfigurationChanged || saving || leadSaving || questionSaving}
+                actorId={actor?.id}
+                canManageAllSelections={canManageConfiguration}
                 onBusyChange={setQuestionSaving}
                 onSaved={teacherData.refresh}
               />
             )}
-            {editing && <p className="exam-section-note">The academic scope and question source are fixed here to preserve existing selections.</p>}
+            {editing && <p className="exam-section-note">{readOnly
+              ? manualContributor
+                ? 'Paper settings are lead-managed. You can contribute questions below; your question changes save immediately.'
+                : 'Paper settings are lead-managed. Random selection has no manual question contribution step.'
+              : questionConfigurationChanged
+                ? 'Save the question configuration before making manual selection changes.'
+                : 'The academic level and subject stay fixed; the lead author or administrator may still update the bank, question count and selection method while this revision is a draft.'}</p>}
             <div className="exam-delivery-options">
             <label className="teacher-exam-field">
               <span>Duration <em>*</em></span>
               <div className="teacher-exam-input-suffix">
-                <input aria-label="Duration in minutes" type="number" min="1" required value={durationMinutes} onChange={(event) => setDurationMinutes(event.target.value)} />
+                <input aria-label="Duration in minutes" type="number" min="1" required value={durationMinutes} disabled={readOnly} onChange={(event) => setDurationMinutes(event.target.value)} />
                 <span>minutes</span>
               </div>
             </label>
-            <ToggleSwitch checked={shuffleQuestions} onChange={setShuffleQuestions} label="Shuffle questions" />
-            <ToggleSwitch checked={shuffleOptions} onChange={setShuffleOptions} label="Shuffle answer options" />
+            <ToggleSwitch checked={shuffleQuestions} onChange={setShuffleQuestions} label="Shuffle questions" disabled={readOnly} />
+            <ToggleSwitch checked={shuffleOptions} onChange={setShuffleOptions} label="Shuffle answer options" disabled={readOnly} />
             </div>
           </ExamSection>
 
@@ -475,7 +560,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
             <ExamDateTimePicker label="Latest normal start" value={latestNormalStartAt} min={scheduledStartAt} onChange={setLatestNormalStartAt} disabled={readOnly || saving || leadSaving || questionSaving} />
             <label className="teacher-exam-field teacher-exam-field--wide">
               <span>Student instructions <small>(optional)</small></span>
-              <textarea aria-label="Student instructions" rows="3" value={instructions} onChange={(event) => setInstructions(event.target.value)} placeholder="Instructions students will see before they start." />
+              <textarea aria-label="Student instructions" rows="3" value={instructions} disabled={readOnly} onChange={(event) => setInstructions(event.target.value)} placeholder="Instructions students will see before they start." />
             </label>
           </ExamSection>
           {!readOnly && (
@@ -561,9 +646,9 @@ function SelectionCard({ value, current, onChange, title, description }) {
   )
 }
 
-function ToggleSwitch({ checked, onChange, label }) {
+function ToggleSwitch({ checked, onChange, label, disabled = false }) {
   return (
-    <button type="button" className={`teacher-exam-switch ${checked ? 'is-on' : ''}`} role="switch" aria-checked={checked} onClick={() => onChange(!checked)}>
+    <button type="button" className={`teacher-exam-switch ${checked ? 'is-on' : ''}`} role="switch" aria-checked={checked} disabled={disabled} onClick={() => onChange(!checked)}>
       <span className="teacher-exam-switch__track"><i /></span>
       <strong>{label}</strong>
     </button>
