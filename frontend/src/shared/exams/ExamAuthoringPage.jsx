@@ -164,6 +164,33 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
     resetDuplicateRecovery()
   }
 
+  const changeScheduledStart = (nextScheduledStartAt) => {
+    if (!nextScheduledStartAt) {
+      setScheduledStartAt('')
+      setLatestNormalStartAt('')
+      setError('')
+      return
+    }
+
+    if (scheduledStartAt && latestNormalStartAt) {
+      const previousStart = new Date(scheduledStartAt).getTime()
+      const previousLatest = new Date(latestNormalStartAt).getTime()
+      const nextStart = new Date(nextScheduledStartAt).getTime()
+      const graceMs = previousLatest - previousStart
+      if (
+        Number.isFinite(previousStart) &&
+        Number.isFinite(previousLatest) &&
+        Number.isFinite(nextStart) &&
+        graceMs >= 0
+      ) {
+        setLatestNormalStartAt(toDateTimeLocal(new Date(nextStart + graceMs).toISOString()))
+      }
+    }
+
+    setScheduledStartAt(nextScheduledStartAt)
+    setError('')
+  }
+
   const leaveForm = () => dispatch({
     type: 'staff',
     patch: { section: 'exams', selectedExamId: null, examAuthoringNotice: '' },
@@ -208,6 +235,18 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
     }
     if ([scheduledStartAt, latestNormalStartAt].some((value) => value && !toIsoOrNull(value))) {
       setError('Choose a valid date and time for the examination schedule.')
+      return
+    }
+    if (!scheduledStartAt && latestNormalStartAt) {
+      setError('Latest normal start requires a scheduled start.')
+      return
+    }
+    if (scheduledStartAt && isElapsedLocalDateTime(scheduledStartAt)) {
+      setError('The scheduled examination time has elapsed. Choose a new future time before saving this draft.')
+      return
+    }
+    if (latestNormalStartAt && isElapsedLocalDateTime(latestNormalStartAt)) {
+      setError('The latest normal start time has elapsed. Choose a new future time before saving this draft.')
       return
     }
     if (
@@ -589,9 +628,9 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
             </div>
           </ExamSection>
 
-          <ExamSection number="3" title="Schedule & instructions" description="Optional. Add now or return to these before the exam." kind="schedule">
-            <ExamDateTimePicker label="Scheduled start" value={scheduledStartAt} onChange={setScheduledStartAt} disabled={readOnly || saving || leadSaving || questionSaving} />
-            <ExamDateTimePicker label="Latest normal start" value={latestNormalStartAt} min={scheduledStartAt} onChange={setLatestNormalStartAt} disabled={readOnly || saving || leadSaving || questionSaving} />
+          <ExamSection number="3" title="Schedule & instructions" description="Optional while drafting. A future schedule is required before submission." kind="schedule">
+            <ExamDateTimePicker label="Scheduled start" value={scheduledStartAt} onChange={changeScheduledStart} disabled={readOnly || saving || leadSaving || questionSaving} />
+            <ExamDateTimePicker label="Latest normal start" value={latestNormalStartAt} min={scheduledStartAt} onChange={(value) => { setLatestNormalStartAt(value); setError('') }} disabled={readOnly || saving || leadSaving || questionSaving || !scheduledStartAt} />
             <label className="teacher-exam-field teacher-exam-field--wide">
               <span>Student instructions <small>(optional)</small></span>
               <textarea aria-label="Student instructions" rows="3" value={instructions} disabled={readOnly} onChange={(event) => setInstructions(event.target.value)} placeholder="Instructions students will see before they start." />
@@ -756,4 +795,10 @@ function toDateTimeLocal(value) {
   if (Number.isNaN(date.getTime())) return ''
   const offset = date.getTimezoneOffset()
   return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 16)
+}
+
+function isElapsedLocalDateTime(value) {
+  if (!value) return false
+  const timestamp = new Date(value).getTime()
+  return Number.isFinite(timestamp) && timestamp <= Date.now()
 }
