@@ -610,7 +610,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
             )}
             {editing && <p className="exam-section-note">{readOnly
               ? manualContributor
-                ? 'Paper settings are lead-managed. You can contribute questions below; your question changes save immediately.'
+                ? 'Paper settings are lead-managed. New question picks stay on this device until you click Save contribution; removing one of your already-saved questions is applied immediately.'
                 : 'Paper settings are lead-managed. Random selection has no manual question contribution step.'
               : questionConfigurationChanged
                 ? 'Save the question configuration before making manual selection changes.'
