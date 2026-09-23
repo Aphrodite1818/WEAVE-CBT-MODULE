@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { describe, expect, it, vi } from 'vitest'
 import { TeacherExamsPage } from '../src/features/teacher/TeacherExamsPage'
 
+import { ExamHistoryPage } from '../src/shared/exams/ExamHistoryPage'
+
 import { ExamAuthoringPage } from '../src/shared/exams/ExamAuthoringPage'
 
 const teacherData = {
@@ -285,4 +287,54 @@ describe('Teacher exams', () => {
     await waitFor(() => expect(submitExam).toHaveBeenCalledWith('exam-1', 3))
     expect(refresh).toHaveBeenCalled()
   })
+})
+
+
+it('opens the latest existing scope regardless of title from creation', () => {
+  const dispatch = vi.fn()
+  const data = { ...teacherData, exams: [
+    { ...teacherData.exams[0], termId: 'term-1', status: 'closed' },
+    { ...teacherData.exams[0], termId: 'term-1', id: 'revision-2', title: 'Different title', revisionNumber: 2 },
+  ] }
+  render(<ExamAuthoringPage state={teacherState} dispatch={dispatch} teacherData={data} gateway={{}} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Open Existing Examination' }))
+  expect(dispatch).toHaveBeenCalledWith({ type: 'staff', patch: { section: 'exam-history', selectedExamId: 'revision-2', examAuthoringNotice: '' } })
+})
+
+it('shows preserved revisions on a dedicated page with an authorized draft editor', () => {
+  const dispatch = vi.fn()
+  const data = { ...teacherData, exams: [
+    { ...teacherData.exams[0], selectionMode: 'random', status: 'closed', statusLabel: 'Closed' },
+    { ...teacherData.exams[0], id: 'revision-2', revisionNumber: 2 },
+  ] }
+  render(<ExamHistoryPage state={{ ...teacherState, staff: { selectedExamId: 'exam-1' } }} dispatch={dispatch} teacherData={data} gateway={{}} />)
+  expect(screen.queryByRole('textbox', { name: 'Exam title' })).not.toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Revision 1' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Revision 2' })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: /Edit draft/ }))
+  expect(dispatch).toHaveBeenCalledWith({ type: 'staff', patch: { section: 'create-exam', selectedExamId: 'revision-2', examAuthoringNotice: '' } })
+})
+
+it('recovers a duplicate committed after the create form loaded', async () => {
+  const dispatch = vi.fn()
+  const data = { ...teacherData, exams: [] }
+  const gateway = { exams: {
+    createExam: vi.fn().mockRejectedValue({ status: 409, userMessage: 'An examination already exists' }),
+    listExams: vi.fn().mockResolvedValue({ exams: [{ id: 'concurrent-revision', revision_number: 2 }], total: 1 }),
+  } }
+  render(<ExamAuthoringPage state={teacherState} dispatch={dispatch} teacherData={data} gateway={gateway} />)
+  fireEvent.change(screen.getByRole('textbox', { name: 'Exam title' }), { target: { value: 'A different title' } })
+  fireEvent.submit(screen.getByRole('textbox', { name: 'Exam title' }).closest('form'))
+  fireEvent.click(await screen.findByRole('button', { name: 'Open Existing Examination' }))
+  expect(gateway.exams.listExams).toHaveBeenCalledWith({ term_id: 'term-1', curriculum_subject_id: 'subject-1', assessment_component_id: 'component-1', offset: 0, limit: 200 })
+  expect(dispatch).toHaveBeenCalledWith({ type: 'staff', patch: { section: 'exam-history', selectedExamId: 'concurrent-revision', examAuthoringNotice: '' } })
+})
+
+it('separates opening the history from editing a draft on the card', () => {
+  const dispatch = vi.fn()
+  render(<TeacherExamsPage state={teacherState} dispatch={dispatch} teacherData={teacherData} gateway={{ exams: {} }} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Open Mathematics CA 1' }))
+  expect(dispatch).toHaveBeenLastCalledWith({ type: 'staff', patch: { section: 'exam-history', selectedExamId: 'exam-1' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Edit Mathematics CA 1' }))
+  expect(dispatch).toHaveBeenLastCalledWith({ type: 'staff', patch: { section: 'create-exam', selectedExamId: 'exam-1' } })
 })

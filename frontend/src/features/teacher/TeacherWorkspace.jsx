@@ -1,3 +1,5 @@
+import { ExamHistoryPage } from '../../shared/exams/ExamHistoryPage'
+import { loadAllExams } from '../../shared/exams/examLineage'
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { weaveGateway } from "../../app/gateway";
 import { TeacherLayout } from "./TeacherLayout";
@@ -111,6 +113,7 @@ export function TeacherWorkspace({
           gateway={gateway}
         />
       )}
+      {state.staff.section === "exam-history" && <ExamHistoryPage state={state} dispatch={workspaceDispatch} teacherData={teacherData} gateway={gateway} />}
       {state.staff.section === "create-exam" && (
         <ExamAuthoringPage
           state={state}
@@ -207,7 +210,7 @@ async function loadTeacherData(gateway) {
     optional(gateway.academics?.getCurrentAcademicTerm, null),
     optional(gateway.academics?.listAuthorableCurriculumSubjects, []),
     optional(gateway.academics?.listEffectiveTeacherAssignments, []),
-    optional(() => gateway.exams?.listExams?.({ limit: 200 }), { exams: [] }),
+    optional(() => loadAllExams(gateway.exams), { exams: [] }),
     optional(
       () => gateway.academics?.listAssessmentSchemes?.({ active_only: true }),
       [],

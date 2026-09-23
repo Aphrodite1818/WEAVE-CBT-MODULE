@@ -17,6 +17,7 @@ from app.domains.academics.repository import AcademicRepository
 from app.domains.auth.models import LocalActor
 from app.domains.exams.authoring_service import _normalize_optional_text
 from app.domains.exams.exceptions import ExamNotFound, ExamStateError
+from app.domains.exams.execution_service import ExamExecutionService
 from app.domains.exams.models import (
     Exam,
     ExamInvigilator,
@@ -931,10 +932,15 @@ class ExamLifecycleServiceMixin:
             raise ExamNotFound("Examination does not exist")
 
         latest = await cls._latest_revision_in_lineage(db, exam)
-        if latest.status not in {ExamStatus.SEALED, ExamStatus.CANCELLED}:
+        if latest.status == ExamStatus.CLOSED:
+            if not await ExamExecutionService.results_are_voided(db, exam_id=latest.id):
+                raise ExamStateError(
+                    "A CLOSED examination can only be revised when its results are voided"
+                )
+        elif latest.status not in {ExamStatus.SEALED, ExamStatus.CANCELLED}:
             raise ExamStateError(
                 "A new revision can only be created from the latest SEALED "
-                "or CANCELLED examination revision"
+                "or CANCELLED examination revision, or a CLOSED revision with VOIDED results"
             )
 
         await AcademicAuthorizationService.require_can_author_curriculum_subject(

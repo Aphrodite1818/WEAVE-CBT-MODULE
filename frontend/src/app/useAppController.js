@@ -12,11 +12,13 @@ const teacherSections = new Set([
   "edit-question",
   "preview-question",
   "exams",
+  "exam-history",
   "create-exam",
 ]);
 const adminSections = new Set([
   "dashboard",
   "exams",
+  "exam-history",
   "question-banks",
   "students",
   "invigilators",
@@ -492,12 +494,15 @@ async function restoreStaffSession(
         section === "preview-question" || section === "edit-question"
           ? savedNavigation?.selectedQuestionId
           : null;
-      dispatch({ type: "staff", patch: { section, selectedQuestionId } });
+      const selectedExamId = section === "exam-history" ? savedNavigation?.selectedExamId : null;
+      dispatch({ type: "staff", patch: { section, selectedQuestionId, selectedExamId } });
       let targetPath = `/teacher/${section}`;
       if (section === "preview-question" && selectedQuestionId)
         targetPath = `/teacher/questions/${encodeURIComponent(selectedQuestionId)}/preview`;
       if (section === "edit-question" && selectedQuestionId)
         targetPath = `/teacher/questions/${encodeURIComponent(selectedQuestionId)}/edit`;
+      if (section === "exam-history" && selectedExamId)
+        targetPath = `/teacher/exams/${encodeURIComponent(selectedExamId)}/history`;
       navigate(targetPath, { replace: true });
       return true;
     }
@@ -507,14 +512,19 @@ async function restoreStaffSession(
         savedNavigation?.staffSection,
       );
       dispatch({ type: "authSuccess", session, view: "sync-check" });
-      dispatch({ type: "staff", patch: { section } });
+      const selectedExamId = section === "exam-history" ? savedNavigation?.selectedExamId : null;
+      dispatch({ type: "staff", patch: { section, selectedExamId } });
       dispatch({ type: "syncChecking" });
       navigate("/sync/check", { replace: true });
       try {
         const status = await gateway.sync.getSyncStatus();
         dispatch({ type: "syncStatus", status });
         navigate(
-          status.bootstrap_completed_at ? `/admin/${section}` : "/sync/initial",
+          status.bootstrap_completed_at
+            ? section === "exam-history" && selectedExamId
+              ? `/admin/exams/${encodeURIComponent(selectedExamId)}/history`
+              : `/admin/${section}`
+            : "/sync/initial",
           { replace: true },
         );
       } catch (error) {
@@ -593,6 +603,14 @@ function routeFromPathUnchecked(pathname) {
       examStage: "active",
       requiresAuth: true,
     };
+  const examHistoryMatch = path.match(/^\/(admin|teacher)\/exams\/([^/]+)\/history$/);
+  if (examHistoryMatch) {
+    return {
+      view: "staff", sessionType: "staff", role: examHistoryMatch[1],
+      staffSection: "exam-history", selectedExamId: decodeURIComponent(examHistoryMatch[2]),
+      requiresAuth: true,
+    };
+  }
   const questionPreviewMatch = path.match(
     /^\/teacher\/questions\/([^/]+)\/preview$/,
   );
@@ -647,6 +665,7 @@ function routeToNavigation(route) {
     role: route.role,
     staffSection: route.staffSection,
     selectedQuestionId: route.selectedQuestionId,
+    selectedExamId: route.selectedExamId,
     examStage: route.examStage,
   };
 }
@@ -668,6 +687,7 @@ function applyRouteToState(route, state, dispatch, navigate) {
         patch: {
           section: staffSectionForRole(state.session.role, route.staffSection),
           selectedQuestionId: route.selectedQuestionId || null,
+          ...(route.staffSection === "exam-history" ? { selectedExamId: route.selectedExamId || null } : {}),
         },
       });
       return;
@@ -757,6 +777,10 @@ function pathForView(view, application = "combined") {
 }
 
 function pathForStaffState(state) {
+  if (state.staff.section === "exam-history" && state.staff.selectedExamId) {
+    const role = state.session?.role === "admin" ? "admin" : "teacher";
+    return `/${role}/exams/${encodeURIComponent(state.staff.selectedExamId)}/history`;
+  }
   if (state.session?.role === "admin") {
     const section =
       state.staff.section === "overview"

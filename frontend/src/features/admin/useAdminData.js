@@ -1,3 +1,4 @@
+import { loadAllExams } from '../../shared/exams/examLineage'
 import { useCallback, useEffect, useState } from 'react'
 
 const emptyAdminData = {
@@ -37,7 +38,7 @@ export function useAdminData(gateway) {
   const refreshExams = useCallback(async ({ silent = true } = {}) => {
     if (!silent) setLoading(true)
     try {
-      const examPayload = await gateway.exams?.listExams?.({ limit: 200 })
+      const examPayload = await loadAllExams(gateway.exams)
       const examRows = Array.isArray(examPayload) ? examPayload : examPayload?.exams || []
       setData((current) => {
         const subjectByCurriculum = new Map(current.subjects.map((subject) => [subject.id, subject]))
@@ -106,7 +107,7 @@ async function loadAdminData(gateway) {
     optional(gateway.academics?.getCurrentAcademicTerm, null),
     optional(gateway.academics?.listAuthorableCurriculumSubjects, []),
     optional(gateway.academics?.listEffectiveTeacherAssignments, []),
-    optional(() => gateway.exams?.listExams?.({ limit: 200 }), { exams: [] }),
+    optional(() => loadAllExams(gateway.exams), { exams: [] }),
     optional(() => gateway.academics?.listAssessmentSchemes?.({ active_only: true }), []),
     optional(() => gateway.questions?.listManageableQuestions?.({ include_archived: true }), []),
   ])

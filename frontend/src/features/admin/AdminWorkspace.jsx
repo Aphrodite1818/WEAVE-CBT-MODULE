@@ -1,3 +1,4 @@
+import { ExamHistoryPage } from '../../shared/exams/ExamHistoryPage'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getLocalBrandLogoSrc } from '../../api/branding'
 import { Icon } from '../../shared/icons/Icon'
@@ -20,7 +21,7 @@ import './admin.css'
 import './admin-sidebar.css'
 
 const bankViews = new Set(['question-banks', 'create-bank', 'bank-detail', 'questions', 'create-question', 'edit-question', 'preview-question'])
-const examViews = new Set(['exams', 'create-exam'])
+const examViews = new Set(['exams', 'create-exam', 'exam-history'])
 const rosterViews = new Set(['roster', 'roster-detail'])
 const operationViews = new Set(['operations', 'operation-detail'])
 const resultViews = new Set(['results', 'result-detail'])
@@ -91,9 +92,10 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
 
   useEffect(() => {
     const next = topLevelView(state.staff.section)
+    if (state.staff.section === 'exam-history') setWorkspaceView('exam-history')
     if (state.staff.section === 'dashboard' || state.staff.section === 'students' || placeholderViews.has(state.staff.section)) setWorkspaceView(next)
     if (state.staff.section === 'question-banks' && !bankViews.has(workspaceView)) setWorkspaceView('question-banks')
-    if (state.staff.section === 'exams' && !examViews.has(workspaceView)) setWorkspaceView('exams')
+    if (state.staff.section === 'exams' && (!examViews.has(workspaceView) || workspaceView === 'exam-history')) setWorkspaceView('exams')
     if (state.staff.section === 'roster' && !rosterViews.has(workspaceView)) setWorkspaceView('roster')
     if (state.staff.section === 'operations' && !operationViews.has(workspaceView)) setWorkspaceView('operations')
     if (state.staff.section === 'results' && !resultViews.has(workspaceView)) setWorkspaceView('results')
@@ -106,7 +108,7 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
   }, [workspaceView])
 
   const navigate = useCallback((view, patch = {}) => {
-    const parentSection = bankViews.has(view)
+    const parentSection = view === 'exam-history' ? 'exam-history' : bankViews.has(view)
       ? 'question-banks'
       : examViews.has(view)
         ? 'exams'
@@ -241,6 +243,7 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
           {workspaceView === 'create-question' && <QuestionBuilder mode="create" state={state} dispatch={workspaceDispatch} teacherData={activeAuthoringData} gateway={gateway} />}
           {workspaceView === 'edit-question' && <QuestionBuilder key={state.staff.selectedQuestionId || 'admin-question-editor'} mode="edit" state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
           {workspaceView === 'exams' && <AdminExamsPage state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
+          {workspaceView === 'exam-history' && <ExamHistoryPage state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
           {workspaceView === 'create-exam' && <ExamAuthoringPage state={state} dispatch={workspaceDispatch} teacherData={examFormData} gateway={gateway} />}
           {workspaceView === 'roster' && <AdminRostersPage adminData={adminData} onNavigate={navigate} />}
           {workspaceView === 'roster-detail' && <AdminRosterDetailPage state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}

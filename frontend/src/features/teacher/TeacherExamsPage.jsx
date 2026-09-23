@@ -1,3 +1,6 @@
+import { buildAcademicLevels } from '../../shared/academics/authoringScope'
+import { ExamLifecycleFilter } from '../../shared/exams/ExamLifecycleFilter'
+import { currentExamRevisions } from '../../shared/exams/examLineage'
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ExamCard, ExamViewToggle } from '../../shared/exams/ExamCard';
 import { canManageExam, examStatuses } from '../../shared/exams/examPermissions';
@@ -21,6 +24,7 @@ export function TeacherExamsPage({ state, dispatch, teacherData, gateway }) {
   const [view, setView] = useState("grid");
   const [query, setQuery] = useState(() => teacherData.exams.find((exam) => exam.id === state.staff.selectedExamId)?.title || "");
   const [status, setStatus] = useState("all");
+  const [levelId, setLevelId] = useState('all')
   const [subjectId, setSubjectId] = useState("all");
   const [componentId, setComponentId] = useState("all");
   const [requestedPage, setPage] = useState(1);
@@ -29,6 +33,7 @@ export function TeacherExamsPage({ state, dispatch, teacherData, gateway }) {
   const [pendingAction, setPendingAction] = useState(null);
   const [lifecycleError, setLifecycleError] = useState("");
   const [busyExamId, setBusyExamId] = useState(null);
+  const currentExams = useMemo(() => currentExamRevisions(teacherData.exams), [teacherData.exams])
   const menuRef = useRef(null);
   const actor = state.session?.actor;
 
@@ -72,16 +77,19 @@ export function TeacherExamsPage({ state, dispatch, teacherData, gateway }) {
 
   const statusCounts = useMemo(() => {
     const counts = Object.fromEntries(EXAM_TABS.map((tab) => [tab, 0]));
-    counts.all = teacherData.exams.length;
-    teacherData.exams.forEach((exam) => {
+    counts.all = currentExams.length;
+    currentExams.forEach((exam) => {
       if (counts[exam.status] !== undefined) counts[exam.status] += 1;
     });
     return counts;
-  }, [teacherData.exams]);
+  }, [currentExams]);
+
+  const levels = useMemo(() => buildAcademicLevels(teacherData.subjects), [teacherData.subjects])
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return teacherData.exams.filter((exam) => {
+    return currentExams.filter((exam) => {
+      if (levelId !== 'all' && exam.academicLevelId !== levelId) return false
       if (status !== "all" && exam.status !== status) return false;
       if (subjectId !== "all" && exam.curriculumSubjectId !== subjectId)
         return false;
@@ -92,7 +100,7 @@ export function TeacherExamsPage({ state, dispatch, teacherData, gateway }) {
         .toLowerCase()
         .includes(needle);
     });
-  }, [componentId, query, status, subjectId, teacherData.exams]);
+  }, [componentId, query, status, subjectId, currentExams, levelId]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const page = Math.min(requestedPage, pageCount);
@@ -174,10 +182,10 @@ export function TeacherExamsPage({ state, dispatch, teacherData, gateway }) {
 
   const subjectOptions = [
     { value: "all", label: "All subjects" },
-    ...teacherData.subjects.map((subject) => ({
+    ...teacherData.subjects.filter((subject) => levelId === 'all' || subject.academicLevelId === levelId).map((subject) => ({
       value: subject.id,
       label: subject.name,
-      description: subject.code || undefined,
+      description: levelId === 'all' ? [subject.academicLevelName, subject.code].filter(Boolean).join(' / ') : subject.code || undefined,
     })),
   ];
   const componentOptions = [
@@ -207,6 +215,8 @@ export function TeacherExamsPage({ state, dispatch, teacherData, gateway }) {
             tied to the synchronized academic context.
           </p>
         </div>
+        <div className="exam-heading-actions">
+          <ExamLifecycleFilter value={status} counts={statusCounts} onChange={applyFilter(setStatus)} />
         <button
           className="teacher-primary-action"
           type="button"
@@ -214,29 +224,13 @@ export function TeacherExamsPage({ state, dispatch, teacherData, gateway }) {
         >
           <RiAddLine size={18} /> Create Exam
         </button>
+        </div>
       </div>
 
       {teacherData.error && <Notice tone="danger">{teacherData.error}</Notice>}
       {teacherData.warning && (
         <Notice tone="warning">{teacherData.warning}</Notice>
       )}
-
-      <nav
-        className="teacher-tab-row teacher-exam-tabs"
-        aria-label="Exam status filters"
-      >
-        {EXAM_TABS.map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            className={status === tab ? "active" : ""}
-            aria-current={status === tab ? "page" : undefined}
-            onClick={() => applyFilter(setStatus)(tab)}
-          >
-            {titleCase(tab)} <span>{statusCounts[tab] || 0}</span>
-          </button>
-        ))}
-      </nav>
 
       <div className="teacher-exam-filters teacher-exam-filters--refined exam-filters">
         <label className="teacher-search-control teacher-search-control--grow">
@@ -252,6 +246,9 @@ export function TeacherExamsPage({ state, dispatch, teacherData, gateway }) {
             placeholder="Search by title, subject, or assessment..."
           />
         </label>
+        <SelectControl label="Academic level filter" value={levelId}
+          options={[{ value: 'all', label: 'All levels' }, ...levels.map((level) => ({ value: level.id, label: level.name }))]}
+          onChange={(value) => { setLevelId(value); setSubjectId('all'); setPage(1) }} />
         <SelectControl
           label="Exam subject filter"
           value={subjectId}
@@ -275,7 +272,7 @@ export function TeacherExamsPage({ state, dispatch, teacherData, gateway }) {
         {visibleExams.map((exam) => {
           const canManageDraft = canManageExam(exam, actor, teacherData.assignments);
           return (
-            <ExamCard key={exam.id} exam={exam} onOpen={() => openEdit(exam)} onEdit={canManageDraft ? () => openEdit(exam) : undefined}>
+            <ExamCard key={exam.id} exam={exam} onOpen={() => dispatch({ type: 'staff', patch: { section: 'exam-history', selectedExamId: exam.id } })} onEdit={canManageDraft ? () => openEdit(exam) : undefined}>
                 <div
                   className="teacher-exam-lifecycle"
                   ref={menuExamId === exam.id ? menuRef : undefined}
@@ -365,12 +362,12 @@ export function TeacherExamsPage({ state, dispatch, teacherData, gateway }) {
               <Icon name="calendar" size={24} />
             </span>
             <strong>
-              {teacherData.exams.length === 0
+              {currentExams.length === 0
                 ? "No examinations yet"
                 : "No examinations match these filters"}
             </strong>
             <p>
-              {teacherData.exams.length === 0
+              {currentExams.length === 0
                 ? "Create the first draft paper for your current teaching scope."
                 : "Adjust the search, subject, component, or lifecycle filter."}
             </p>
@@ -583,11 +580,6 @@ function getPopoverPosition(trigger) {
       };
 }
 
-function titleCase(value) {
-  return String(value)
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
 
 export const ExamsPage = TeacherExamsPage;
 

@@ -31,12 +31,17 @@ export function ExamCard({ exam, onOpen, onEdit, children }) {
 
   return (
     <article className="exam-card" style={{ '--exam-folder-color': folderColor }}>
+      <span className="exam-card__binding" aria-hidden="true">{Array.from({ length: 7 }, (_, index) => <i key={index} />)}</span>
       <button type="button" className="exam-card__open" aria-label={`Open ${exam.title}`} onClick={onOpen}>
         <ExamFolder color={folderColor} />
         <h2 title={exam.title}>{exam.title}</h2>
         <p title={`${exam.subjectName} · ${exam.assessmentName}`}>{exam.subjectName} <span>·</span> {exam.assessmentName}</p>
+        <span className="exam-card__revision">Revision {exam.revisionNumber || 1}</span>
       </button>
-      <div className="exam-card__menu">{children}</div>
+      <div className="exam-card__menu">
+        {exam.status === 'draft' && onEdit && <button type="button" className="exam-card__edit" aria-label={`Edit ${exam.title}`} title="Edit draft" onClick={onEdit}><RiEdit2Line size={17} /></button>}
+        {children}
+      </div>
       <span className={`exam-status exam-status--${exam.status}`}>{exam.statusLabel}</span>
       <div className="exam-card__date">
         <RiCalendarLine size={16} />
@@ -46,7 +51,6 @@ export function ExamCard({ exam, onOpen, onEdit, children }) {
       </div>
       <div className="exam-card__footer">
         <span>{exam.questionCount} {exam.questionCount === 1 ? 'question' : 'questions'} <span>·</span> {exam.durationMinutes} min</span>
-        {onEdit && <button type="button" onClick={onEdit}><RiEdit2Line size={16} /> Edit</button>}
       </div>
     </article>
   )

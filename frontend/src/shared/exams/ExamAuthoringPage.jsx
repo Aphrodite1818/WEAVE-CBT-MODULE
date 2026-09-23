@@ -1,3 +1,4 @@
+import { examRevisionHistory, loadAllExams } from './examLineage'
 import { useMemo, useState } from 'react'
 import { RiCheckLine, RiCheckboxCircleFill, RiCheckboxBlankCircleLine } from '@remixicon/react'
 import { buildAcademicLevels, findSubjectScope, humanizeAcademicCategory, listBanksForSubject, listSubjectsForLevel } from '../academics/authoringScope'
@@ -56,6 +57,17 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
   const [questionSaving, setQuestionSaving] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [duplicateScope, setDuplicateScope] = useState(null)
+  const currentScope = { termId: teacherData.term?.id, curriculumSubjectId: subjectId, assessmentComponentId: componentId }
+  const existingScopeExam = !editing ? teacherData.exams.find((exam) =>
+    exam.termId === currentScope.termId && exam.curriculumSubjectId === subjectId && exam.assessmentComponentId === componentId,
+  ) : null
+  const existingExam = existingScopeExam ? examRevisionHistory(teacherData.exams, existingScopeExam)[0] : null
+  const recoveryExamId = existingExam?.id || (
+    duplicateScope?.termId === currentScope.termId && duplicateScope?.curriculumSubjectId === subjectId && duplicateScope?.assessmentComponentId === componentId
+      ? duplicateScope.id : null
+  )
+  const openExam = (id) => dispatch({ type: 'staff', patch: { section: 'exam-history', selectedExamId: id, examAuthoringNotice: '' } })
 
   const levels = useMemo(() => buildAcademicLevels(teacherData.subjects), [teacherData.subjects])
   const subjectsForLevel = useMemo(
@@ -118,6 +130,10 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
     if (readOnly || saving || leadSaving || questionSaving) return
     setError('')
 
+    if (!editing && recoveryExamId) {
+      setError('Exam already exists for this assessment scope.')
+      return
+    }
     if (!teacherData.session?.id || !teacherData.term?.id) {
       setError('The current academic session and term are not available on this CBT server.')
       return
@@ -217,6 +233,22 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
       leaveForm()
     } catch (requestError) {
       setError(requestError.userMessage || `Weave could not ${editing ? 'update' : 'create'} this examination.`)
+      if (!editing && requestError.status === 409) {
+        // A concurrent creator may have committed after this form loaded.
+        try {
+          const payload = await loadAllExams(gateway.exams, {
+            term_id: currentScope.termId, curriculum_subject_id: subjectId, assessment_component_id: componentId,
+          })
+          const latest = payload.exams.reduce((current, exam) => !current || exam.revision_number > current.revision_number ? exam : current, null)
+          if (latest) {
+            setDuplicateScope({ ...currentScope, id: latest.id })
+            setError('Exam already exists for this assessment scope.')
+            await teacherData.refresh()
+          }
+        } catch {
+          // Keep the original creation error if recovery data is unavailable.
+        }
+      }
     } finally {
       setSaving(false)
     }
@@ -289,6 +321,13 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway }) {
 
       {state.staff?.examAuthoringNotice && <Notice tone="warning">{state.staff.examAuthoringNotice}</Notice>}
       {error && <Notice tone="danger">{error}</Notice>}
+      {!editing && recoveryExamId && (
+        <div className="exam-authoring-recovery" role="status">
+          <p>Exam already exists for this assessment scope.</p>
+          <button type="button" className="teacher-secondary-action" disabled={saving} onClick={() => openExam(recoveryExamId)}>Open Existing Examination</button>
+        </div>
+      )}
+      {editing && <button type="button" className="teacher-secondary-action" disabled={saving || leadSaving || questionSaving} onClick={() => openExam(editingExam.id)}>View revision history</button>}
       {teacherData.error && <Notice tone="danger">{teacherData.error}</Notice>}
       {teacherData.warning && <Notice tone="warning">{teacherData.warning}</Notice>}
       {!canSave && !teacherData.loading && !readOnly && (
