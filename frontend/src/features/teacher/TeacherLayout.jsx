@@ -41,11 +41,8 @@ export function TeacherLayout({ state, dispatch, signOut, children }) {
         <div className="teacher-sidebar__header">
           <div className="school-card">
             <span>{schoolLogoSrc ? <img className="school-brand-logo" src={schoolLogoSrc} alt="School logo" /> : <Icon name="school" size={20} />}</span>
-            <div><strong>{schoolName}</strong><small>{serverName}</small></div>
+            <div><strong>{schoolName}</strong></div>
           </div>
-          <button className="dashboard-sidebar-toggle" type="button" aria-label={sidebarOpen ? 'Collapse sidebar' : 'Open sidebar'} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>
-            <Icon name={sidebarOpen ? 'back' : 'menu'} size={18} />
-          </button>
         </div>
         <nav aria-label="Teacher navigation">
           {nav.map(([section, icon, label]) => (
@@ -58,7 +55,20 @@ export function TeacherLayout({ state, dispatch, signOut, children }) {
 
       <section className="teacher-main">
         <header className="teacher-topbar">
-          <DashboardSchoolIdentity schoolName={schoolName} logoSrc={schoolLogoSrc} />
+          <div className="teacher-topbar__brand">
+            <button className="dashboard-sidebar-toggle" type="button" aria-label={sidebarOpen ? 'Collapse sidebar' : 'Open sidebar'} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>
+              <Icon name={sidebarOpen ? 'back' : 'menu'} size={18} />
+            </button>
+            <DashboardSchoolIdentity schoolName={schoolName} logoSrc={schoolLogoSrc} />
+          </div>
+
+          <div className="dashboard-server-identity" title={serverName}>
+            <span className="dashboard-server-identity__icon"><Icon name="database" size={15} /></span>
+            <span className="dashboard-server-identity__copy">
+              <small>CBT server</small>
+              <strong>{serverName}</strong>
+            </span>
+          </div>
 
           <div className="teacher-topbar__actions">
             <DashboardAccountMenu actor={actor} fallbackName={teacherName} roleLabel={teacherRole} onSignOut={signOut} />
