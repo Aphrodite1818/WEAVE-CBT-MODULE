@@ -90,7 +90,6 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
     }
   }, [])
 
-
   useEffect(() => {
     const activeGroup = groupForView(workspaceView)
     if (activeGroup) setOpenGroup(activeGroup)
@@ -144,11 +143,8 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
         <div className="teacher-sidebar__header">
           <div className="school-card">
             <span>{schoolLogoSrc ? <img className="school-brand-logo" src={schoolLogoSrc} alt="School logo" /> : <Icon name="school" size={20} />}</span>
-            <div><strong>{schoolName}</strong><small>{serverName}</small></div>
+            <div><strong>{schoolName}</strong></div>
           </div>
-          <button className="dashboard-sidebar-toggle" type="button" aria-label={sidebarOpen ? 'Collapse sidebar' : 'Open sidebar'} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>
-            <Icon name={sidebarOpen ? 'back' : 'menu'} size={18} />
-          </button>
         </div>
         <nav className="admin-sidebar-nav" aria-label="Administrator navigation">
           {adminNav.map((item) => {
@@ -207,7 +203,21 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
 
       <section className="teacher-main admin-main">
         <header className="teacher-topbar">
-          <DashboardSchoolIdentity schoolName={schoolName} logoSrc={schoolLogoSrc} />
+          <div className="teacher-topbar__brand">
+            <button className="dashboard-sidebar-toggle" type="button" aria-label={sidebarOpen ? 'Collapse sidebar' : 'Open sidebar'} aria-expanded={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>
+              <Icon name={sidebarOpen ? 'back' : 'menu'} size={18} />
+            </button>
+            <DashboardSchoolIdentity schoolName={schoolName} logoSrc={schoolLogoSrc} />
+          </div>
+
+          <div className="dashboard-server-identity" title={serverName}>
+            <span className="dashboard-server-identity__icon"><Icon name="database" size={15} /></span>
+            <span className="dashboard-server-identity__copy">
+              <small>CBT server</small>
+              <strong>{serverName}</strong>
+            </span>
+          </div>
+
           <div className="teacher-topbar__actions"><DashboardAccountMenu actor={actor} fallbackName={adminName} roleLabel="Administrator" onSignOut={signOut} /></div>
         </header>
         <div className="teacher-content admin-content">
