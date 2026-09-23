@@ -398,7 +398,7 @@
 }
 
 .admin-roster-back {
-  align-self: flex-end;
+  justify-self: end;
   width: fit-content;
   display: inline-flex;
   align-items: center;
