@@ -19,8 +19,8 @@
   max-width: 680px;
   margin: 6px 0 0;
   color: rgb(var(--color-text-muted));
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.55;
 }
 
 .exam-history-heading .teacher-secondary-action {
@@ -78,7 +78,7 @@
 .exam-history-eyebrow {
   display: block;
   color: rgb(var(--color-text-muted));
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 750;
   letter-spacing: .09em;
   text-transform: uppercase;
@@ -106,8 +106,8 @@
   border-radius: 6px;
   background: rgb(var(--color-surface-muted));
   color: rgb(var(--color-text-muted));
-  font-size: 12px;
-  line-height: 1.2;
+  font-size: 13px;
+  line-height: 1.3;
 }
 
 .exam-history-overview__actions {
@@ -126,9 +126,13 @@
   gap: 7px;
 }
 
+.exam-history-page .exam-status {
+  font-size: 12px;
+}
+
 .exam-history-current-revision {
   color: rgb(var(--color-text-muted));
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -166,16 +170,16 @@
 .exam-history-fact dt {
   margin: 0 0 5px;
   color: rgb(var(--color-text-muted));
-  font-size: 11px;
-  line-height: 1.25;
+  font-size: 12px;
+  line-height: 1.3;
 }
 
 .exam-history-fact dd {
   margin: 0;
   color: rgb(var(--color-text));
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 650;
-  line-height: 1.35;
+  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
@@ -183,8 +187,8 @@
   display: block;
   margin-top: 2px;
   color: rgb(var(--color-text-muted));
-  font-size: 10px;
-  line-height: 1.3;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .exam-history-disposition {
@@ -195,7 +199,7 @@
   border-radius: 20px;
   background: rgb(var(--color-surface-muted));
   color: rgb(var(--color-text-muted));
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
 }
 
@@ -246,7 +250,7 @@
 
 .exam-history-section-heading h2 {
   margin: 0 0 3px;
-  font-size: 18px;
+  font-size: 20px;
   line-height: 1.25;
 }
 
@@ -254,7 +258,8 @@
 .exam-history-section-heading > span {
   margin: 0;
   color: rgb(var(--color-text-muted));
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .exam-history-timeline {
@@ -293,7 +298,7 @@
   border-radius: 50%;
   background: rgb(var(--color-surface));
   color: rgb(var(--color-text-muted));
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
   box-shadow: 0 2px 7px rgb(15 23 42 / .04);
 }
@@ -333,7 +338,7 @@
 
 .exam-history-record h3 {
   margin: 0;
-  font-size: 15px;
+  font-size: 17px;
   line-height: 1.3;
 }
 
@@ -345,14 +350,15 @@
   border-radius: 5px;
   background: rgb(var(--color-primary) / .08);
   color: rgb(var(--color-primary));
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
 }
 
 .exam-history-record header p {
   margin: 5px 0 0;
   color: rgb(var(--color-text-muted));
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
@@ -378,7 +384,7 @@
   width: fit-content;
   padding: 10px 0 11px;
   color: rgb(var(--color-text-muted));
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -406,13 +412,13 @@
 .exam-history-details dt {
   margin: 0 0 4px;
   color: rgb(var(--color-text-muted));
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .exam-history-details dd {
   margin: 0;
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 1.5;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -481,7 +487,7 @@
   .exam-history-marker {
     width: 24px;
     height: 24px;
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .exam-history-timeline > li::before {
