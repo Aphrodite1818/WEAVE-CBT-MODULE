@@ -27,7 +27,7 @@ function createAdminGateway() {
 }
 
 describe('Dashboard shell headers', () => {
-  it('uses the compact account pill and no notification control for teachers', () => {
+  it('keeps teacher shell controls and server identity structurally in the header', () => {
     const signOut = vi.fn()
     render(
       <TeacherLayout
@@ -49,10 +49,18 @@ describe('Dashboard shell headers', () => {
     expect(account.querySelector('.dashboard-account__avatar')).toHaveTextContent('M')
     expect(screen.queryByText('teacher@brightfield.test')).not.toBeInTheDocument()
     expect(screen.getAllByText('Brightfield Academy')).toHaveLength(2)
+
+    const serverName = screen.getByText('Main CBT Lab')
+    expect(serverName.closest('.dashboard-server-identity')).toBeInTheDocument()
+    expect(serverName.closest('header')).toHaveClass('teacher-topbar')
+
     const sidebarToggle = screen.getByRole('button', { name: /collapse sidebar/i })
-    expect(sidebarToggle.closest('aside')).toHaveClass('teacher-sidebar')
+    expect(sidebarToggle.closest('header')).toHaveClass('teacher-topbar')
+    expect(sidebarToggle.closest('aside')).toBeNull()
     fireEvent.click(sidebarToggle)
     expect(screen.getByRole('main')).toHaveClass('teacher-shell--collapsed')
+    expect(screen.getByRole('button', { name: /open sidebar/i })).toBeVisible()
+
     expect(screen.queryByRole('button', { name: /notifications/i })).not.toBeInTheDocument()
     fireEvent.click(account)
     expect(screen.queryByRole('button', { name: /my profile/i })).not.toBeInTheDocument()
@@ -61,7 +69,7 @@ describe('Dashboard shell headers', () => {
     expect(signOut).toHaveBeenCalledOnce()
   })
 
-  it('uses the same compact shell for admins and removes the old decorative controls', () => {
+  it('uses the same structural header shell for administrators', () => {
     render(
       <AdminWorkspace
         state={{
@@ -82,10 +90,16 @@ describe('Dashboard shell headers', () => {
     expect(screen.queryByText('admin@brightfield.test')).not.toBeInTheDocument()
     expect(screen.getAllByText('Brightfield Academy')).toHaveLength(2)
 
+    const serverName = screen.getByText('Main CBT Lab')
+    expect(serverName.closest('.dashboard-server-identity')).toBeInTheDocument()
+    expect(serverName.closest('header')).toHaveClass('teacher-topbar')
+
     const sidebarToggle = screen.getByRole('button', { name: /collapse sidebar/i })
-    expect(sidebarToggle.closest('aside')).toHaveClass('teacher-sidebar', 'admin-sidebar')
+    expect(sidebarToggle.closest('header')).toHaveClass('teacher-topbar')
+    expect(sidebarToggle.closest('aside')).toBeNull()
     fireEvent.click(sidebarToggle)
     expect(screen.getByRole('main')).toHaveClass('teacher-shell--collapsed', 'admin-shell--collapsed')
+    expect(screen.getByRole('button', { name: /open sidebar/i })).toBeVisible()
 
     expect(screen.queryByPlaceholderText(/search anything/i)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^settings$/i })).not.toBeInTheDocument()
