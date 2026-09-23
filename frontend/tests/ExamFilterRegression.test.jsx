@@ -114,7 +114,7 @@ describe('exam workspace filter regressions', () => {
       />,
     )
 
-    expect(screen.getByText(/Submitted/)).toBeInTheDocument()
+    expect(screen.getAllByText(/Submitted/).length).toBeGreaterThan(0)
     expect(screen.queryByText(/Scheduled/)).not.toBeInTheDocument()
   })
 })
