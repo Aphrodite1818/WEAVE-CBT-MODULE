@@ -303,7 +303,7 @@ function AdminPaperMenu({ exam, style, menuRef, onOpen, onEdit, onOperations, on
 
 function authoringActions(exam) {
   if (exam.status === 'draft') return [
-    { key: 'submit', label: 'Submit for review', copy: 'Validate the paper and move it to administrator review.', Icon: RiSendPlaneLine },
+    { key: 'submit', label: 'Advance to review', copy: 'Validate the paper and move it into the review stage before sealing.', Icon: RiSendPlaneLine },
     { key: 'delete', label: 'Delete draft', copy: 'Permanently remove this draft.', Icon: RiDeleteBinLine, danger: true },
   ]
   if (exam.status === 'submitted') return [
@@ -347,7 +347,7 @@ function PaperConfirmModal({ pending, error, busy, onCancel, onConfirm }) {
 
 function authoringCopy(action) {
   const entries = {
-    submit: ['Submit this examination?', 'The paper will be validated and move to administrator review.', 'Submit for review', RiSendPlaneLine, false],
+    submit: ['Advance this examination to review?', 'The paper will be validated and moved into the review stage before sealing.', 'Advance to review', RiSendPlaneLine, false],
     delete: ['Delete this draft examination?', 'This permanently removes the draft paper.', 'Delete draft', RiDeleteBinLine, true],
     'return-draft': ['Return this examination to draft?', 'Authoring will reopen for this submitted paper.', 'Return to draft', RiArrowGoBackLine, false],
     seal: ['Seal this examination?', 'Questions, options, component score and target classes will be frozen.', 'Seal examination', RiShieldCheckLine, false],
