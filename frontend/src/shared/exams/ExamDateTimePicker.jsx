@@ -30,7 +30,8 @@ export function ExamDateTimePicker({ label, value, onChange, min = '', disabled 
   const [month, setMonth] = useState(() => new Date())
   const [opened, setOpened] = useState(false)
   const [now, setNow] = useState(() => Date.now())
-  const effectiveMin = min || nextLocalMinute()
+  const currentMinimum = nextLocalMinute()
+  const effectiveMin = min && min > currentMinimum ? min : currentMinimum
   const selectedDate = draft.slice(0, 10)
   const hours = draft.slice(11, 13) || '09'
   const minutes = draft.slice(14, 16) || '00'
