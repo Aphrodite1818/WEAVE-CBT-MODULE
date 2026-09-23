@@ -268,6 +268,53 @@ class ExamService(
             "component in a term. Open the existing examination and continue from it."
         )
 
+    @staticmethod
+    def _schedule_utc(value: datetime | None, field_name: str) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ExamStateError(f"{field_name} must include a timezone")
+        return value.astimezone(UTC)
+
+    @classmethod
+    def _require_authoring_schedule(
+        cls,
+        *,
+        scheduled_start_at: datetime | None,
+        latest_normal_start_at: datetime | None,
+        require_scheduled: bool,
+        action: str,
+    ) -> None:
+        """Validate the durable schedule at authoring lifecycle boundaries."""
+
+        scheduled = cls._schedule_utc(scheduled_start_at, "scheduled_start_at")
+        latest = cls._schedule_utc(
+            latest_normal_start_at,
+            "latest_normal_start_at",
+        )
+
+        if scheduled is None:
+            if latest is not None:
+                raise ExamStateError(
+                    "Latest normal start cannot exist without a scheduled start"
+                )
+            if require_scheduled:
+                raise ExamStateError(
+                    f"Schedule the examination before {action}."
+                )
+            return
+
+        if scheduled <= datetime.now(UTC):
+            raise ExamStateError(
+                "The scheduled examination time has elapsed. "
+                f"Reschedule the examination before {action}."
+            )
+
+        if latest is not None and latest < scheduled:
+            raise ExamStateError(
+                "Latest normal start cannot be earlier than the scheduled start"
+            )
+
     @classmethod
     async def assign_lead_teacher(
         cls,
@@ -339,6 +386,7 @@ class ExamService(
             term_id=payload.term_id,
             curriculum_subject_id=payload.curriculum_subject_id,
             scheduled_start_at=payload.scheduled_start_at,
+            latest_normal_start_at=payload.latest_normal_start_at,
             duration_minutes=payload.duration_minutes,
         )
 
@@ -353,15 +401,8 @@ class ExamService(
         scheduled_start_at: datetime | None,
         duration_minutes: int,
     ) -> None:
-        await ExamTimetableService.require_planned_slot_available(
-            db,
-            session_id=session_id,
-            term_id=term_id,
-            curriculum_subject_id=exam.curriculum_subject_id,
-            scheduled_start_at=scheduled_start_at,
-            duration_minutes=duration_minutes,
-            exclude_exam_id=exam.id,
-        )
+        # The public update_exam preflight owns timetable validation because it
+        # has the complete PATCH result, including latest_normal_start_at.
         lead_teacher_id = getattr(exam, "lead_teacher_id", None)
         if lead_teacher_id is not None:
             await cls._validate_lead_teacher(
@@ -545,9 +586,87 @@ class ExamService(
         payload: ExamUpdate,
         exam_id: UUID,
     ) -> Exam:
+        exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id, lock=True)
+        if exam is None:
+            raise ExamNotFound("Examination does not exist")
+        if exam.status != ExamStatus.DRAFT:
+            raise ExamStateError("Only examinations in DRAFT state can be edited")
+        cls._require_expected_authoring_version(
+            exam,
+            payload.expected_authoring_version,
+        )
+        cls._require_lead_or_admin(actor, exam)
+
+        fields = payload.model_fields_set
+        if (
+            "scheduled_start_at" in fields
+            and payload.scheduled_start_at is None
+            and "latest_normal_start_at" not in fields
+        ):
+            payload_data = payload.model_dump(exclude_unset=True)
+            payload_data["latest_normal_start_at"] = None
+            payload = ExamUpdate.model_validate(payload_data)
+            fields = payload.model_fields_set
+
+        next_scheduled_start_at = (
+            payload.scheduled_start_at
+            if "scheduled_start_at" in fields
+            else exam.scheduled_start_at
+        )
+        next_latest_normal_start_at = (
+            payload.latest_normal_start_at
+            if "latest_normal_start_at" in fields
+            else exam.latest_normal_start_at
+        )
+        next_session_id = (
+            payload.session_id if "session_id" in fields else exam.session_id
+        )
+        next_term_id = payload.term_id if "term_id" in fields else exam.term_id
+        next_duration_minutes = (
+            payload.duration_minutes
+            if "duration_minutes" in fields
+            else exam.duration_minutes
+        )
+
+        cls._require_authoring_schedule(
+            scheduled_start_at=next_scheduled_start_at,
+            latest_normal_start_at=next_latest_normal_start_at,
+            require_scheduled=False,
+            action="saving changes to this draft",
+        )
+        await ExamTimetableService.require_planned_slot_available(
+            db,
+            session_id=next_session_id,
+            term_id=next_term_id,
+            curriculum_subject_id=exam.curriculum_subject_id,
+            scheduled_start_at=next_scheduled_start_at,
+            latest_normal_start_at=next_latest_normal_start_at,
+            duration_minutes=next_duration_minutes,
+            exclude_exam_id=exam.id,
+        )
+
         return await super().update_exam(
             db, actor=actor, payload=payload, exam_id=exam_id
         )
+
+    @classmethod
+    async def submit_exam(
+        cls,
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        exam_id: UUID,
+    ) -> Exam:
+        exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id, lock=True)
+        if exam is None:
+            raise ExamNotFound("Examination does not exist")
+        cls._require_authoring_schedule(
+            scheduled_start_at=exam.scheduled_start_at,
+            latest_normal_start_at=exam.latest_normal_start_at,
+            require_scheduled=True,
+            action="submitting it for review",
+        )
+        return await super().submit_exam(db, actor=actor, exam_id=exam_id)
 
     @classmethod
     async def remove_manual_question(
@@ -623,15 +742,22 @@ class ExamService(
         actor: LocalActor,
         exam_id: UUID,
     ) -> Exam:
-        exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id)
+        exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id, lock=True)
         if exam is None:
             raise ExamNotFound("Examination does not exist")
+        cls._require_authoring_schedule(
+            scheduled_start_at=exam.scheduled_start_at,
+            latest_normal_start_at=exam.latest_normal_start_at,
+            require_scheduled=True,
+            action="sealing it",
+        )
         await ExamTimetableService.require_planned_slot_available(
             db,
             session_id=exam.session_id,
             term_id=exam.term_id,
             curriculum_subject_id=exam.curriculum_subject_id,
             scheduled_start_at=exam.scheduled_start_at,
+            latest_normal_start_at=exam.latest_normal_start_at,
             duration_minutes=exam.duration_minutes,
             exclude_exam_id=exam.id,
         )
@@ -764,8 +890,8 @@ class ExamService(
             duration_minutes=latest.duration_minutes,
             shuffle_questions=latest.shuffle_questions,
             shuffle_options=latest.shuffle_options,
-            scheduled_start_at=latest.scheduled_start_at,
-            latest_normal_start_at=latest.latest_normal_start_at,
+            scheduled_start_at=None,
+            latest_normal_start_at=None,
             status=ExamStatus.DRAFT,
             roster_status=ExamRosterStatus.NOT_PREPARED,
             roster_version=0,
@@ -832,6 +958,8 @@ class ExamService(
             revision.lead_teacher_id = getattr(latest, "lead_teacher_id", None)
             revision.lead_assigned_by_actor_id = actor.id
             revision.lead_assigned_at = datetime.now(UTC)
+            revision.scheduled_start_at = None
+            revision.latest_normal_start_at = None
             try:
                 revision = await ExamRepository.save_exam(db, revision)
                 await db.commit()
