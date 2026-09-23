@@ -26,14 +26,14 @@ def _validate_future_exam_datetime(
     *,
     field_name: str,
 ) -> None:
-    """Reject ambiguous or historical schedule timestamps supplied by clients."""
+    """Reject ambiguous or elapsed schedule timestamps supplied by clients."""
 
     if value is None:
         return
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"{field_name} must include a timezone")
-    if value.astimezone(UTC) < datetime.now(UTC):
-        raise ValueError(f"{field_name} cannot be in the past")
+    if value.astimezone(UTC) <= datetime.now(UTC):
+        raise ValueError(f"{field_name} must be in the future")
 
 
 class InputBase(BaseModel):
@@ -96,6 +96,10 @@ class ExamCreate(InputBase):
             self.latest_normal_start_at,
             field_name="latest_normal_start_at",
         )
+        if self.scheduled_start_at is None and self.latest_normal_start_at is not None:
+            raise ValueError(
+                "latest_normal_start_at requires scheduled_start_at"
+            )
         if (
             self.scheduled_start_at is not None
             and self.latest_normal_start_at is not None
@@ -161,6 +165,16 @@ class ExamUpdate(InputBase):
             _validate_future_exam_datetime(
                 self.latest_normal_start_at,
                 field_name="latest_normal_start_at",
+            )
+
+        if (
+            "scheduled_start_at" in self.model_fields_set
+            and "latest_normal_start_at" in self.model_fields_set
+            and self.scheduled_start_at is None
+            and self.latest_normal_start_at is not None
+        ):
+            raise ValueError(
+                "latest_normal_start_at requires scheduled_start_at"
             )
 
         if (
