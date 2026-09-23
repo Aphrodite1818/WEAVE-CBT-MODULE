@@ -24,7 +24,7 @@ export function ExamViewToggle({ value, onChange }) {
   )
 }
 
-export function ExamCard({ exam, onOpen, onEdit, children }) {
+export function ExamCard({ exam, onOpen, onEdit, cardAction, children }) {
   const dated = getDisplayDate(exam)
   const date = dated[1] ? new Date(dated[1]) : null
   const folderColor = exam.folderColor || stableFolderColor(exam.id || exam.title)
@@ -49,6 +49,7 @@ export function ExamCard({ exam, onOpen, onEdit, children }) {
           ? `${dated[0]} ${date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`
           : 'Not scheduled'}
       </div>
+      {cardAction && <div className="exam-card__action">{cardAction}</div>}
       <div className="exam-card__footer">
         <span>{exam.questionCount} {exam.questionCount === 1 ? 'question' : 'questions'} <span>·</span> {exam.durationMinutes} min</span>
       </div>
