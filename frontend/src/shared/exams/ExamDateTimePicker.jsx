@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { RiCalendarLine, RiArrowLeftSLine, RiArrowRightSLine, RiCloseLine, RiTimeLine } from '@remixicon/react'
 import { SelectControl } from '../ui'
 import './exam-date-time-picker.css'
@@ -15,24 +15,40 @@ function nextLocalMinute() {
   return `${dateKey(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+function hasElapsed(value, now) {
+  if (!value) return false
+  const timestamp = new Date(value).getTime()
+  return Number.isFinite(timestamp) && timestamp <= now
+}
+
 export function ExamDateTimePicker({ label, value, onChange, min = '', disabled = false }) {
   const dialogRef = useRef(null)
   const headingId = useId()
   const helpId = useId()
+  const elapsedHelpId = useId()
   const [draft, setDraft] = useState('')
   const [month, setMonth] = useState(() => new Date())
   const [opened, setOpened] = useState(false)
+  const [now, setNow] = useState(() => Date.now())
   const effectiveMin = min || nextLocalMinute()
   const selectedDate = draft.slice(0, 10)
   const hours = draft.slice(11, 13) || '09'
   const minutes = draft.slice(14, 16) || '00'
   const tooEarly = Boolean(effectiveMin && draft && draft < effectiveMin)
+  const valueElapsed = hasElapsed(value, now)
   const firstDay = new Date(month.getFullYear(), month.getMonth(), 1).getDay()
   const dayCount = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()
   const today = dateKey(new Date())
 
+  useEffect(() => {
+    if (!value) return undefined
+    setNow(Date.now())
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000)
+    return () => window.clearInterval(timer)
+  }, [value])
+
   const open = () => {
-    const initial = value || effectiveMin || `${today}T09:00`
+    const initial = valueElapsed ? effectiveMin : value || effectiveMin || `${today}T09:00`
     setDraft(initial)
     setMonth(new Date(`${initial.slice(0, 10)}T12:00`))
     setOpened(true)
@@ -45,10 +61,23 @@ export function ExamDateTimePicker({ label, value, onChange, min = '', disabled 
   return (
     <div className="teacher-exam-field exam-datetime">
       <span>{label} <small>(optional)</small></span>
-      <button type="button" className={`exam-datetime__trigger${value ? ' has-value' : ''}`} aria-label={label} aria-haspopup="dialog" disabled={disabled} onClick={open}>
+      <button
+        type="button"
+        className={`exam-datetime__trigger${value ? ' has-value' : ''}${valueElapsed ? ' is-overdue' : ''}`}
+        aria-label={label}
+        aria-haspopup="dialog"
+        aria-describedby={valueElapsed ? elapsedHelpId : undefined}
+        disabled={disabled}
+        onClick={open}
+      >
         <RiCalendarLine size={18} aria-hidden="true" />
         <span>{value ? new Date(value).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Choose date & time'}</span>
       </button>
+      {valueElapsed && (
+        <p id={elapsedHelpId} className="exam-datetime__elapsed" role="alert">
+          This time has elapsed. Choose a new future time before saving or moving this examination forward.
+        </p>
+      )}
       <dialog ref={dialogRef} className="exam-datetime-dialog" aria-labelledby={headingId} onClose={() => setOpened(false)} onClick={(event) => {
         if (event.target !== event.currentTarget) return
         const rect = event.currentTarget.getBoundingClientRect()
