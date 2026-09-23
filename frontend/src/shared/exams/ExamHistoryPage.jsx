@@ -178,8 +178,7 @@ function HistoryFact({ label: factLabel, value, detail }) {
   return (
     <div className="exam-history-fact">
       <dt>{factLabel}</dt>
-      <dd>{value}</dd>
-      {detail && <small>{detail}</small>}
+      <dd>{value}{detail && <small>{detail}</small>}</dd>
     </div>
   )
 }
