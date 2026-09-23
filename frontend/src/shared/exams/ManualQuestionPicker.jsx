@@ -3,7 +3,18 @@ import { RiSearchLine } from '@remixicon/react'
 import { Notice } from '../ui'
 import { FormattedText } from '../ui/FormattedText'
 
-export function ManualQuestionPicker({ bankId, exam, gateway, selectedIds, onChange, disabled, onBusyChange, onSaved }) {
+export function ManualQuestionPicker({
+  bankId,
+  exam,
+  gateway,
+  selectedIds,
+  onChange,
+  disabled,
+  onBusyChange,
+  onSaved,
+  actorId,
+  canManageAllSelections = false,
+}) {
   const [resource, setResource] = useState({ loading: true, questions: [], selections: [], version: null, error: '' })
   const [query, setQuery] = useState('')
   const [selectedOnly, setSelectedOnly] = useState(false)
@@ -29,10 +40,18 @@ export function ManualQuestionPicker({ bankId, exam, gateway, selectedIds, onCha
 
   const ids = examId ? resource.selections.map((row) => row.question_id) : selectedIds
   const selected = new Set(ids)
+  const selectionByQuestion = new Map(resource.selections.map((row) => [row.question_id, row]))
   const visible = resource.questions.filter((question) => (question.is_active || selected.has(question.id)) && (!selectedOnly || selected.has(question.id)) && question.prompt.toLowerCase().includes(query.trim().toLowerCase()))
+
+  const canRemoveSelectedQuestion = (questionId) => {
+    if (!examId || canManageAllSelections) return true
+    const selection = selectionByQuestion.get(questionId)
+    return Boolean(actorId && selection?.added_by_actor_id && String(selection.added_by_actor_id) === String(actorId))
+  }
 
   const toggle = async (questionId) => {
     if (disabled || busy) return
+    if (selected.has(questionId) && !canRemoveSelectedQuestion(questionId)) return
     if (!examId) {
       onChange(selected.has(questionId) ? ids.filter((id) => id !== questionId) : [...ids, questionId])
       return
@@ -40,13 +59,19 @@ export function ManualQuestionPicker({ bankId, exam, gateway, selectedIds, onCha
     setBusy(true)
     onBusyChange(true)
     try {
-      const updated = selected.has(questionId)
+      const removing = selected.has(questionId)
+      const updated = removing
         ? await gateway.exams.removeManualQuestion(examId, questionId, resource.version)
         : await gateway.exams.addManualQuestions(examId, [questionId], resource.version)
       // The mutation is already committed; reflect it before refreshing surrounding data.
-      setResource((previous) => ({ ...previous, version: updated.authoring_version, error: '', selections: selected.has(questionId)
-        ? previous.selections.filter((row) => row.question_id !== questionId)
-        : [...previous.selections, { question_id: questionId }] }))
+      setResource((previous) => ({
+        ...previous,
+        version: updated.authoring_version,
+        error: '',
+        selections: removing
+          ? previous.selections.filter((row) => row.question_id !== questionId)
+          : [...previous.selections, { question_id: questionId, added_by_actor_id: actorId }],
+      }))
       await onSaved()
     } catch (error) {
       setResource((previous) => ({ ...previous, error: error.userMessage || 'Could not update the selection. Reload the questions before trying again.' }))
@@ -65,17 +90,20 @@ export function ManualQuestionPicker({ bankId, exam, gateway, selectedIds, onCha
       </div>
       {resource.error && <div className="exam-manual-picker__error"><Notice tone="danger">{resource.error}</Notice> <button type="button" className="exam-text-action" disabled={busy} onClick={() => { setResource((previous) => ({ ...previous, loading: true, error: '' })); setRetry((value) => value + 1) }}>Reload questions</button></div>}
       {resource.loading ? <p role="status">Loading bank questions…</p> : <div className="exam-manual-picker__list">
-        {visible.map((question) => <div key={question.id} className={`exam-manual-question${selected.has(question.id) ? ' is-selected' : ''}`}>
-          <label>
-            <input type="checkbox" aria-label={`Select question: ${question.prompt}`} checked={selected.has(question.id)} disabled={disabled || busy || Boolean(resource.error) || (!selected.has(question.id) && (!question.is_active || ids.length >= limit))} onChange={() => toggle(question.id)} />
-            <div><FormattedText text={question.prompt} /><small>{question.question_type.replaceAll('_', ' ')}{!question.is_active ? ' · Archived — remove before submission' : ''}</small></div>
-          </label>
-          <details onToggle={(event) => { const open = event.currentTarget.open; setPreviews((previous) => ({ ...previous, [question.id]: open })) }}><summary>Preview question</summary>
-            {question.instruction && <FormattedText text={question.instruction} />}
-            {previews[question.id] && question.image_asset_id && <QuestionImage gateway={gateway} questionId={question.id} />}
-            <ol>{question.options.map((option) => <li key={option.id}><FormattedText text={option.text} />{option.is_correct && <small>Correct answer</small>}{previews[question.id] && option.image_asset_id && <QuestionImage gateway={gateway} questionId={question.id} optionId={option.id} />}</li>)}</ol>
-          </details>
-        </div>)}
+        {visible.map((question) => {
+          const selectionLocked = selected.has(question.id) && !canRemoveSelectedQuestion(question.id)
+          return <div key={question.id} className={`exam-manual-question${selected.has(question.id) ? ' is-selected' : ''}`}>
+            <label>
+              <input type="checkbox" aria-label={`Select question: ${question.prompt}`} checked={selected.has(question.id)} disabled={disabled || busy || Boolean(resource.error) || selectionLocked || (!selected.has(question.id) && (!question.is_active || ids.length >= limit))} onChange={() => toggle(question.id)} />
+              <div><FormattedText text={question.prompt} /><small>{question.question_type.replaceAll('_', ' ')}{!question.is_active ? ' · Archived — remove before submission' : ''}</small></div>
+            </label>
+            <details onToggle={(event) => { const open = event.currentTarget.open; setPreviews((previous) => ({ ...previous, [question.id]: open })) }}><summary>Preview question</summary>
+              {question.instruction && <FormattedText text={question.instruction} />}
+              {previews[question.id] && question.image_asset_id && <QuestionImage gateway={gateway} questionId={question.id} />}
+              <ol>{question.options.map((option) => <li key={option.id}><FormattedText text={option.text} />{option.is_correct && <small>Correct answer</small>}{previews[question.id] && option.image_asset_id && <QuestionImage gateway={gateway} questionId={question.id} optionId={option.id} />}</li>)}</ol>
+            </details>
+          </div>
+        })}
         {!visible.length && <p>{resource.questions.length ? 'No questions match this view.' : 'This bank has no available questions.'}</p>}
       </div>}
       <p className="exam-section-note">Select {limit} questions before submitting the paper for review. {ids.length > limit ? 'Remove the extra selections to match the question count.' : ''}</p>
