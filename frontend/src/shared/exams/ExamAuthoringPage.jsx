@@ -71,8 +71,9 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway, active = tru
   const [shuffleOptions, setShuffleOptions] = useState(editingExam?.shuffleOptions !== false)
   const [scheduledStartAt, setScheduledStartAt] = useState(initialScheduledStartAt)
   const [latestNormalStartAt, setLatestNormalStartAt] = useState(initialLatestNormalStartAt)
-  const [manualSelection, setManualSelection] = useState({ bankId: '', ids: [] })
+  const [manualSelection, setManualSelection] = useState({ bankId: '', ids: [], ready: !editing })
   const manualQuestionIds = manualSelection.bankId === bankId ? manualSelection.ids : []
+  const manualSelectionReady = !editing || Boolean(manualSelection.bankId === bankId && manualSelection.ready)
   const [questionSaving, setQuestionSaving] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -115,13 +116,19 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway, active = tru
     ),
   )
   const persistedManualDraft = Boolean(editing && editingExam.status === 'draft' && editingExam.selectionMode === 'manual')
+  const editableDraft = Boolean(editing && editingExam.status === 'draft')
   const canManageManualSelections = Boolean(
-    !editing || (persistedManualDraft && (canManageConfiguration || isEligibleTeacherContributor)),
+    !editing || (editableDraft && (canManageConfiguration || (persistedManualDraft && isEligibleTeacherContributor))),
   )
   const showManualPicker = Boolean(
     selectionMode === 'manual' &&
     bankId &&
-    (!editing || (editingExam.selectionMode === 'manual' && bankId === editingExam.questionBankId)),
+    (!editing || canManageConfiguration || (persistedManualDraft && bankId === editingExam.questionBankId)),
+  )
+  const ignorePersistedManualSelections = Boolean(
+    editing &&
+    canManageConfiguration &&
+    (editingExam.selectionMode !== 'manual' || bankId !== editingExam.questionBankId),
   )
 
   const activeBankQuestions = Number(selectedBank?.activeQuestionCount ?? selectedBank?.count ?? 0)
@@ -148,7 +155,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway, active = tru
     setSubjectId('')
     setBankId('')
     resetLead()
-    setManualSelection({ bankId: '', ids: [] })
+    setManualSelection({ bankId: '', ids: [], ready: !editing })
     resetDuplicateRecovery()
   }
 
@@ -156,7 +163,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway, active = tru
     setSubjectId(nextSubjectId)
     setBankId('')
     resetLead()
-    setManualSelection({ bankId: '', ids: [] })
+    setManualSelection({ bankId: '', ids: [], ready: !editing })
     resetDuplicateRecovery()
   }
 
@@ -169,6 +176,23 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway, active = tru
   const changeComponent = (nextComponentId) => {
     setComponentId(nextComponentId)
     resetDuplicateRecovery()
+  }
+
+  const changeBank = (nextBankId) => {
+    setBankId(nextBankId)
+    setManualSelection({ bankId: nextBankId, ids: [], ready: !editing })
+    setError('')
+  }
+
+  const changeSelectionMode = (nextMode) => {
+    setSelectionMode(nextMode)
+    if (
+      nextMode === 'manual' &&
+      (manualSelection.bankId !== bankId || !manualSelection.ready)
+    ) {
+      setManualSelection({ bankId, ids: [], ready: !editing })
+    }
+    setError('')
   }
 
   const changeScheduledStart = (nextScheduledStartAt) => {
@@ -232,8 +256,12 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway, active = tru
       setError('Question count and duration must both be greater than zero.')
       return
     }
-    if (!editing && selectionMode === 'manual' && manualQuestionIds.length > Number(questionCount)) {
+    if (selectionMode === 'manual' && manualQuestionIds.length > Number(questionCount)) {
       setError('Remove extra manual selections or increase the number of questions.')
+      return
+    }
+    if (editing && canManageConfiguration && selectionMode === 'manual' && !manualSelectionReady) {
+      setError('Wait for the current manual question selection to finish loading before saving.')
       return
     }
     if (capacityIssue) {
@@ -268,29 +296,19 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway, active = tru
     setSaving(true)
     try {
       if (editing) {
-        let clearExistingManualSelections = false
-        if (questionConfigurationChanged && editingExam.selectionMode === 'manual') {
+        if (
+          editingExam.selectionMode === 'manual' &&
+          (selectionMode === 'random' || bankId !== editingExam.questionBankId)
+        ) {
           const selections = await gateway.exams.listManualQuestions(editingExam.id)
-          if (
-            selectionMode === 'manual' &&
-            bankId === editingExam.questionBankId &&
-            Number(questionCount) < selections.length
-          ) {
-            setError(`Question count cannot be lower than the ${selections.length} questions already selected for this paper.`)
-            return
-          }
-
-          const changingToRandom = selectionMode === 'random'
-          const changingBank = bankId !== editingExam.questionBankId
-          if ((changingToRandom || changingBank) && selections.length) {
+          if (selections.length) {
             const warning = buildDestructiveQuestionConfigurationWarning({
               selections,
-              changingToRandom,
-              changingBank,
+              changingToRandom: selectionMode === 'random',
+              changingBank: bankId !== editingExam.questionBankId,
             })
             const confirmed = typeof window !== 'undefined' && window.confirm(warning)
             if (!confirmed) return
-            clearExistingManualSelections = true
           }
         }
 
@@ -312,15 +330,13 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway, active = tru
             : {}),
         })
 
-        if (questionConfigurationChanged) {
-          await gateway.exams.configureExamQuestions(editingExam.id, {
-            question_bank_id: bankId,
-            question_selection_mode: selectionMode,
-            question_count: Number(questionCount),
-            clear_existing_manual_selections: clearExistingManualSelections,
-            expected_authoring_version: updatedExam.authoring_version ?? updatedExam.authoringVersion ?? (editingExam.authoringVersion || 1),
-          })
-        }
+        await gateway.exams.saveExamQuestionAuthoring(editingExam.id, {
+          question_bank_id: bankId,
+          question_selection_mode: selectionMode,
+          question_count: Number(questionCount),
+          manual_question_ids: selectionMode === 'manual' ? manualQuestionIds : [],
+          expected_authoring_version: updatedExam.authoring_version ?? updatedExam.authoringVersion ?? (editingExam.authoringVersion || 1),
+        })
       } else {
         const createdExam = await gateway.exams.createExam({
           ...(isAdmin ? { lead_teacher_id: leadTeacherId || null } : {}),
@@ -405,7 +421,9 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway, active = tru
       componentId &&
       components.some((component) => component.id === componentId) &&
       bankId &&
-      selectedBank?.curriculumSubjectId === subjectId,
+      selectedBank?.curriculumSubjectId === subjectId &&
+      (selectionMode !== 'manual' || manualQuestionIds.length <= Number(questionCount)) &&
+      (!editing || !canManageConfiguration || selectionMode !== 'manual' || manualSelectionReady),
   )
 
   if (selectedExamId && !editingExam && teacherData.loading) {
@@ -585,7 +603,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway, active = tru
 
           <ExamSection number="2" title="Questions & delivery" description="Choose your question source and how students take the paper." kind="questions">
             <FieldSelect label="Question bank *">
-              <SelectControl label="Question bank" value={bankId} options={subjectBanks.map((bank) => ({ value: bank.id, label: bank.name, description: `${bank.activeQuestionCount ?? bank.count ?? 0} active questions` }))} onChange={(value) => { setBankId(value); setManualSelection({ bankId: value, ids: [] }); setError('') }} disabled={!subjectBanks.length || readOnly} placeholder={subjectId ? 'Choose bank' : 'Choose a subject first'} />
+              <SelectControl label="Question bank" value={bankId} options={subjectBanks.map((bank) => ({ value: bank.id, label: bank.name, description: `${bank.activeQuestionCount ?? bank.count ?? 0} active questions` }))} onChange={changeBank} disabled={!subjectBanks.length || readOnly} placeholder={subjectId ? 'Choose bank' : 'Choose a subject first'} />
             </FieldSelect>
             <label className="teacher-exam-field">
               <span>Number of questions <em>*</em></span>
@@ -596,8 +614,8 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway, active = tru
             <fieldset className="teacher-exam-selection" disabled={readOnly}>
               <legend>Question selection method</legend>
               <div>
-                <SelectionCard value="random" current={selectionMode} onChange={setSelectionMode} title="Random selection" description="Select from the bank." />
-                <SelectionCard value="manual" current={selectionMode} onChange={setSelectionMode} title="Manual selection" description="Choose specific questions." />
+                <SelectionCard value="random" current={selectionMode} onChange={changeSelectionMode} title="Random selection" description="Select from the bank." />
+                <SelectionCard value="manual" current={selectionMode} onChange={changeSelectionMode} title="Manual selection" description="Choose specific questions." />
               </div>
             </fieldset>
             {showManualPicker && (
@@ -607,7 +625,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway, active = tru
                 exam={editingExam ? { ...editingExam, questionCount: Number(questionCount) } : { questionCount }}
                 gateway={gateway}
                 selectedIds={manualQuestionIds}
-                onChange={(ids) => setManualSelection({ bankId, ids })}
+                onChange={(ids) => setManualSelection({ bankId, ids, ready: true })}
                 onPreview={(questionId, trigger) => {
                   previewTriggerRef.current = trigger
                   dispatch({
@@ -615,9 +633,12 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway, active = tru
                     patch: { section: 'preview-question', selectedQuestionId: questionId, questionPreviewOrigin: 'create-exam' },
                   })
                 }}
-                disabled={!canManageManualSelections || questionConfigurationChanged || saving || leadSaving || questionSaving}
+                disabled={!canManageManualSelections || saving || leadSaving || questionSaving}
                 actorId={actor?.id}
                 canManageAllSelections={canManageConfiguration}
+                deferManagedSelections={Boolean(editing && canManageConfiguration)}
+                ignorePersistedSelections={ignorePersistedManualSelections}
+                managedSelectionReady={manualSelectionReady}
                 onBusyChange={setQuestionSaving}
                 onSaved={teacherData.refresh}
               />
@@ -626,9 +647,7 @@ function ExamAuthoringForm({ state, dispatch, teacherData, gateway, active = tru
               ? manualContributor
                 ? 'Paper settings are lead-managed. New question picks stay on this device until you click Save contribution; removing one of your already-saved questions is applied immediately.'
                 : 'Paper settings are lead-managed. Random selection has no manual question contribution step.'
-              : questionConfigurationChanged
-                ? 'Save the question configuration before making manual selection changes.'
-                : 'The academic level and subject stay fixed; the lead author or administrator may still update the bank, question count and selection method while this revision is a draft.'}</p>}
+              : 'Question bank, question count, selection method and manual picks can be changed together; they are committed when you click Save changes.'}</p>}
             <div className="exam-delivery-options">
             <label className="teacher-exam-field">
               <span>Duration <em>*</em></span>
