@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -19,6 +19,21 @@ from app.domains.exams.models import (
     ExamRosterStatus,
     ExamStatus,
 )
+
+
+def _validate_future_exam_datetime(
+    value: datetime | None,
+    *,
+    field_name: str,
+) -> None:
+    """Reject ambiguous or historical schedule timestamps supplied by clients."""
+
+    if value is None:
+        return
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{field_name} must include a timezone")
+    if value.astimezone(UTC) < datetime.now(UTC):
+        raise ValueError(f"{field_name} cannot be in the past")
 
 
 class InputBase(BaseModel):
@@ -73,6 +88,14 @@ class ExamCreate(InputBase):
 
     @model_validator(mode="after")
     def validate_start_window(self) -> ExamCreate:
+        _validate_future_exam_datetime(
+            self.scheduled_start_at,
+            field_name="scheduled_start_at",
+        )
+        _validate_future_exam_datetime(
+            self.latest_normal_start_at,
+            field_name="latest_normal_start_at",
+        )
         if (
             self.scheduled_start_at is not None
             and self.latest_normal_start_at is not None
@@ -128,6 +151,17 @@ class ExamUpdate(InputBase):
                 and getattr(self, field_name) is None
             ):
                 raise ValueError(f"{field_name} cannot be null")
+
+        if "scheduled_start_at" in self.model_fields_set:
+            _validate_future_exam_datetime(
+                self.scheduled_start_at,
+                field_name="scheduled_start_at",
+            )
+        if "latest_normal_start_at" in self.model_fields_set:
+            _validate_future_exam_datetime(
+                self.latest_normal_start_at,
+                field_name="latest_normal_start_at",
+            )
 
         if (
             "scheduled_start_at" in self.model_fields_set
