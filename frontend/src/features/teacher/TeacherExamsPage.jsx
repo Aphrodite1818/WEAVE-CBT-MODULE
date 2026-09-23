@@ -108,13 +108,10 @@ export function TeacherExamsPage({ state, dispatch, teacherData, gateway }) {
     page * PAGE_SIZE,
   );
 
-
   const applyFilter = (setter) => (value) => {
     setter(value);
     setPage(1);
   };
-
-
 
   const toggleMenu = (exam, trigger) => {
     if (menuExamId === exam.id) {
@@ -216,13 +213,13 @@ export function TeacherExamsPage({ state, dispatch, teacherData, gateway }) {
         </div>
         <div className="exam-heading-actions">
           <ExamLifecycleFilter value={status} counts={statusCounts} onChange={applyFilter(setStatus)} />
-        <button
-          className="teacher-primary-action"
-          type="button"
-          onClick={openCreate}
-        >
-          <RiAddLine size={18} /> Create Exam
-        </button>
+          <button
+            className="teacher-primary-action"
+            type="button"
+            onClick={openCreate}
+          >
+            <RiAddLine size={18} /> Create Exam
+          </button>
         </div>
       </div>
 
@@ -278,98 +275,103 @@ export function TeacherExamsPage({ state, dispatch, teacherData, gateway }) {
           const canContributeManual = Boolean(
             !canManageDraft && eligibleContributor && exam.selectionMode === 'manual',
           );
+          const contributionAction = canContributeManual ? (
+            <button
+              type="button"
+              className="exam-card__contribute"
+              onClick={() => openEdit(exam)}
+            >
+              <RiEdit2Line size={16} aria-hidden="true" />
+              <span>Contribute questions</span>
+            </button>
+          ) : null;
+
           return (
-            <ExamCard key={exam.id} exam={exam} onOpen={() => dispatch({ type: 'staff', patch: { section: 'exam-history', selectedExamId: exam.id } })} onEdit={canManageDraft ? () => openEdit(exam) : undefined}>
-                <div className="teacher-exam-lifecycle">
-                  <button
-                    className="teacher-exam-lifecycle__trigger"
-                    type="button"
-                    aria-label={`Lifecycle actions for ${exam.title}`}
-                    aria-haspopup="dialog"
-                    aria-expanded={menuExamId === exam.id}
-                    onClick={(event) => toggleMenu(exam, event.currentTarget)}
+            <ExamCard
+              key={exam.id}
+              exam={exam}
+              onOpen={() => dispatch({ type: 'staff', patch: { section: 'exam-history', selectedExamId: exam.id } })}
+              onEdit={canManageDraft ? () => openEdit(exam) : undefined}
+              cardAction={contributionAction}
+            >
+              <div className="teacher-exam-lifecycle">
+                <button
+                  className="teacher-exam-lifecycle__trigger"
+                  type="button"
+                  aria-label={`Lifecycle actions for ${exam.title}`}
+                  aria-haspopup="dialog"
+                  aria-expanded={menuExamId === exam.id}
+                  onClick={(event) => toggleMenu(exam, event.currentTarget)}
+                >
+                  <Icon name="moreVertical" size={19} />
+                </button>
+
+                {menuExamId === exam.id && menuPosition && (
+                  createPortal(<div
+                    ref={menuRef}
+                    className="teacher-exam-lifecycle__menu"
+                    role="dialog"
+                    aria-label={`Lifecycle for ${exam.title}`}
+                    style={menuPosition}
                   >
-                    <Icon name="moreVertical" size={19} />
-                  </button>
-
-                  {menuExamId === exam.id && menuPosition && (
-                    createPortal(<div
-                      ref={menuRef}
-                      className="teacher-exam-lifecycle__menu"
-                      role="dialog"
-                      aria-label={`Lifecycle for ${exam.title}`}
-                      style={menuPosition}
-                    >
-                      <div className="teacher-exam-lifecycle__heading">
-                        <div>
-                          <strong>Exam lifecycle</strong>
-                          <span>{exam.statusLabel}</span>
-                        </div>
-                        <small>v{exam.authoringVersion || 1}</small>
+                    <div className="teacher-exam-lifecycle__heading">
+                      <div>
+                        <strong>Exam lifecycle</strong>
+                        <span>{exam.statusLabel}</span>
                       </div>
+                      <small>v{exam.authoringVersion || 1}</small>
+                    </div>
 
-                      {canManageDraft ? (
-                        <>
-                          <button type="button" onClick={() => openEdit(exam)}>
-                            <RiEdit2Line size={18} />
-                            <span>
-                              <strong>Edit draft details</strong>
-                              <small>
-                                Update assessment, timing, instructions and
-                                delivery settings.
-                              </small>
-                            </span>
-                          </button>
+                    {canManageDraft ? (
+                      <>
+                        <button type="button" onClick={() => openEdit(exam)}>
+                          <RiEdit2Line size={18} />
+                          <span>
+                            <strong>Edit draft details</strong>
+                            <small>
+                              Update assessment, timing, instructions and
+                              delivery settings.
+                            </small>
+                          </span>
+                        </button>
 
-                          <button
-                            type="button"
-                            onClick={() => requestAction(exam, "submit")}
-                          >
-                            <Icon name="submit" size={18} />
-                            <span>
-                              <strong>Submit for review</strong>
-                              <small>
-                                Finish teacher authoring and send the paper to
-                                administration.
-                              </small>
-                            </span>
-                          </button>
+                        <button
+                          type="button"
+                          onClick={() => requestAction(exam, "submit")}
+                        >
+                          <Icon name="submit" size={18} />
+                          <span>
+                            <strong>Submit for review</strong>
+                            <small>
+                              Finish teacher authoring and send the paper to
+                              administration.
+                            </small>
+                          </span>
+                        </button>
 
-                          <button
-                            type="button"
-                            className="teacher-exam-lifecycle__danger"
-                            onClick={() => requestAction(exam, "delete")}
-                          >
-                            <RiDeleteBinLine size={18} />
-                            <span>
-                              <strong>Delete draft</strong>
-                              <small>Permanently remove this draft paper.</small>
-                            </span>
-                          </button>
-                        </>
-                      ) : canContributeManual ? (
-                        <>
-                          <div className="teacher-exam-lifecycle__info">
-                            <Icon name="info" size={18} />
-                            <p>This shared draft uses Manual selection. The lead author manages the paper settings, while you can contribute questions from the configured bank.</p>
-                          </div>
-                          <button type="button" onClick={() => openEdit(exam)}>
-                            <RiEdit2Line size={18} />
-                            <span>
-                              <strong>Contribute questions</strong>
-                              <small>Open the paper to add questions or remove questions you contributed.</small>
-                            </span>
-                          </button>
-                        </>
-                      ) : (
-                        <div className="teacher-exam-lifecycle__info">
-                          <Icon name="info" size={18} />
-                          <p>{lifecycleMessage(exam)}</p>
-                        </div>
-                      )}
-                    </div>, document.body)
-                  )}
-                </div>
+                        <button
+                          type="button"
+                          className="teacher-exam-lifecycle__danger"
+                          onClick={() => requestAction(exam, "delete")}
+                        >
+                          <RiDeleteBinLine size={18} />
+                          <span>
+                            <strong>Delete draft</strong>
+                            <small>Permanently remove this draft paper.</small>
+                          </span>
+                        </button>
+                      </>
+                    ) : (
+                      <div className="teacher-exam-lifecycle__info">
+                        <Icon name="info" size={18} />
+                        <p>{canContributeManual
+                          ? 'This shared draft uses Manual selection. The lead author manages the paper settings. Use Contribute questions on the exam card to add questions from the configured bank.'
+                          : lifecycleMessage(exam)}</p>
+                      </div>
+                    )}
+                  </div>, document.body)
+                )}
+              </div>
             </ExamCard>
           );
         })}
@@ -562,6 +564,5 @@ function getLifecycleConfirmation(action) {
     busyLabel: "Submitting…",
   };
 }
-
 
 export const ExamsPage = TeacherExamsPage;
