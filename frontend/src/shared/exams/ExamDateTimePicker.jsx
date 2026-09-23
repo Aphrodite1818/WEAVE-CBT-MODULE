@@ -1,4 +1,4 @@
-﻿import { useId, useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { RiCalendarLine, RiArrowLeftSLine, RiArrowRightSLine, RiCloseLine, RiTimeLine } from '@remixicon/react'
 import { SelectControl } from '../ui'
 import './exam-date-time-picker.css'
@@ -10,6 +10,11 @@ const timeOptions = (count) => Array.from({ length: count }, (_, value) => ({ va
 const HOURS = timeOptions(24)
 const MINUTES = timeOptions(60)
 
+function nextLocalMinute() {
+  const date = new Date(Date.now() + 60_000)
+  return `${dateKey(date)}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 export function ExamDateTimePicker({ label, value, onChange, min = '', disabled = false }) {
   const dialogRef = useRef(null)
   const headingId = useId()
@@ -17,16 +22,17 @@ export function ExamDateTimePicker({ label, value, onChange, min = '', disabled 
   const [draft, setDraft] = useState('')
   const [month, setMonth] = useState(() => new Date())
   const [opened, setOpened] = useState(false)
+  const effectiveMin = min || nextLocalMinute()
   const selectedDate = draft.slice(0, 10)
   const hours = draft.slice(11, 13) || '09'
   const minutes = draft.slice(14, 16) || '00'
-  const tooEarly = Boolean(min && draft && draft < min)
+  const tooEarly = Boolean(effectiveMin && draft && draft < effectiveMin)
   const firstDay = new Date(month.getFullYear(), month.getMonth(), 1).getDay()
   const dayCount = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()
   const today = dateKey(new Date())
 
   const open = () => {
-    const initial = value || min || `${today}T09:00`
+    const initial = value || effectiveMin || `${today}T09:00`
     setDraft(initial)
     setMonth(new Date(`${initial.slice(0, 10)}T12:00`))
     setOpened(true)
@@ -64,7 +70,7 @@ export function ExamDateTimePicker({ label, value, onChange, min = '', disabled 
             {Array.from({ length: dayCount }, (_, index) => {
               const date = new Date(month.getFullYear(), month.getMonth(), index + 1, 12)
               const key = dateKey(date)
-              return <button type="button" key={key} aria-label={dateLabel(date)} aria-pressed={selectedDate === key} aria-current={today === key ? 'date' : undefined} disabled={Boolean(min && key < min.slice(0, 10))} onClick={() => setDraft(`${key}T${hours}:${minutes}`)}>{index + 1}</button>
+              return <button type="button" key={key} aria-label={dateLabel(date)} aria-pressed={selectedDate === key} aria-current={today === key ? 'date' : undefined} disabled={Boolean(effectiveMin && key < effectiveMin.slice(0, 10))} onClick={() => setDraft(`${key}T${hours}:${minutes}`)}>{index + 1}</button>
             })}
           </div>
           <div className="exam-datetime__time">
@@ -74,7 +80,7 @@ export function ExamDateTimePicker({ label, value, onChange, min = '', disabled 
             <SelectControl label={`${label} minute`} value={minutes} options={MINUTES} onChange={(minute) => changeTime(hours, minute)} />
           </div>
           <p id={helpId} className={`exam-datetime__hint${tooEarly ? ' is-error' : ''}`} role={tooEarly ? 'alert' : undefined}>
-            {tooEarly ? 'Choose a time on or after the scheduled start.' : 'Times use this device’s local timezone.'}
+            {tooEarly ? `Choose a time on or after ${new Date(effectiveMin).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.` : 'Times use this device’s local timezone.'}
           </p>
           <footer className="exam-datetime-dialog__actions">
             <button type="button" className="exam-text-action" onClick={() => { onChange(''); close() }}>Clear</button>
