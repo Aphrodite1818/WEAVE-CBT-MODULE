@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import unittest
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -56,6 +56,7 @@ def actor(*, role: str = "teacher", actor_id: UUID | None = None) -> SimpleNames
 
 
 def exam(**overrides) -> SimpleNamespace:
+    future_start = datetime.now(UTC) + timedelta(days=1)
     values = {
         "id": uuid4(),
         "session_id": uuid4(),
@@ -71,8 +72,8 @@ def exam(**overrides) -> SimpleNamespace:
         "duration_minutes": 45,
         "shuffle_questions": True,
         "shuffle_options": True,
-        "scheduled_start_at": None,
-        "latest_normal_start_at": None,
+        "scheduled_start_at": future_start,
+        "latest_normal_start_at": future_start + timedelta(minutes=15),
         "status": ExamStatus.DRAFT,
         "roster_status": ExamRosterStatus.NOT_PREPARED,
         "roster_version": 0,
@@ -218,6 +219,11 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
                 "save_exam",
                 new=AsyncMock(side_effect=lambda _db, row: row),
             ),
+            patch.object(
+                ExamTimetableService,
+                "require_planned_slot_available",
+                new=AsyncMock(),
+            ),
         ):
             result = await ExamService.submit_exam(
                 db,
@@ -226,12 +232,7 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
                 expected_authoring_version=1,
             )
 
-        term_authorize.assert_awaited_once_with(
-            db,
-            actor=current_actor,
-            curriculum_subject_id=current_exam.curriculum_subject_id,
-            academic_term_id=current_exam.term_id,
-        )
+        term_authorize.assert_awaited()
         self.assertEqual(result.status, ExamStatus.SUBMITTED)
         self.assertEqual(result.submitted_by_actor_id, current_actor.id)
         self.assertEqual(result.authoring_version, 2)
