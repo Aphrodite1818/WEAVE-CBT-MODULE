@@ -2,14 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { RiArchiveLine, RiDeleteBinLine, RiEdit2Line, RiImageAddLine, RiMore2Line, RiRefreshLine, RiSearchLine } from '@remixicon/react'
 import { Icon } from '../../shared/icons/Icon'
+import { getAnchoredPopoverPosition } from '../../shared/ui/anchoredPopover'
 import { Notice, SelectControl, StatusBadge } from '../../shared/ui'
 import './questions-page.css'
 import './question-lifecycle-modal.css'
 
 const PAGE_SIZE = 10
-const LIFECYCLE_POPOVER_WIDTH = 320
-const LIFECYCLE_POPOVER_GAP = 8
-const LIFECYCLE_VIEWPORT_PADDING = 12
 
 export function TeacherQuestionsPage({ state, dispatch, teacherData, gateway }) {
   const [query, setQuery] = useState('')
@@ -72,7 +70,7 @@ export function TeacherQuestionsPage({ state, dispatch, teacherData, gateway }) 
   useEffect(() => {
     if (!lifecycleQuestionId) return undefined
     const closeOnOutsideClick = (event) => {
-      if (!lifecycleRef.current?.contains(event.target)) closeLifecycle()
+      if (!lifecycleRef.current?.contains(event.target) && !event.target.closest?.('.teacher-question-lifecycle__trigger')) closeLifecycle()
     }
     const closeOnEscape = (event) => {
       if (event.key === 'Escape') closeLifecycle()
@@ -159,7 +157,7 @@ export function TeacherQuestionsPage({ state, dispatch, teacherData, gateway }) 
 
   const toggleLifecycle = (question, trigger) => {
     if (lifecycleQuestionId === question.id) return closeLifecycle()
-    setLifecyclePosition(getLifecyclePopoverPosition(trigger))
+    setLifecyclePosition(getAnchoredPopoverPosition(trigger, { width: 320, maxHeight: 330 }))
     setLifecycleQuestionId(question.id)
   }
 
@@ -221,12 +219,12 @@ export function TeacherQuestionsPage({ state, dispatch, teacherData, gateway }) 
               <button type="button" className="teacher-question-edit" disabled={question.status === 'Archived'} onClick={() => editQuestion(question)}>
                 <RiEdit2Line size={15} /> Edit
               </button>
-              <div ref={lifecycleQuestionId === question.id ? lifecycleRef : undefined} className="teacher-question-lifecycle">
+              <div className="teacher-question-lifecycle">
                 <button type="button" className="teacher-question-lifecycle__trigger" aria-label={`Question lifecycle for ${question.prompt}`} aria-haspopup="dialog" aria-expanded={lifecycleQuestionId === question.id} onClick={(event) => toggleLifecycle(question, event.currentTarget)}>
                   <RiMore2Line size={20} aria-hidden="true" />
                 </button>
-                {lifecycleQuestionId === question.id && lifecyclePosition && (
-                  <div className="teacher-question-lifecycle__card" role="dialog" aria-label={`Lifecycle for ${question.prompt}`} data-placement={lifecyclePosition.placement} style={lifecyclePosition.style}>
+                {lifecycleQuestionId === question.id && lifecyclePosition && typeof document !== 'undefined' && createPortal(
+                  <div ref={lifecycleRef} className="teacher-question-lifecycle__card" role="dialog" aria-label={`Lifecycle for ${question.prompt}`} data-placement={lifecyclePosition.placement} style={lifecyclePosition.style}>
                     <div className="teacher-question-lifecycle__heading"><strong>Question lifecycle</strong><span>{question.status}</span></div>
                     <p>{question.status === 'Archived' ? 'Reactivate this question to return it to active authoring.' : 'Archive this question without deleting its history or exam references.'}</p>
                     <button type="button" onClick={() => requestLifecycleAction(question, question.status === 'Archived' ? 'reactivate' : 'archive')}>
@@ -236,7 +234,8 @@ export function TeacherQuestionsPage({ state, dispatch, teacherData, gateway }) 
                     <button type="button" className="teacher-question-lifecycle__delete" onClick={() => requestLifecycleAction(question, 'delete')}>
                       <RiDeleteBinLine size={18} /><span><strong>Delete permanently</strong><small>Only unused questions can be deleted. Used questions must be archived.</small></span>
                     </button>
-                  </div>
+                  </div>,
+                  document.body,
                 )}
               </div>
             </div>
@@ -286,18 +285,4 @@ function getLifecycleConfirmationCopy(action) {
   if (action === 'delete') return { title: 'Delete this question permanently?', subtitle: 'This action is only allowed for questions that have never been used by an exam.', warning: 'Permanent deletion cannot be undone. If this question has exam history, the backend will reject the deletion and you should archive it instead.', confirmLabel: 'Confirm delete', busyLabel: 'Deleting…' }
   if (action === 'reactivate') return { title: 'Reactivate this question?', subtitle: 'The question will return to active authoring.', warning: 'After reactivation, the question can be selected for future exam papers again, provided its question bank is active.', confirmLabel: 'Confirm reactivate', busyLabel: 'Reactivating…' }
   return { title: 'Archive this question?', subtitle: 'The question will be removed from active authoring without deleting its history.', warning: 'Existing exam references are preserved. You can reactivate the question later if the containing question bank remains active.', confirmLabel: 'Confirm archive', busyLabel: 'Archiving…' }
-}
-
-function getLifecyclePopoverPosition(trigger) {
-  const viewportWidth = typeof window === 'undefined' ? 1280 : window.innerWidth
-  const viewportHeight = typeof window === 'undefined' ? 800 : window.innerHeight
-  const rect = trigger.getBoundingClientRect()
-  const width = Math.min(LIFECYCLE_POPOVER_WIDTH, Math.max(240, viewportWidth - (LIFECYCLE_VIEWPORT_PADDING * 2)))
-  const left = Math.max(LIFECYCLE_VIEWPORT_PADDING, Math.min(rect.right - width, viewportWidth - width - LIFECYCLE_VIEWPORT_PADDING))
-  const availableBelow = Math.max(0, viewportHeight - rect.bottom - LIFECYCLE_POPOVER_GAP - LIFECYCLE_VIEWPORT_PADDING)
-  const availableAbove = Math.max(0, rect.top - LIFECYCLE_POPOVER_GAP - LIFECYCLE_VIEWPORT_PADDING)
-  const placement = availableBelow < 230 && availableAbove > availableBelow ? 'top' : 'bottom'
-  const maxHeight = Math.max(150, Math.min(320, placement === 'top' ? availableAbove : availableBelow))
-  if (placement === 'top') return { placement, style: { left, width, maxHeight, bottom: viewportHeight - rect.top + LIFECYCLE_POPOVER_GAP, top: 'auto' } }
-  return { placement, style: { left, width, maxHeight, top: rect.bottom + LIFECYCLE_POPOVER_GAP, bottom: 'auto' } }
 }
