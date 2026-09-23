@@ -11,6 +11,7 @@ import {
   RiSearchLine,
 } from '@remixicon/react'
 import { Icon } from '../../../shared/icons/Icon'
+import { getAnchoredPopoverPosition } from '../../../shared/ui/anchoredPopover'
 import { Notice, PageTitle, SelectControl, StatusBadge } from '../../../shared/ui'
 import { QuestionRows } from '../../teacher/components'
 
@@ -18,6 +19,7 @@ export function AdminQuestionBanksPage({ adminData, gateway, onNavigate, createR
   const [query, setQuery] = useState('')
   const [editor, setEditor] = useState(null)
   const [menuBankId, setMenuBankId] = useState(null)
+  const [menuPosition, setMenuPosition] = useState(null)
   const [pendingAction, setPendingAction] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -29,17 +31,31 @@ export function AdminQuestionBanksPage({ adminData, gateway, onNavigate, createR
     onCreateHandled?.()
   }, [createRequested, onCreateHandled])
 
+  const closeMenu = () => {
+    setMenuBankId(null)
+    setMenuPosition(null)
+  }
+
   useEffect(() => {
     if (!menuBankId) return undefined
     const close = (event) => {
-      if (event.type === 'keydown' && event.key === 'Escape') setMenuBankId(null)
-      if (event.type === 'pointerdown' && menuRef.current && !menuRef.current.contains(event.target)) setMenuBankId(null)
+      if (event.type === 'keydown' && event.key === 'Escape') closeMenu()
+      if (
+        event.type === 'pointerdown' &&
+        !menuRef.current?.contains(event.target) &&
+        !event.target.closest?.('.admin-bank-card__menu-trigger')
+      ) closeMenu()
     }
+    const closeOnViewportChange = () => closeMenu()
     document.addEventListener('pointerdown', close)
     document.addEventListener('keydown', close)
+    window.addEventListener('resize', closeOnViewportChange)
+    window.addEventListener('scroll', closeOnViewportChange, true)
     return () => {
       document.removeEventListener('pointerdown', close)
       document.removeEventListener('keydown', close)
+      window.removeEventListener('resize', closeOnViewportChange)
+      window.removeEventListener('scroll', closeOnViewportChange, true)
     }
   }, [menuBankId])
 
@@ -49,8 +65,14 @@ export function AdminQuestionBanksPage({ adminData, gateway, onNavigate, createR
     return adminData.banks.filter((bank) => `${bank.name} ${bank.description || ''} ${bank.academicLevelName || ''} ${bank.subjectName || ''}`.toLowerCase().includes(needle))
   }, [adminData.banks, query])
 
+  const toggleBankMenu = (bankId, trigger) => {
+    if (menuBankId === bankId) return closeMenu()
+    setMenuPosition(getAnchoredPopoverPosition(trigger, { width: 300, maxHeight: 320 }))
+    setMenuBankId(bankId)
+  }
+
   const requestLifecycle = (bank, action) => {
-    setMenuBankId(null)
+    closeMenu()
     setError('')
     setPendingAction({ bank, action })
   }
@@ -112,17 +134,18 @@ export function AdminQuestionBanksPage({ adminData, gateway, onNavigate, createR
           <article key={bank.id} className={`teacher-bank-card admin-bank-card${bank.status === 'Archived' ? ' is-archived' : ''}`}>
             <div className="admin-bank-card__topline">
               <span className="teacher-bank-card__icon"><Icon name="bank" size={22} /></span>
-              <div className="admin-bank-card__menu" ref={menuBankId === bank.id ? menuRef : undefined}>
-                <button type="button" aria-label={`Manage ${bank.name}`} aria-expanded={menuBankId === bank.id} onClick={() => setMenuBankId((current) => current === bank.id ? null : bank.id)}><RiMore2Line size={20} /></button>
-                {menuBankId === bank.id && (
-                  <div className="admin-bank-card__popover" role="menu">
-                    <button type="button" role="menuitem" onClick={() => { setMenuBankId(null); setEditor({ mode: 'edit', bank }) }}><RiEdit2Line size={17} /><span><strong>Edit bank</strong><small>Change its name and description; empty banks may also move level or subject.</small></span></button>
+              <div className="admin-bank-card__menu">
+                <button type="button" className="admin-bank-card__menu-trigger" aria-label={`Manage ${bank.name}`} aria-expanded={menuBankId === bank.id} onClick={(event) => toggleBankMenu(bank.id, event.currentTarget)}><RiMore2Line size={20} /></button>
+                {menuBankId === bank.id && menuPosition && typeof document !== 'undefined' && createPortal(
+                  <div ref={menuRef} className="admin-bank-card__popover" role="menu" data-placement={menuPosition.placement} style={menuPosition.style}>
+                    <button type="button" role="menuitem" onClick={() => { closeMenu(); setEditor({ mode: 'edit', bank }) }}><RiEdit2Line size={17} /><span><strong>Edit bank</strong><small>Change its name and description; empty banks may also move level or subject.</small></span></button>
                     <button type="button" role="menuitem" onClick={() => requestLifecycle(bank, bank.status === 'Archived' ? 'reactivate' : 'archive')}>
                       {bank.status === 'Archived' ? <RiRefreshLine size={17} /> : <RiArchiveLine size={17} />}
                       <span><strong>{bank.status === 'Archived' ? 'Reactivate bank' : 'Archive bank'}</strong><small>{bank.status === 'Archived' ? 'Return it to active authoring.' : 'Keep its history but stop authoring.'}</small></span>
                     </button>
                     <button type="button" role="menuitem" className="is-danger" disabled={bank.count > 0} onClick={() => requestLifecycle(bank, 'delete')}><RiDeleteBinLine size={17} /><span><strong>Delete empty bank</strong><small>{bank.count > 0 ? 'Banks containing questions cannot be deleted.' : 'Permanently remove this empty bank.'}</small></span></button>
-                  </div>
+                  </div>,
+                  document.body,
                 )}
               </div>
             </div>
