@@ -201,6 +201,73 @@ class ExamService(
             "this shared-paper operation"
         )
 
+    @staticmethod
+    def _exam_creation_conflict_message(existing_exam: Exam) -> str:
+        """Explain why an academic assessment scope cannot own a second lineage."""
+
+        title = getattr(existing_exam, "title", None) or "Existing examination"
+        prefix = (
+            f'An examination ("{title}") already owns this term, curriculum '
+            "subject and assessment component. "
+        )
+        status = existing_exam.status
+
+        if status == ExamStatus.DRAFT:
+            return (
+                prefix
+                + "It is still a draft. Open and continue editing the existing "
+                "draft instead of creating another examination."
+            )
+        if status == ExamStatus.SUBMITTED:
+            return (
+                prefix
+                + "It has already been submitted for review. Return the existing "
+                "examination to draft if changes are needed; a second examination "
+                "cannot be created for the same assessment component."
+            )
+        if status == ExamStatus.SEALED:
+            return (
+                prefix
+                + "It has already been sealed as the official paper. Use the "
+                "existing examination, or use the revision/replacement workflow "
+                "if the paper must be replaced before the sitting."
+            )
+        if status == ExamStatus.ACTIVE:
+            return (
+                prefix
+                + "That examination is currently active. Another examination "
+                "cannot be created for the same assessment component while the "
+                "official sitting is in progress."
+            )
+        if status == ExamStatus.SUSPENDED:
+            return (
+                prefix
+                + "That examination is currently suspended. Resume or resolve the "
+                "existing sitting instead of creating another examination for the "
+                "same assessment component."
+            )
+        if status == ExamStatus.CLOSED:
+            return (
+                prefix
+                + "It has already been conducted and closed. Use the existing "
+                "makeup/late-start workflow for eligible missed candidates. If the "
+                "completed exam must be replaced, its results must first be voided "
+                "and the formal revision/replacement workflow used."
+            )
+        if status == ExamStatus.CANCELLED:
+            return (
+                prefix
+                + "It was cancelled but its exam lineage is preserved for audit. "
+                "Use the revision/replacement workflow to create the replacement "
+                "paper instead of creating a separate examination."
+            )
+
+        return (
+            prefix
+            + "Only one official examination lineage is allowed for an assessment "
+            "component in a term. Open the existing examination and continue from it."
+        )
+
     @classmethod
     async def assign_lead_teacher(
         cls,
@@ -404,10 +471,7 @@ class ExamService(
             revision_number=1,
         )
         if existing_exam is not None:
-            raise ValueError(
-                "An examination already exists for the selected term, "
-                "curriculum subject and assessment component"
-            )
+            raise ValueError(cls._exam_creation_conflict_message(existing_exam))
 
         lead_teacher_id = await cls._resolve_initial_lead_teacher_id(
             db,
@@ -456,9 +520,19 @@ class ExamService(
             await db.commit()
         except IntegrityError as exc:
             await db.rollback()
+            existing_exam = await ExamRepository.get_exam_revision(
+                db,
+                term_id=payload.term_id,
+                curriculum_subject_id=payload.curriculum_subject_id,
+                assessment_component_id=payload.assessment_component_id,
+                revision_number=1,
+            )
+            if existing_exam is not None:
+                raise ValueError(cls._exam_creation_conflict_message(existing_exam)) from exc
             raise ValueError(
-                "The examination could not be created because its "
-                "configuration conflicts with an existing shared paper"
+                "The examination could not be created because another examination "
+                "now owns this term, curriculum subject and assessment component. "
+                "Refresh the examinations page and continue from the existing paper."
             ) from exc
         return exam
 
