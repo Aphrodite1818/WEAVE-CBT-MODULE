@@ -270,6 +270,14 @@ export function TeacherExamsPage({ state, dispatch, teacherData, gateway }) {
       >
         {visibleExams.map((exam) => {
           const canManageDraft = canManageExam(exam, actor, teacherData.assignments);
+          const eligibleContributor = Boolean(
+            exam.status === 'draft' &&
+            actor?.role === 'teacher' &&
+            teacherData.assignments.some((assignment) => assignment.curriculumSubjectId === exam.curriculumSubjectId),
+          );
+          const canContributeManual = Boolean(
+            !canManageDraft && eligibleContributor && exam.selectionMode === 'manual',
+          );
           return (
             <ExamCard key={exam.id} exam={exam} onOpen={() => dispatch({ type: 'staff', patch: { section: 'exam-history', selectedExamId: exam.id } })} onEdit={canManageDraft ? () => openEdit(exam) : undefined}>
                 <div className="teacher-exam-lifecycle">
@@ -339,10 +347,24 @@ export function TeacherExamsPage({ state, dispatch, teacherData, gateway }) {
                             </span>
                           </button>
                         </>
+                      ) : canContributeManual ? (
+                        <>
+                          <div className="teacher-exam-lifecycle__info">
+                            <Icon name="info" size={18} />
+                            <p>This shared draft uses Manual selection. The lead author manages the paper settings, while you can contribute questions from the configured bank.</p>
+                          </div>
+                          <button type="button" onClick={() => openEdit(exam)}>
+                            <RiEdit2Line size={18} />
+                            <span>
+                              <strong>Contribute questions</strong>
+                              <small>Open the paper to add questions or remove questions you contributed.</small>
+                            </span>
+                          </button>
+                        </>
                       ) : (
                         <div className="teacher-exam-lifecycle__info">
                           <Icon name="info" size={18} />
-                          <p>{lifecycleMessage(exam.status)}</p>
+                          <p>{lifecycleMessage(exam)}</p>
                         </div>
                       )}
                     </div>, document.body)
@@ -493,23 +515,26 @@ export function TeacherExamsPage({ state, dispatch, teacherData, gateway }) {
   );
 }
 
-function lifecycleMessage(status) {
-  if (status === "draft") {
+function lifecycleMessage(exam) {
+  if (exam.status === "draft") {
+    if (exam.selectionMode === 'random') {
+      return "This shared draft uses Random selection. The lead author manages the question bank, question count and paper settings. Questions are chosen automatically, so you do not need to add or configure questions.";
+    }
     return "This is a shared draft. Only its lead author can edit metadata, submit it for review, or delete it.";
   }
-  if (status === "submitted") {
+  if (exam.status === "submitted") {
     return "This paper has been submitted for administrator review. Teacher authoring is now read-only.";
   }
-  if (status === "sealed") {
+  if (exam.status === "sealed") {
     return "This paper is sealed. Operational lifecycle controls belong to school administration.";
   }
-  if (status === "active" || status === "suspended") {
+  if (exam.status === "active" || exam.status === "suspended") {
     return "This examination is in its live operational lifecycle. Teacher controls are handled through invigilation access, not paper authoring.";
   }
-  if (status === "closed") {
+  if (exam.status === "closed") {
     return "This examination is closed and preserved as academic evidence.";
   }
-  if (status === "cancelled") {
+  if (exam.status === "cancelled") {
     return "This examination revision was cancelled. Lifecycle recovery is an administrator operation.";
   }
   return "No teacher lifecycle action is available for this examination state.";
@@ -540,4 +565,3 @@ function getLifecycleConfirmation(action) {
 
 
 export const ExamsPage = TeacherExamsPage;
-
