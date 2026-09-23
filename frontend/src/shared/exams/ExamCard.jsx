@@ -49,9 +49,9 @@ export function ExamCard({ exam, onOpen, onEdit, cardAction, children }) {
           ? `${dated[0]} ${date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`
           : 'Not scheduled'}
       </div>
-      {cardAction && <div className="exam-card__action">{cardAction}</div>}
       <div className="exam-card__footer">
         <span>{exam.questionCount} {exam.questionCount === 1 ? 'question' : 'questions'} <span>·</span> {exam.durationMinutes} min</span>
+        {cardAction}
       </div>
     </article>
   )
