@@ -307,9 +307,6 @@
 .exam-manual-picker__error { color: #b42323; font-size: 12px; line-height: 1.5; padding-block: 8px; }
 
 .exam-authoring-actions {
-  position: sticky;
-  bottom: 0;
-  z-index: 30;
   display: flex;
   justify-content: flex-end;
   flex-wrap: wrap;
