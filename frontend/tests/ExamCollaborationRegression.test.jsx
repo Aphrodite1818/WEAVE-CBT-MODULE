@@ -96,7 +96,7 @@ describe('shared examination collaboration guidance', () => {
     expect(screen.queryByRole('button', { name: /contribute questions/i })).not.toBeInTheDocument()
   })
 
-  it('gives an eligible non-lead a contribution path for a manual shared draft', () => {
+  it('shows an eligible non-lead the manual contribution action directly on the exam card', () => {
     const dispatch = vi.fn()
     const exam = makeExam({ selectionMode: 'manual' })
     render(
@@ -108,8 +108,9 @@ describe('shared examination collaboration guidance', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /lifecycle actions for jss1 english exam/i }))
-    fireEvent.click(screen.getByRole('button', { name: /contribute questions/i }))
+    const contributionButton = screen.getByRole('button', { name: /contribute questions/i })
+    expect(contributionButton).toBeVisible()
+    fireEvent.click(contributionButton)
 
     expect(dispatch).toHaveBeenCalledWith({
       type: 'staff',
