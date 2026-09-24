@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { RiRefreshLine } from '@remixicon/react'
 import { Notice } from '../../../shared/ui'
 import '../admin-roster-actions.css'
@@ -37,7 +37,7 @@ export function RosterCandidateActionButton({ candidate, exam, gateway, onChange
     [authorizations],
   )
 
-  const loadAuthorizations = async () => {
+  const loadAuthorizations = useCallback(async () => {
     setLoadingAuthorizations(true)
     setError('')
     try {
@@ -48,17 +48,17 @@ export function RosterCandidateActionButton({ candidate, exam, gateway, onChange
     } finally {
       setLoadingAuthorizations(false)
     }
-  }
+  }, [candidate.id, gateway])
 
   useEffect(() => {
     if (!open) return undefined
     void loadAuthorizations()
     const closeOnEscape = (event) => {
-      if (event.key === 'Escape' && !busy) setOpen(false)
+      if (event.key === 'Escape') setOpen(false)
     }
     document.addEventListener('keydown', closeOnEscape)
     return () => document.removeEventListener('keydown', closeOnEscape)
-  }, [open, candidate.id])
+  }, [loadAuthorizations, open])
 
   const runCandidateMutation = async (action, request) => {
     setBusy(action)
