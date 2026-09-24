@@ -1,29 +1,70 @@
-.admin-roster-manage {
-  min-width: 74px;
+.admin-roster-row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-height: 34px;
+}
+
+.admin-roster-row-action {
+  min-height: 31px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgb(var(--color-primary) / .26);
-  border-radius: 8px;
+  border-radius: 7px;
+  padding: 6px 9px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 720;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.admin-roster-row-action--danger {
+  border: 1px solid #e0a7a7;
+  background: #fff;
+  color: #a72727;
+}
+
+.admin-roster-row-action--danger:hover:not(:disabled) {
+  border-color: #c94a4a;
+  background: #fff3f3;
+}
+
+.admin-roster-row-action--primary {
+  border: 1px solid rgb(var(--color-primary));
+  background: rgb(var(--color-primary));
+  color: #fff;
+}
+
+.admin-roster-row-action--secondary {
+  border: 1px solid rgb(var(--color-primary) / .28);
   background: rgb(var(--color-primary-soft));
   color: rgb(var(--color-primary));
-  padding: 7px 10px;
-  font: inherit;
-  font-size: 11.5px;
+}
+
+.admin-roster-row-action--secondary:hover:not(:disabled) {
+  border-color: rgb(var(--color-primary) / .48);
+}
+
+.admin-roster-row-action:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+.admin-roster-row-actions__empty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  color: rgb(var(--color-text-muted));
+}
+
+.admin-roster-row-actions__error {
+  color: #b42323;
+  font-size: 10px;
   font-weight: 700;
-  cursor: pointer;
-  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
-}
-
-.admin-roster-manage:hover {
-  border-color: rgb(var(--color-primary) / .42);
-  background: rgb(var(--color-primary) / .1);
-  transform: translateY(-1px);
-}
-
-.admin-roster-manage:focus-visible {
-  outline: 3px solid rgb(var(--color-primary) / .22);
-  outline-offset: 2px;
 }
 
 .admin-roster-action-modal {
@@ -32,144 +73,111 @@
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgb(15 23 42 / .4);
-  padding: 28px;
+  background: rgb(15 23 42 / .42);
+  padding: 24px;
 }
 
-.admin-roster-action-sheet {
-  width: min(680px, 100%);
-  max-height: min(760px, calc(100vh - 56px));
+.admin-roster-action-dialog {
+  width: min(500px, 100%);
+  max-height: calc(100vh - 48px);
   overflow-y: auto;
   border: 1px solid rgb(var(--color-border));
-  border-radius: 16px;
+  border-radius: 14px;
   background: rgb(var(--color-surface));
-  box-shadow: 0 22px 60px rgb(15 23 42 / .22);
-  padding: 20px;
+  box-shadow: 0 22px 58px rgb(15 23 42 / .2);
 }
 
-.admin-roster-action-sheet__header {
+.admin-roster-action-dialog__header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
-  padding-bottom: 16px;
   border-bottom: 1px solid rgb(var(--color-border));
+  padding: 17px 18px 15px;
 }
 
-.admin-roster-action-sheet__header > div {
+.admin-roster-action-dialog__header > div {
   min-width: 0;
 }
 
-.admin-roster-action-sheet__header > div > span {
+.admin-roster-action-dialog__header > div > span {
   display: block;
   color: rgb(var(--color-primary));
-  font-size: 10.5px;
+  font-size: 9.5px;
   font-weight: 800;
   letter-spacing: .055em;
   text-transform: uppercase;
 }
 
-.admin-roster-action-sheet__header h2 {
-  margin: 5px 0 3px;
+.admin-roster-action-dialog__header h2 {
+  margin: 4px 0 3px;
   color: rgb(var(--color-text));
-  font-size: 20px;
+  font-size: 18px;
   line-height: 1.25;
 }
 
-.admin-roster-action-sheet__header p {
+.admin-roster-action-dialog__header p {
   margin: 0;
   color: rgb(var(--color-text-muted));
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
-.admin-roster-action-sheet__header > button {
-  width: 34px;
-  height: 34px;
+.admin-roster-action-dialog__header > button {
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
   flex: 0 0 auto;
   border: 1px solid rgb(var(--color-border));
-  border-radius: 9px;
+  border-radius: 8px;
   background: rgb(var(--color-surface-muted));
   color: rgb(var(--color-text-muted));
-  font-size: 21px;
+  font-size: 20px;
   line-height: 1;
   cursor: pointer;
 }
 
-.admin-roster-action-sheet__header > button:hover:not(:disabled) {
-  color: rgb(var(--color-text));
+.admin-roster-action-dialog__header > button:hover:not(:disabled) {
   background: rgb(var(--color-surface));
+  color: rgb(var(--color-text));
 }
 
-.admin-roster-action-section {
+.admin-roster-action-dialog__body {
   display: grid;
   gap: 14px;
-  padding: 18px 0;
-  border-bottom: 1px solid rgb(var(--color-border));
+  padding: 17px 18px 18px;
 }
 
-.admin-roster-action-section:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
-}
-
-.admin-roster-action-section__heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.admin-roster-action-section__heading > div {
-  display: grid;
-  gap: 3px;
-}
-
-.admin-roster-action-section__heading strong {
-  color: rgb(var(--color-text));
-  font-size: 13px;
-  font-weight: 760;
-}
-
-.admin-roster-action-section__heading span {
+.admin-roster-dialog-copy {
+  margin: 0;
   color: rgb(var(--color-text-muted));
-  font-size: 11.5px;
-  line-height: 1.45;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
-.admin-roster-action-form {
-  display: grid;
-  gap: 12px;
-  border: 1px solid rgb(var(--color-border));
-  border-radius: 11px;
-  background: rgb(var(--color-surface-muted));
-  padding: 13px;
+.admin-roster-dialog-copy strong {
+  color: rgb(var(--color-text));
 }
 
-.admin-roster-action-form--compact {
-  margin-top: 10px;
-  background: rgb(var(--color-surface));
-}
-
-.admin-roster-action-form label {
+.admin-roster-dialog-field {
   display: grid;
   gap: 6px;
 }
 
-.admin-roster-action-form label > span {
+.admin-roster-dialog-field > span {
   color: rgb(var(--color-text));
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 720;
 }
 
-.admin-roster-action-form label > span small {
+.admin-roster-dialog-field > span small {
   color: rgb(var(--color-text-muted));
   font-weight: 500;
 }
 
-.admin-roster-action-form textarea,
-.admin-roster-action-form input {
+.admin-roster-dialog-field textarea,
+.admin-roster-dialog-field input {
   width: 100%;
   border: 1px solid rgb(var(--color-border));
   border-radius: 8px;
@@ -182,180 +190,108 @@
   transition: border-color 140ms ease, box-shadow 140ms ease;
 }
 
-.admin-roster-action-form textarea {
-  min-height: 78px;
+.admin-roster-dialog-field textarea {
+  min-height: 92px;
   resize: vertical;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
-.admin-roster-action-form textarea:focus,
-.admin-roster-action-form input:focus {
-  border-color: rgb(var(--color-primary) / .5);
+.admin-roster-dialog-field textarea:focus,
+.admin-roster-dialog-field input:focus {
+  border-color: rgb(var(--color-primary) / .55);
   box-shadow: 0 0 0 3px rgb(var(--color-primary) / .1);
 }
 
-.admin-roster-action-form__footer {
+.admin-roster-dialog-loading {
+  border-radius: 8px;
+  background: rgb(var(--color-surface-muted));
+  color: rgb(var(--color-text-muted));
+  padding: 11px 12px;
+  font-size: 11.5px;
+}
+
+.admin-roster-dialog-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 14px;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 2px;
 }
 
-.admin-roster-action-form__footer small {
-  max-width: 390px;
-  color: rgb(var(--color-text-muted));
-  font-size: 10.5px;
-  line-height: 1.45;
-}
-
-.admin-roster-action-primary,
-.admin-roster-action-danger {
+.admin-roster-dialog-button {
   min-height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 auto;
   border-radius: 8px;
-  padding: 8px 12px;
+  padding: 7px 11px;
   font: inherit;
   font-size: 11.5px;
   font-weight: 720;
   cursor: pointer;
 }
 
-.admin-roster-action-primary {
+.admin-roster-dialog-button--secondary {
+  border: 1px solid rgb(var(--color-border));
+  background: rgb(var(--color-surface));
+  color: rgb(var(--color-text));
+}
+
+.admin-roster-dialog-button--primary {
   border: 1px solid rgb(var(--color-primary));
   background: rgb(var(--color-primary));
   color: #fff;
 }
 
-.admin-roster-action-danger {
+.admin-roster-dialog-button--danger {
   border: 1px solid #c73b3b;
   background: #c73b3b;
   color: #fff;
 }
 
-.admin-roster-action-danger--secondary {
+.admin-roster-dialog-button--danger-outline {
+  border: 1px solid #d58b8b;
   background: #fff;
-  color: #b42323;
+  color: #a72727;
 }
 
-.admin-roster-action-primary:disabled,
-.admin-roster-action-danger:disabled,
-.admin-roster-action-sheet__header > button:disabled {
+.admin-roster-dialog-button:disabled,
+.admin-roster-action-dialog__header > button:disabled {
   opacity: .55;
   cursor: wait;
 }
 
-.admin-roster-action-callout {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  border: 1px solid rgb(var(--color-border));
-  border-radius: 10px;
-  background: rgb(var(--color-surface-muted));
-  padding: 12px 13px;
-}
-
-.admin-roster-action-callout > div {
+.admin-roster-authorization-card {
   display: grid;
-  gap: 4px;
-}
-
-.admin-roster-action-callout span,
-.admin-roster-authorization-history > span {
-  color: rgb(var(--color-text-muted));
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: .025em;
-  text-transform: uppercase;
-}
-
-.admin-roster-action-callout strong {
-  color: rgb(var(--color-text));
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.admin-roster-action-note,
-.admin-roster-action-loading {
-  margin: 0;
-  border-radius: 9px;
-  background: rgb(var(--color-surface-muted));
-  color: rgb(var(--color-text-muted));
-  padding: 11px 12px;
-  font-size: 11.5px;
-  line-height: 1.5;
-}
-
-.admin-roster-late-start-active {
+  gap: 12px;
   border: 1px solid #b7e4c7;
-  border-radius: 11px;
-  background: #f2fbf5;
+  border-radius: 10px;
+  background: #f4fbf6;
   padding: 13px;
 }
 
-.admin-roster-late-start-active__header {
+.admin-roster-authorization-card__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.admin-roster-late-start-active__header span {
+.admin-roster-authorization-card__header strong {
   color: #11713e;
+  font-size: 12px;
+}
+
+.admin-roster-authorization-card__header span {
+  color: #315c42;
   font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: .03em;
-  text-transform: uppercase;
 }
 
-.admin-roster-late-start-active__header strong {
-  color: #11713e;
-  font-size: 11px;
-}
-
-.admin-roster-late-start-active > p {
-  margin: 8px 0 0;
+.admin-roster-authorization-card > p {
+  margin: 0;
   color: #315c42;
   font-size: 11.5px;
   line-height: 1.5;
-}
-
-.admin-roster-authorization-history {
-  display: grid;
-  gap: 8px;
-}
-
-.admin-roster-authorization-history > div {
-  display: grid;
-  gap: 4px;
-  border-top: 1px solid rgb(var(--color-border));
-  padding-top: 8px;
-}
-
-.admin-roster-authorization-history > div > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.admin-roster-authorization-history strong {
-  color: rgb(var(--color-text));
-  font-size: 11.5px;
-}
-
-.admin-roster-authorization-history div span,
-.admin-roster-authorization-history p {
-  color: rgb(var(--color-text-muted));
-  font-size: 10.5px;
-}
-
-.admin-roster-authorization-history p {
-  margin: 0;
-  line-height: 1.45;
 }
 
 .admin-roster-recovery {
@@ -436,12 +372,12 @@
   cursor: wait;
 }
 
-.admin-roster-table th:nth-child(1) { width: 24%; }
-.admin-roster-table th:nth-child(2) { width: 17%; }
-.admin-roster-table th:nth-child(3) { width: 14%; }
-.admin-roster-table th:nth-child(4) { width: 14%; }
-.admin-roster-table th:nth-child(5) { width: 21%; }
-.admin-roster-table th:nth-child(6) { width: 10%; }
+.admin-roster-table th:nth-child(1) { width: 23%; }
+.admin-roster-table th:nth-child(2) { width: 16%; }
+.admin-roster-table th:nth-child(3) { width: 13%; }
+.admin-roster-table th:nth-child(4) { width: 13%; }
+.admin-roster-table th:nth-child(5) { width: 19%; }
+.admin-roster-table th:nth-child(6) { width: 16%; }
 
 .admin-roster-table td:last-child {
   text-align: right;
@@ -453,23 +389,27 @@
     padding: 0;
   }
 
-  .admin-roster-action-sheet {
+  .admin-roster-action-dialog {
     width: 100%;
     max-height: 90vh;
-    border-radius: 16px 16px 0 0;
-    padding: 16px;
+    border-radius: 14px 14px 0 0;
   }
 
-  .admin-roster-action-section__heading,
-  .admin-roster-action-callout,
-  .admin-roster-action-form__footer,
+  .admin-roster-dialog-footer,
+  .admin-roster-authorization-card__header,
   .admin-roster-recovery {
     align-items: stretch;
     flex-direction: column;
   }
 
+  .admin-roster-row-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
   .admin-roster-recovery__actions {
     width: 100%;
+    flex-wrap: wrap;
   }
 
   .admin-roster-recovery__actions button {
