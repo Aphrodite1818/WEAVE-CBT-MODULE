@@ -16,9 +16,11 @@ from app.domains.candidates.schemas import (
     CandidateLateStartRevocationPayload,
     CandidateResponse,
     CandidateRosterResponse,
+    CandidateRosterRetryResponse,
     CandidateStatusReasonPayload,
 )
 from app.domains.exams.exceptions import ExamNotFound
+from app.workers.producer import arq_producer
 
 
 router = APIRouter(tags=["Candidates"])
@@ -100,6 +102,47 @@ async def list_exam_roster(
         ValueError,
     ) as exc:
         raise _domain_http_error(exc) from exc
+
+
+@router.post(
+    "/exams/{exam_id}/roster/retry",
+    response_model=CandidateRosterRetryResponse,
+)
+async def retry_failed_roster(
+    exam_id: UUID,
+    db: DbSession,
+    actor: CurrentLocalActor,
+) -> CandidateRosterRetryResponse:
+    """Retry one FAILED sealed roster without making Redis authoritative."""
+
+    try:
+        exam, recovery_mode = await CandidateService.retry_failed_roster(
+            db,
+            actor=actor,
+            exam_id=exam_id,
+        )
+    except (
+        AcademicAuthorizationError,
+        CandidateRosterError,
+        ExamNotFound,
+        ValueError,
+    ) as exc:
+        raise _domain_http_error(exc) from exc
+
+    job_name = (
+        "prepare_exam_roster"
+        if recovery_mode == "prepare"
+        else "reconcile_exam_roster"
+    )
+    queued = await arq_producer.enqueue(job_name, str(exam.id))
+
+    return CandidateRosterRetryResponse(
+        exam_id=exam.id,
+        roster_status=exam.roster_status,
+        roster_version=exam.roster_version,
+        recovery_mode=recovery_mode,
+        queued=queued,
+    )
 
 
 @router.get(
