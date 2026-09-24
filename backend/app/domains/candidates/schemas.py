@@ -93,6 +93,14 @@ class CandidateRosterResponse(OutputBase):
     candidates: list[CandidateResponse]
 
 
+class CandidateRosterRetryResponse(OutputBase):
+    exam_id: UUID
+    roster_status: ExamRosterStatus
+    roster_version: int
+    recovery_mode: str
+    queued: bool
+
+
 class CandidateMakeupAuthorizationResponse(OutputBase):
     id: UUID
     candidate_id: UUID
