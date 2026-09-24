@@ -3,6 +3,7 @@ import { RiArrowLeftLine, RiArrowRightLine, RiSearchLine } from '@remixicon/reac
 import { buildAcademicLevels, listSubjectsForLevel } from '../../../shared/academics/authoringScope'
 import { Icon } from '../../../shared/icons/Icon'
 import { Notice, SelectControl } from '../../../shared/ui'
+import { RosterCandidateActionButton, RosterRecoveryNotice } from '../components/RosterCandidateActions'
 import '../admin-rosters.css'
 
 const OVERVIEW_PAGE_SIZE = 12
@@ -203,6 +204,11 @@ export function AdminRosterDetailPage({ state, adminData, gateway, onNavigate })
     { value: 'withdrawn', label: 'Withdrawn' },
   ]
 
+  const refreshRosterStatus = async () => {
+    await refreshExams({ silent: true })
+    setRefreshToken((value) => value + 1)
+  }
+
   return (
     <div className="teacher-reference-page admin-roster-detail">
       <button className="admin-roster-back" type="button" onClick={() => onNavigate('roster')}><RiArrowLeftLine size={17} /> Back to roster</button>
@@ -218,8 +224,11 @@ export function AdminRosterDetailPage({ state, adminData, gateway, onNavigate })
         <RosterState status={exam.rosterStatus} />
       </div>
 
-      {exam.rosterStatus === 'stale' && <Notice tone="warning">Enrollment changed in Weave. This roster is being reconciled automatically before the examination can activate.</Notice>}
-      {exam.rosterStatus === 'failed' && <Notice tone="danger">{exam.rosterError || 'Roster preparation or reconciliation failed. Review the examination and worker logs before activation.'}</Notice>}
+      <RosterRecoveryNotice
+        exam={exam}
+        onRefresh={refreshRosterStatus}
+        onOpenOperations={() => onNavigate('operation-detail', { selectedExamId: exam.id })}
+      />
       {error && <Notice tone="danger">{error}</Notice>}
 
       <div className="admin-roster-summary" aria-label="Roster summary">
@@ -252,6 +261,7 @@ export function AdminRosterDetailPage({ state, adminData, gateway, onNavigate })
               <th>Class</th>
               <th>Eligibility</th>
               <th>Reason</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -262,11 +272,19 @@ export function AdminRosterDetailPage({ state, adminData, gateway, onNavigate })
                 <td>{candidate.class_name || '—'}</td>
                 <td><CandidateState status={candidate.status} /></td>
                 <td className="admin-roster-reason">{candidate.status_reason || '—'}</td>
+                <td>
+                  <RosterCandidateActionButton
+                    candidate={candidate}
+                    exam={exam}
+                    gateway={gateway}
+                    onChanged={() => setRefreshToken((value) => value + 1)}
+                  />
+                </td>
               </tr>
             ))}
-            {loading && <tr><td colSpan={5}><div className="admin-roster-table-state">Loading candidates…</div></td></tr>}
+            {loading && <tr><td colSpan={6}><div className="admin-roster-table-state">Loading candidates…</div></td></tr>}
             {!loading && !error && (payload?.candidates || []).length === 0 && (
-              <tr><td colSpan={5}><div className="admin-roster-table-state"><strong>No candidates match these filters</strong><span>Try a different class, status, or search term.</span></div></td></tr>
+              <tr><td colSpan={6}><div className="admin-roster-table-state"><strong>No candidates match these filters</strong><span>Try a different class, status, or search term.</span></div></td></tr>
             )}
           </tbody>
         </table>
