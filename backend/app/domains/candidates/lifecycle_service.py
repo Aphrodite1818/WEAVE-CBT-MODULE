@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.academics.repository import AcademicRepository
 from app.domains.auth.models import LocalActor
+from app.domains.candidates.exceptions import CandidateRosterError
 from app.domains.candidates.models import CandidateStatus
 from app.domains.candidates.query_repository import CandidateRosterQueryRepository
 from app.domains.candidates.schemas import (
@@ -17,7 +18,7 @@ from app.domains.candidates.schemas import (
 )
 from app.domains.candidates.service import CandidateService as _CandidateService
 from app.domains.exams.exceptions import ExamNotFound
-from app.domains.exams.models import ExamStatus
+from app.domains.exams.models import Exam, ExamRosterStatus, ExamStatus
 from app.domains.exams.repository import ExamRepository
 
 
@@ -122,3 +123,52 @@ class CandidateService(_CandidateService):
             ],
             candidates=candidate_rows,
         )
+
+    @classmethod
+    async def retry_failed_roster(
+        cls,
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        exam_id: UUID,
+    ) -> tuple[Exam, str]:
+        """Return a failed sealed roster to a durable recoverable state.
+
+        PostgreSQL owns the recovery request. Queue delivery is deliberately
+        handled by the router after this transaction commits so Redis failure
+        cannot lose the operator's retry request; maintenance can reconstruct
+        PENDING/STale work later from the database.
+        """
+
+        cls._require_admin(actor)
+
+        exam = await ExamRepository.get_exam_by_id(
+            db,
+            exam_id=exam_id,
+            lock=True,
+        )
+        if exam is None:
+            raise ExamNotFound("Examination does not exist")
+
+        if exam.status != ExamStatus.SEALED:
+            raise CandidateRosterError(
+                "Failed roster recovery is only available for a SEALED examination"
+            )
+
+        if exam.roster_status != ExamRosterStatus.FAILED:
+            raise CandidateRosterError(
+                "Roster recovery can only be retried from FAILED state"
+            )
+
+        initial_preparation = exam.roster_version == 0
+        recovery_mode = "prepare" if initial_preparation else "reconcile"
+        exam.roster_status = (
+            ExamRosterStatus.PENDING
+            if initial_preparation
+            else ExamRosterStatus.STALE
+        )
+        exam.roster_error = None
+
+        await ExamRepository.save_exam(db, exam)
+        await db.commit()
+        return exam, recovery_mode
