@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -97,7 +98,7 @@ class CandidateRosterRetryResponse(OutputBase):
     exam_id: UUID
     roster_status: ExamRosterStatus
     roster_version: int
-    recovery_mode: str
+    recovery_mode: Literal["prepare", "reconcile"]
     queued: bool
 
 
