@@ -296,8 +296,9 @@ export function RosterCandidateActionButton({ candidate, exam, gateway, onChange
   )
 }
 
-export function RosterRecoveryNotice({ exam, onRefresh, onOpenOperations }) {
+export function RosterRecoveryNotice({ exam, onRefresh, onRetry, onOpenOperations }) {
   const [checking, setChecking] = useState(false)
+  const [retrying, setRetrying] = useState(false)
   const [error, setError] = useState('')
 
   if (!['stale', 'failed'].includes(exam.rosterStatus)) return null
@@ -314,22 +315,51 @@ export function RosterRecoveryNotice({ exam, onRefresh, onOpenOperations }) {
     }
   }
 
+  const retry = async () => {
+    setRetrying(true)
+    setError('')
+    try {
+      await onRetry?.()
+    } catch (requestError) {
+      setError(requestError.userMessage || 'Weave could not retry roster recovery.')
+    } finally {
+      setRetrying(false)
+    }
+  }
+
   const failed = exam.rosterStatus === 'failed'
+  const busy = checking || retrying
 
   return (
     <div className={`admin-roster-recovery admin-roster-recovery--${failed ? 'failed' : 'stale'}`} role={failed ? 'alert' : 'status'}>
       <div className="admin-roster-recovery__copy">
-        <strong>{failed ? 'Roster reconciliation needs attention' : 'Roster refresh in progress'}</strong>
+        <strong>{failed ? 'Roster recovery needs attention' : 'Roster refresh in progress'}</strong>
         <p>
           {failed
-            ? (exam.rosterError || 'The last roster preparation or reconciliation attempt failed. Failed rosters are left for administrator review rather than retried indefinitely.')
+            ? (exam.rosterError || 'The last roster preparation or reconciliation attempt failed. Review the failure and retry when the underlying issue is resolved.')
             : 'Enrollment changed in Weave. The maintenance worker will reconcile this sealed roster automatically before activation.'}
         </p>
         {error && <small>{error}</small>}
       </div>
       <div className="admin-roster-recovery__actions">
-        <button type="button" disabled={checking} onClick={refresh}><RiRefreshLine size={16} /> {checking ? 'Checking…' : 'Refresh status'}</button>
-        {failed && <button type="button" className="admin-roster-recovery__secondary" onClick={onOpenOperations}>Open Exam Operations</button>}
+        {failed && (
+          <button type="button" disabled={busy} onClick={retry}>
+            <RiRefreshLine size={16} /> {retrying ? 'Retrying…' : 'Retry roster'}
+          </button>
+        )}
+        <button
+          type="button"
+          className={failed ? 'admin-roster-recovery__secondary' : ''}
+          disabled={busy}
+          onClick={refresh}
+        >
+          <RiRefreshLine size={16} /> {checking ? 'Checking…' : 'Refresh status'}
+        </button>
+        {failed && (
+          <button type="button" className="admin-roster-recovery__secondary" disabled={busy} onClick={onOpenOperations}>
+            Open Exam Operations
+          </button>
+        )}
       </div>
     </div>
   )
