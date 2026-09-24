@@ -209,6 +209,11 @@ export function AdminRosterDetailPage({ state, adminData, gateway, onNavigate })
     setRefreshToken((value) => value + 1)
   }
 
+  const retryFailedRoster = async () => {
+    await gateway.candidates.retryFailedRoster(exam.id)
+    await refreshRosterStatus()
+  }
+
   return (
     <div className="teacher-reference-page admin-roster-detail">
       <button className="admin-roster-back" type="button" onClick={() => onNavigate('roster')}><RiArrowLeftLine size={17} /> Back to roster</button>
@@ -227,6 +232,7 @@ export function AdminRosterDetailPage({ state, adminData, gateway, onNavigate })
       <RosterRecoveryNotice
         exam={exam}
         onRefresh={refreshRosterStatus}
+        onRetry={retryFailedRoster}
         onOpenOperations={() => onNavigate('operation-detail', { selectedExamId: exam.id })}
       />
       {error && <Notice tone="danger">{error}</Notice>}
