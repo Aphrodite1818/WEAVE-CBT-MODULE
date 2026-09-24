@@ -4,6 +4,13 @@ export function listExamRoster(examId, params = {}, options = {}) {
   return weaveRequest(`/exams/${examId}/candidates${queryString(params)}`, options)
 }
 
+export function retryFailedRoster(examId) {
+  return weaveRequest(`/exams/${examId}/roster/retry`, {
+    method: 'POST',
+    successMessage: 'Roster recovery requested.',
+  })
+}
+
 export function getCandidate(candidateId, options = {}) {
   return weaveRequest(`/candidates/${candidateId}`, options)
 }
