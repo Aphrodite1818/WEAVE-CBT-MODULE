@@ -25,6 +25,7 @@ from app.domains.node.exceptions import (
 from app.domains.node.identity_store import node_identity_store
 from app.domains.sync.service import sync_service
 from app.integrations.weave.academics import weave_academics_gateway
+from app.workers.roster_delivery import enqueue_roster_reconciliation_after_sync
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +197,11 @@ class SyncSupervisor:
     async def _reconcile_once() -> int:
         async with async_session_factory() as db:
             result = await sync_service.reconcile(db)
+            # The sync service has committed any enrollment-driven STALE roster
+            # transitions by this point. Deliver reconciliation immediately;
+            # the maintenance cron remains the durable fallback if enqueueing
+            # is unavailable.
+            await enqueue_roster_reconciliation_after_sync(result)
             await branding_service.refresh_best_effort(db)
             return result.cursor
 
