@@ -81,23 +81,24 @@ class ExamOperationsService:
     ) -> ActivationPreflight:
         """Validate static readiness and calculate activation/timetable state.
 
-        Enforcement calls use the real current-time state by default. UI
-        preflight calls explicitly enable ``suggest_recovery_times`` so proposed
-        recovery slots include operational headroom.
+        The timetable preflight acquires the transaction-scoped level advisory
+        lock before we acquire exam row locks. Keeping that order consistent
+        prevents activation/recovery deadlocks between parallel admin actions.
         """
 
         cls._require_admin(actor)
-        exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id, lock=True)
-        if exam is None:
-            raise ExamNotFound("Examination does not exist")
-        await cls._require_activation_static_readiness(db, exam)
-        return await ExamTimetableService.activation_preflight(
+        preflight = await ExamTimetableService.activation_preflight(
             db,
-            exam_id=exam.id,
+            exam_id=exam_id,
             proposed_activation_at=proposed_activation_at,
             include_conflict_details=True,
             apply_recovery_buffer=suggest_recovery_times,
         )
+        exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id, lock=True)
+        if exam is None:
+            raise ExamNotFound("Examination does not exist")
+        await cls._require_activation_static_readiness(db, exam)
+        return preflight
 
     @classmethod
     async def reschedule_activation_impact(
@@ -124,6 +125,17 @@ class ExamOperationsService:
             raise ValueError("At least one affected examination must be rescheduled")
 
         checked_at = datetime.now(UTC)
+
+        # Acquire the level advisory lock through timetable preflight before any
+        # source/downstream row lock. All recovery row locks below therefore use
+        # one deterministic lock order: level advisory lock -> exam rows.
+        current = await ExamTimetableService.activation_preflight(
+            db,
+            exam_id=source_exam_id,
+            proposed_activation_at=checked_at,
+            include_conflict_details=True,
+            apply_recovery_buffer=True,
+        )
         source = await ExamRepository.get_exam_by_id(
             db,
             exam_id=source_exam_id,
@@ -133,15 +145,6 @@ class ExamOperationsService:
             raise ExamNotFound("Examination does not exist")
         await cls._require_activation_static_readiness(db, source)
 
-        # First obtain the conservative UI-facing chain so only currently
-        # affected examinations may be changed by this recovery endpoint.
-        current = await ExamTimetableService.activation_preflight(
-            db,
-            exam_id=source.id,
-            proposed_activation_at=checked_at,
-            include_conflict_details=True,
-            apply_recovery_buffer=True,
-        )
         if "too_early" in current.blockers:
             raise ExamStateError(
                 "Examination cannot be activated before its scheduled start time"
