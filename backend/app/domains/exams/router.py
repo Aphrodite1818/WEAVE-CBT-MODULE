@@ -13,6 +13,7 @@ from app.domains.exams.exceptions import (
     ExamStateError,
 )
 from app.domains.exams.execution_service import ExamExecutionService
+from app.domains.exams.operations_service import ExamOperationsService
 from app.domains.exams.schemas import (
     AcademicTeacherResponse,
     ExamAuthoringAction,
@@ -31,6 +32,7 @@ from app.domains.exams.schemas import (
     ManualQuestionReorder,
 )
 from app.domains.exams.service import ExamService
+from app.domains.exams.timetable_schemas import ActivationPreflightResponse
 from app.workers.producer import arq_producer
 
 
@@ -64,6 +66,33 @@ def _domain_http_error(exc: Exception) -> HTTPException:
     else:
         code = status.HTTP_400_BAD_REQUEST
     return HTTPException(status_code=code, detail=detail)
+
+
+def _activation_preflight_http_error(preflight) -> HTTPException:
+    if "too_early" in preflight.blockers:
+        code = "activation_too_early"
+        message = "Examination cannot be activated before its scheduled start time"
+    elif "candidate_scope_conflict" in preflight.blockers:
+        code = "candidate_scope_conflict"
+        message = (
+            "One or more eligible candidates are already part of another "
+            "operational examination"
+        )
+    elif preflight.affected_exams:
+        code = "activation_schedule_impact"
+        message = (
+            "Activation would disrupt downstream examinations; reschedule the "
+            "affected chain before activating"
+        )
+    else:
+        code = "activation_preflight_failed"
+        message = "Examination is not ready for activation"
+
+    payload = ActivationPreflightResponse.model_validate(preflight).model_dump(mode="json")
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={"code": code, "message": message, "preflight": payload},
+    )
 
 
 DOMAIN_ERRORS = (
@@ -266,7 +295,20 @@ async def activate_exam(
     actor: CurrentLocalActor,
 ) -> ExamResponse:
     try:
+        # Preflight and activation intentionally share this DB transaction. The
+        # preflight acquires the same transaction-scoped level advisory lock used
+        # by timetable mutations, so a validated recovery schedule cannot change
+        # between this check and the lifecycle commit.
+        preflight = await ExamOperationsService.activation_preflight(
+            db,
+            actor=actor,
+            exam_id=exam_id,
+        )
+        if not preflight.can_activate:
+            raise _activation_preflight_http_error(preflight)
         exam = await ExamService.activate_exam(db, actor=actor, exam_id=exam_id)
+    except HTTPException:
+        raise
     except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
     return ExamResponse.model_validate(exam)
