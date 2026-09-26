@@ -170,6 +170,22 @@ class ExamTimetableService:
             {"scope": scope},
         )
 
+    @staticmethod
+    async def acquire_operational_candidate_lock(db: AsyncSession) -> None:
+        """Serialize mutations that can create cross-exam candidate occupancy.
+
+        Level locks protect timetable races inside a normal academic scope. This
+        short global lock closes the pathological cross-level race too, so even
+        inconsistent projection data cannot make one student operationally
+        eligible in two exams at the same instant.
+        """
+
+        scope = "exam-operational-candidate-scope"
+        await db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:scope, 0))"),
+            {"scope": scope},
+        )
+
     @classmethod
     async def list_leaf_exams(
         cls,
@@ -460,6 +476,7 @@ class ExamTimetableService:
         await cls.acquire_level_lock(
             db, session_id=exam.session_id, term_id=exam.term_id, level_id=level_id
         )
+        await cls.acquire_operational_candidate_lock(db)
         overlap_exists = cls._candidate_overlap_exists_statement(exam.id)
         if bool(await db.scalar(select(overlap_exists))):
             raise ExamStateError(
@@ -688,6 +705,7 @@ class ExamTimetableService:
             term_id=exam.term_id,
             level_id=level_id,
         )
+        await cls.acquire_operational_candidate_lock(db)
 
         blockers: list[str] = []
         scheduled = exam.scheduled_start_at
@@ -813,9 +831,50 @@ class ExamTimetableService:
             )
 
         overrides = schedule_overrides or {}
+        projected_parallel_overdue_ids: set[UUID] = set()
+        parallel_recovery_start = (
+            checked_at + ACTIVATION_RECOVERY_BUFFER
+            if apply_recovery_buffer
+            else checked_at
+        )
+
+        # A parallel department exam may be overdue but still SEALED when this
+        # source exam is preflighted. It is safe to run concurrently when its
+        # delivery scope is disjoint, but later general subjects depend on both
+        # branches. Project that pending parallel sitting from the same recovery
+        # window so downstream suggestions account for the branch instead of
+        # pretending its missed slot already happened.
+        for row in rows:
+            if row.status != ExamStatus.SEALED:
+                continue
+            row_scope = scope_map.get(row.id, frozenset())
+            base_start = overrides.get(row.id, row.scheduled_start_at)
+            if (
+                base_start is None
+                or base_start >= checked_at
+                or not source_scope
+                or not row_scope
+                or not source_scope.isdisjoint(row_scope)
+            ):
+                continue
+
+            window_duration = timedelta(minutes=row.duration_minutes) + cls.entry_grace(row)
+            fixed_windows.append(
+                _ScopeWindow(
+                    exam_id=row.id,
+                    title=row.title,
+                    class_ids=row_scope,
+                    start_at=parallel_recovery_start,
+                    end_at=parallel_recovery_start + window_duration,
+                )
+            )
+            projected_parallel_overdue_ids.add(row.id)
+
         planned_nodes: list[_PlannedNode] = []
         for row in rows:
             if row.status != ExamStatus.SEALED:
+                continue
+            if row.id in projected_parallel_overdue_ids:
                 continue
             base_start = overrides.get(row.id, row.scheduled_start_at)
             window_duration = timedelta(minutes=row.duration_minutes) + cls.entry_grace(row)
