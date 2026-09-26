@@ -14,19 +14,18 @@ from app.workers.broker import create_arq_pool
 logger = logging.getLogger(__name__)
 
 
-# These jobs represent durable, exam-scoped operations whose authoritative
+# These jobs represent one-shot, exam-scoped operations whose authoritative
 # state lives in PostgreSQL. Multiple API replicas may discover or request the
 # same work at nearly the same time, especially during runtime recovery.
 #
 # A deterministic ARQ job ID prevents duplicate queue entries while one copy is
 # already queued/running (or while its short-lived result key is retained).
-# `evaluate_exam_completion` is intentionally excluded because it is a
-# repeatable evaluation trigger and may need to run again after exam state
-# changes.
+# Repeatable jobs are intentionally excluded. In particular,
+# `reconcile_exam_roster` may legitimately run many times for the same exam as
+# synchronized enrollment truth changes between roster versions.
 _UNIQUE_DURABLE_EXAM_JOBS = frozenset(
     {
         "prepare_exam_roster",
-        "reconcile_exam_roster",
         "finalize_exam_close",
         "finalize_exam_cancellation",
         "sync_exam_results",
@@ -48,6 +47,32 @@ def durable_exam_job_id(
         return None
 
     return f"weave-cbt:{function_name}:{exam_identity}"
+
+
+def roster_reconcile_job_id(
+    exam_id: Any,
+    roster_version: int,
+) -> str:
+    """Return the dedupe key for one stale roster generation.
+
+    Reconciliation is repeatable for an exam, so exam ID alone is not a safe
+    idempotency key: ARQ may retain a completed job key briefly and suppress a
+    later legitimate reconciliation. The current persisted roster version is
+    the generation being refreshed. Repeated delivery for that same generation
+    therefore collapses safely, while a later stale roster version receives a
+    different key and can be queued immediately.
+    """
+
+    exam_identity = str(exam_id).strip()
+    if not exam_identity:
+        raise ValueError("exam ID is required")
+    if roster_version < 0:
+        raise ValueError("roster version cannot be negative")
+
+    return (
+        "weave-cbt:reconcile_exam_roster:"
+        f"{exam_identity}:v{roster_version}"
+    )
 
 
 class ArqProducer:
@@ -92,11 +117,12 @@ class ArqProducer:
         """Ensure one ARQ job is queued for the requested durable work.
 
         For one-shot exam-scoped jobs, this method automatically supplies a
-        deterministic ARQ job ID. That makes simultaneous enqueue attempts from
-        several FastAPI replicas collapse into one queue entry.
+        deterministic ARQ job ID. Callers of repeatable workflows may provide a
+        generation-scoped ``_job_id`` when they need duplicate suppression.
 
         True means the requested work is queued or an equivalent deterministic
-        job already exists. False means queue delivery was unavailable.
+        job already exists. False means queue delivery was unavailable or a
+        non-deduplicated enqueue was rejected.
         """
 
         redis = self._redis
