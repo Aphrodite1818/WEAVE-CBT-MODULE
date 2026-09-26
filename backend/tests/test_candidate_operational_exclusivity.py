@@ -84,7 +84,7 @@ class CandidateOperationalExclusivityTests(unittest.IsolatedAsyncioTestCase):
 
         db.scalar.assert_not_awaited()
 
-    async def test_unblock_acquires_level_lock_before_candidate_and_exam_row_locks(self):
+    async def test_unblock_acquires_advisory_locks_before_candidate_and_exam_row_locks(self):
         db = AsyncMock()
         candidate = self.candidate()
         exam = self.exam(status=ExamStatus.ACTIVE)
@@ -103,6 +103,9 @@ class CandidateOperationalExclusivityTests(unittest.IsolatedAsyncioTestCase):
         async def acquire_level_lock(_db, **_kwargs):
             events.append("level_lock")
 
+        async def acquire_candidate_lock(_db):
+            events.append("candidate_lock")
+
         with (
             patch.object(
                 CandidateService,
@@ -119,6 +122,11 @@ class CandidateOperationalExclusivityTests(unittest.IsolatedAsyncioTestCase):
                 "acquire_level_lock",
                 new=AsyncMock(side_effect=acquire_level_lock),
             ) as acquire_lock,
+            patch.object(
+                ExamTimetableService,
+                "acquire_operational_candidate_lock",
+                new=AsyncMock(side_effect=acquire_candidate_lock),
+            ) as acquire_candidate_scope_lock,
             patch.object(
                 CandidateService,
                 "_require_operational_unblock_safe",
@@ -140,13 +148,17 @@ class CandidateOperationalExclusivityTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(response, "ok")
-        self.assertEqual(events, ["preview", "level_lock", "row_locks"])
+        self.assertEqual(
+            events,
+            ["preview", "level_lock", "candidate_lock", "row_locks"],
+        )
         acquire_lock.assert_awaited_once_with(
             db,
             session_id=exam.session_id,
             term_id=exam.term_id,
             level_id=level_id,
         )
+        acquire_candidate_scope_lock.assert_awaited_once_with(db)
         safety_check.assert_awaited_once_with(
             db,
             candidate=candidate,
