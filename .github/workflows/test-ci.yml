@@ -1,0 +1,55 @@
+name: Backend and Frontend Tests
+
+on:
+  push:
+    branches: [implementing-services]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - '.github/workflows/test-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-tests:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install backend and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . pytest pytest-asyncio
+      - name: Run backend tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://weave:weave@localhost:5432/weave_cbt_test
+          REDIS_URL: redis://localhost:6379/15
+          DEBUG: 'false'
+        run: python -m pytest -q
+
+  frontend-tests:
+    name: Frontend tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Run frontend tests
+        run: npm test
