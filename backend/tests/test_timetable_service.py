@@ -1,12 +1,18 @@
 import os
 import unittest
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 
 os.environ.setdefault(
     "DATABASE_URL", "postgresql+asyncpg://weave:weave@localhost:5432/weave_cbt_test"
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
+from app.domains.exams.exceptions import ExamStateError  # noqa: E402
+from app.domains.exams.models import ExamStatus  # noqa: E402
+from app.domains.exams.repository import ExamRepository  # noqa: E402
 from app.domains.exams.timetable_service import ExamTimetableService  # noqa: E402
 
 
@@ -54,6 +60,208 @@ class TimetableIntervalTests(unittest.TestCase):
             ),
             self.start + timedelta(hours=1),
         )
+
+
+class TimetableDeliveryScopeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_overlapping_time_is_allowed_for_disjoint_delivery_classes(self):
+        db = AsyncMock()
+        session_id = uuid4()
+        term_id = uuid4()
+        subject_id = uuid4()
+        level_id = uuid4()
+        science_class_id = uuid4()
+        arts_class_id = uuid4()
+        start = datetime.now(UTC) + timedelta(days=1)
+        other = SimpleNamespace(
+            id=uuid4(),
+            session_id=session_id,
+            term_id=term_id,
+            curriculum_subject_id=uuid4(),
+            status=ExamStatus.DRAFT,
+            scheduled_start_at=start,
+            latest_normal_start_at=None,
+            duration_minutes=60,
+            title="SS1 Literature",
+        )
+
+        with (
+            patch.object(
+                ExamTimetableService,
+                "level_id",
+                new=AsyncMock(return_value=level_id),
+            ),
+            patch.object(
+                ExamTimetableService,
+                "acquire_level_lock",
+                new=AsyncMock(),
+            ),
+            patch.object(
+                ExamTimetableService,
+                "list_leaf_exams",
+                new=AsyncMock(return_value=[other]),
+            ),
+            patch.object(
+                ExamTimetableService,
+                "_derived_delivery_class_ids",
+                new=AsyncMock(
+                    side_effect=[{science_class_id}, {arts_class_id}],
+                ),
+            ),
+        ):
+            await ExamTimetableService.require_planned_slot_available(
+                db,
+                session_id=session_id,
+                term_id=term_id,
+                curriculum_subject_id=subject_id,
+                scheduled_start_at=start,
+                duration_minutes=60,
+            )
+
+    async def test_overlapping_time_is_blocked_for_overlapping_delivery_classes(self):
+        db = AsyncMock()
+        session_id = uuid4()
+        term_id = uuid4()
+        subject_id = uuid4()
+        level_id = uuid4()
+        shared_class_id = uuid4()
+        start = datetime.now(UTC) + timedelta(days=1)
+        other = SimpleNamespace(
+            id=uuid4(),
+            session_id=session_id,
+            term_id=term_id,
+            curriculum_subject_id=uuid4(),
+            status=ExamStatus.DRAFT,
+            scheduled_start_at=start,
+            latest_normal_start_at=None,
+            duration_minutes=60,
+            title="SS1 English",
+        )
+
+        with (
+            patch.object(
+                ExamTimetableService,
+                "level_id",
+                new=AsyncMock(return_value=level_id),
+            ),
+            patch.object(
+                ExamTimetableService,
+                "acquire_level_lock",
+                new=AsyncMock(),
+            ),
+            patch.object(
+                ExamTimetableService,
+                "list_leaf_exams",
+                new=AsyncMock(return_value=[other]),
+            ),
+            patch.object(
+                ExamTimetableService,
+                "_derived_delivery_class_ids",
+                new=AsyncMock(
+                    side_effect=[{shared_class_id}, {shared_class_id}],
+                ),
+            ),
+        ):
+            with self.assertRaisesRegex(
+                ExamStateError,
+                "overlapping student delivery scope",
+            ):
+                await ExamTimetableService.require_planned_slot_available(
+                    db,
+                    session_id=session_id,
+                    term_id=term_id,
+                    curriculum_subject_id=subject_id,
+                    scheduled_start_at=start,
+                    duration_minutes=60,
+                )
+
+
+class TimetableActivationScopeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_activation_allows_disjoint_candidate_rosters_with_one_exists_query(self):
+        db = AsyncMock()
+        db.scalar = AsyncMock(return_value=False)
+        current_exam = SimpleNamespace(
+            id=uuid4(),
+            session_id=uuid4(),
+            term_id=uuid4(),
+            curriculum_subject_id=uuid4(),
+        )
+        level_id = uuid4()
+
+        with (
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=current_exam),
+            ),
+            patch.object(
+                ExamTimetableService,
+                "level_id",
+                new=AsyncMock(return_value=level_id),
+            ),
+            patch.object(
+                ExamTimetableService,
+                "acquire_level_lock",
+                new=AsyncMock(),
+            ) as acquire_lock,
+            patch.object(
+                ExamTimetableService,
+                "list_leaf_exams",
+                new=AsyncMock(),
+            ) as list_leaf,
+        ):
+            await ExamTimetableService.require_level_free(
+                db,
+                exam_id=current_exam.id,
+            )
+
+        acquire_lock.assert_awaited_once_with(
+            db,
+            session_id=current_exam.session_id,
+            term_id=current_exam.term_id,
+            level_id=level_id,
+        )
+        db.scalar.assert_awaited_once()
+        list_leaf.assert_not_awaited()
+        statement = db.scalar.await_args.args[0]
+        self.assertIn("EXISTS", str(statement).upper())
+
+    async def test_activation_blocks_when_any_eligible_candidate_overlaps(self):
+        db = AsyncMock()
+        db.scalar = AsyncMock(return_value=True)
+        current_exam = SimpleNamespace(
+            id=uuid4(),
+            session_id=uuid4(),
+            term_id=uuid4(),
+            curriculum_subject_id=uuid4(),
+        )
+
+        with (
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=current_exam),
+            ),
+            patch.object(
+                ExamTimetableService,
+                "level_id",
+                new=AsyncMock(return_value=uuid4()),
+            ),
+            patch.object(
+                ExamTimetableService,
+                "acquire_level_lock",
+                new=AsyncMock(),
+            ),
+        ):
+            with self.assertRaisesRegex(
+                ExamStateError,
+                "eligible candidates are already assigned",
+            ):
+                await ExamTimetableService.require_level_free(
+                    db,
+                    exam_id=current_exam.id,
+                )
+
+        db.scalar.assert_awaited_once()
 
 
 if __name__ == "__main__":
