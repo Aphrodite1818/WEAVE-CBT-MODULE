@@ -17,6 +17,18 @@ class ExamStateError(ExamDomainError):
     """Raised when an exam lifecycle transition is invalid."""
 
 
+class ExamScheduleImpactError(ExamStateError):
+    """Raised when activation would invalidate the downstream exam timetable.
+
+    ``preflight`` intentionally stays untyped here so the exception layer does
+    not import timetable-service types and create a circular dependency.
+    """
+
+    def __init__(self, message: str, *, preflight) -> None:
+        super().__init__(message)
+        self.preflight = preflight
+
+
 class ExamAuthorizationError(ExamDomainError):
     """Raised when an actor is not authorized for an exam operation."""
 
