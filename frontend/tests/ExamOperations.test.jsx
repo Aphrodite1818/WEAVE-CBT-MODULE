@@ -89,7 +89,7 @@ describe('Admin exam operations workspace', () => {
 
     render(<ExamOperations adminData={data} onNavigate={vi.fn()} />)
 
-    expect(screen.getByText('English CA 1')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Operations timeline' })).getByText('English CA 1')).toBeInTheDocument()
     expect(screen.queryByText('Submitted English Paper')).not.toBeInTheDocument()
     expect(screen.getByText('Scheduled today')).toBeInTheDocument()
     expect(screen.getByText('Ready to start')).toBeInTheDocument()
@@ -119,7 +119,55 @@ describe('Admin exam operations workspace', () => {
 
     expect(subjectFilter).toBeEnabled()
     expect(screen.queryByText('English CA 1')).not.toBeInTheDocument()
-    expect(screen.getByText('JSS2 Mathematics CA 1')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Operations timeline' })).getByText('JSS2 Mathematics CA 1')).toBeInTheDocument()
+  })
+
+
+  it('uses the selected date for readiness and excludes stale rosters from the ready view', () => {
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const tomorrowKey = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`
+    const data = makeAdminData([
+      makeExam(),
+      makeExam({ id: 'tomorrow', title: 'Tomorrow sitting', scheduledStartAt: tomorrow.toISOString() }),
+      makeExam({ id: 'stale', title: 'Stale sitting', rosterStatus: 'stale' }),
+    ])
+    const onNavigate = vi.fn()
+    render(<ExamOperations adminData={data} onNavigate={onNavigate} />)
+    const readiness = screen.getByRole('region', { name: 'Ready sittings' })
+    expect(within(readiness).queryByText('Tomorrow sitting')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Operations date'), { target: { value: tomorrowKey } })
+    expect(within(readiness).getByText('Tomorrow sitting')).toBeInTheDocument()
+    expect(within(readiness).queryByText('English CA 1')).not.toBeInTheDocument()
+    fireEvent.click(within(readiness).getByRole('button', { name: /open controls/i }))
+    expect(onNavigate).toHaveBeenCalledWith('operation-detail', { selectedExamId: 'tomorrow' })
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Operation views' })).getByRole('button', { name: /^Ready/ }))
+    expect(within(screen.getByRole('region', { name: 'Operations timeline' })).queryByText('Stale sitting')).not.toBeInTheDocument()
+  })
+
+  it('shows heartbeat-based activity and routes connection checks to the selected roster', async () => {
+    const data = makeAdminData([makeExam({ status: 'active' })])
+    const gateway = makeGateway()
+    gateway.exams.listExamAttempts = vi.fn().mockResolvedValue({ total: 2, attempts: [
+      { id: 'online', candidate_name: 'Ada Example', admission_number: '001', status: 'in_progress', connectivity: 'online', heartbeat_age_seconds: 3 },
+      { id: 'offline', candidate_name: 'Bola Example', admission_number: '002', status: 'interrupted', connectivity: 'stale', heartbeat_age_seconds: 180 },
+    ] })
+    const onNavigate = vi.fn()
+    render(<ExamOperations adminData={data} gateway={gateway} onNavigate={onNavigate} />)
+    expect(await screen.findByText('Ada Example')).toBeInTheDocument()
+    expect(screen.getByText('Bola Example')).toBeInTheDocument()
+    expect(screen.getByText('1 candidate needs a connection check')).toBeInTheDocument()
+    fireEvent.click(within(screen.getByRole('region', { name: 'Attention queue' })).getByRole('button', { name: 'Review' }))
+    expect(onNavigate).toHaveBeenCalledWith('roster-detail', { selectedExamId: 'exam-1' })
+    expect(gateway.exams.listExamAttempts).toHaveBeenCalledWith('exam-1', { offset: 0, limit: 200 }, { signal: expect.any(AbortSignal) })
+  })
+
+  it('does not present a failed monitoring request as zero online candidates', async () => {
+    const gateway = makeGateway()
+    gateway.exams.listExamAttempts = vi.fn().mockRejectedValue(new Error('unavailable'))
+    render(<ExamOperations adminData={makeAdminData([makeExam({ status: 'active' })])} gateway={gateway} onNavigate={vi.fn()} />)
+    expect(await screen.findByRole('alert')).toHaveTextContent(/candidate monitoring could not refresh/i)
+    expect(screen.queryByText(/0 attempts started/)).not.toBeInTheDocument()
   })
 
   it('activates a sealed examination from the operations control room', async () => {
@@ -172,4 +220,11 @@ describe('Admin exam operations workspace', () => {
 
     await waitFor(() => expect(gateway.exams.suspendExam).toHaveBeenCalledWith('exam-1', 'Network interruption'))
   })
+})
+
+it('opens the timetable from the operations shortcut', () => {
+  const onNavigate = vi.fn()
+  render(<ExamOperations adminData={makeAdminData([])} onNavigate={onNavigate} />)
+  fireEvent.click(screen.getByRole('button', { name: /Timetable.*View scheduled examinations by level/i }))
+  expect(onNavigate).toHaveBeenCalledWith('timetable')
 })

@@ -7,6 +7,7 @@ import { QuestionBuilder } from '../teacher/QuestionBuilder'
 import { ExamAuthoringPage } from '../../shared/exams/ExamAuthoringPage'
 import { TeacherQuestionPreviewPage } from '../teacher/TeacherQuestionPreviewPage'
 import { AdminExamsPage } from './pages/AdminExamsPage'
+import { AdminTimetablePage } from './pages/AdminTimetablePage'
 import { ExamOperations, ExamOperationsDetail } from './pages/ExamOperations'
 import { AdminOverview } from './pages/AdminOverview'
 import { AdminBankDetailPage, AdminQuestionBanksPage } from './pages/AdminQuestionBanks'
@@ -33,6 +34,7 @@ const examinationGroupViews = new Set([
   ...rosterViews,
   ...operationViews,
   ...resultViews,
+  'timetable',
   'invigilators',
 ])
 
@@ -55,6 +57,7 @@ const adminNav = [
     label: 'Examinations',
     items: [
       ['exams', 'calendar', 'Exams'],
+      ['timetable', 'clock', 'Timetable'],
       ['roster', 'roster', 'Roster'],
       ['operations', 'operations', 'Exam Operations'],
       ['invigilators', 'shield', 'Invigilators'],
@@ -100,7 +103,7 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
     const previewPatch = view === 'preview-question'
       ? { questionPreviewOrigin: workspaceView === 'create-exam' ? 'create-exam' : workspaceView === 'bank-detail' ? 'bank-detail' : 'questions' }
       : {}
-    dispatch({ type: 'staff', patch: { section: view, ...previewPatch, ...patch } })
+    dispatch({ type: 'staff', patch: { section: view, timetableLevelId: null, ...previewPatch, ...patch } })
   }, [dispatch, workspaceView])
 
   const workspaceDispatch = useCallback((action) => {
@@ -231,6 +234,7 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
           {workspaceView === 'create-question' && <QuestionBuilder mode="create" state={state} dispatch={workspaceDispatch} teacherData={activeAuthoringData} gateway={gateway} />}
           {workspaceView === 'edit-question' && <QuestionBuilder key={state.staff.selectedQuestionId || 'admin-question-editor'} mode="edit" state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
           {workspaceView === 'exams' && <AdminExamsPage state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
+          {workspaceView === 'timetable' && <AdminTimetablePage adminData={adminData} levelId={state.staff.timetableLevelId} onSelectLevel={(timetableLevelId) => navigate('timetable', { timetableLevelId })} />}
           {workspaceView === 'exam-history' && <ExamHistoryPage state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
           {(workspaceView === 'create-exam' || (workspaceView === 'preview-question' && state.staff.questionPreviewOrigin === 'create-exam')) && (
             <div hidden={workspaceView !== 'create-exam'}>
@@ -239,7 +243,7 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
           )}
           {workspaceView === 'roster' && <AdminRostersPage adminData={adminData} onNavigate={navigate} />}
           {workspaceView === 'roster-detail' && <AdminRosterDetailPage state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
-          {workspaceView === 'operations' && <ExamOperations adminData={adminData} onNavigate={navigate} />}
+          {workspaceView === 'operations' && <ExamOperations adminData={adminData} gateway={gateway} onNavigate={navigate} />}
           {workspaceView === 'operation-detail' && <ExamOperationsDetail state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
           {workspaceView === 'results' && <AdminResultsPage adminData={adminData} gateway={gateway} onNavigate={navigate} />}
           {workspaceView === 'result-detail' && <AdminResultDetailPage state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}

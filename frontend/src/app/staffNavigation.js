@@ -1,5 +1,5 @@
 const teacherSections = new Set(['overview', 'question-banks', 'bank-detail', 'questions', 'create-question', 'edit-question', 'preview-question', 'exams', 'exam-history', 'create-exam'])
-const adminSections = new Set(['dashboard', 'question-banks', 'create-bank', 'bank-detail', 'questions', 'create-question', 'edit-question', 'preview-question', 'exams', 'create-exam', 'exam-history', 'roster', 'roster-detail', 'operations', 'operation-detail', 'results', 'result-detail', 'students', 'invigilators', 'reports', 'settings'])
+const adminSections = new Set(['dashboard', 'question-banks', 'create-bank', 'bank-detail', 'questions', 'create-question', 'edit-question', 'preview-question', 'exams', 'create-exam', 'exam-history', 'roster', 'roster-detail', 'timetable', 'operations', 'operation-detail', 'results', 'result-detail', 'students', 'invigilators', 'reports', 'settings'])
 const examViews = { history: 'exam-history', edit: 'create-exam', roster: 'roster-detail', operations: 'operation-detail', results: 'result-detail' }
 
 export function staffSectionForRole(role, section) {
@@ -27,10 +27,11 @@ export function parseStaffPath(location) {
     section = staffSectionForRole(role, examViews[action])
     selectedExamId = id
   }
+  const timetableLevelId = role === 'admin' && group === 'timetable' ? url.searchParams.get('level') : null
   const origin = url.searchParams.get('from')
   const questionPreviewOrigin = section === 'preview-question' && ['create-exam', 'bank-detail', 'questions'].includes(origin) ? origin : null
   if (questionPreviewOrigin === 'create-exam') selectedExamId = url.searchParams.get('exam')
-  return { view: 'staff', sessionType: 'staff', role, requiresAuth: true, staffSection: section, selectedQuestionId, selectedExamId, selectedBankId, questionPreviewOrigin }
+  return { view: 'staff', sessionType: 'staff', role, requiresAuth: true, staffSection: section, selectedQuestionId, selectedExamId, selectedBankId, questionPreviewOrigin, timetableLevelId }
 }
 
 export function pathForStaffState(state) {
@@ -53,6 +54,7 @@ export function pathForStaffState(state) {
     params.set('from', staff.questionPreviewOrigin)
     if (staff.questionPreviewOrigin === 'create-exam' && staff.selectedExamId) params.set('exam', staff.selectedExamId)
   }
+  if (section === 'timetable' && staff.timetableLevelId) params.set('level', staff.timetableLevelId)
   return params.size ? `${path}?${params}` : path
 }
 
@@ -63,5 +65,6 @@ export function staffPatchFromRoute(route) {
     selectedExamId: route.selectedExamId || null,
     selectedBankId: route.selectedBankId || null,
     questionPreviewOrigin: route.questionPreviewOrigin || null,
+    timetableLevelId: route.timetableLevelId || null,
   }
 }

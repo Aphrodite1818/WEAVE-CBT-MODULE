@@ -403,7 +403,7 @@ class ExamRegressionCoverageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(revision.status, ExamStatus.DRAFT)
         self.assertEqual(revision.revision_number, 3)
         self.assertEqual(revision.revision_of_exam_id, current_exam.id)
-        self.assertEqual(db.commit.await_count, 2)
+        db.commit.assert_awaited_once()
 
     async def test_activate_rejects_non_latest_revision(self) -> None:
         db = AsyncMock()

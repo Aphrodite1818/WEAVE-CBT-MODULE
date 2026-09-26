@@ -4,6 +4,10 @@ export function listExams(params = {}, options = {}) {
   return weaveRequest(`/exams${queryString(params)}`, options)
 }
 
+export function listExamAttempts(examId, params = {}, options = {}) {
+  return weaveRequest(`/exams/${examId}/attempts${queryString(params)}`, options)
+}
+
 export function getExam(examId, options = {}) {
   return weaveRequest(`/exams/${examId}`, options)
 }

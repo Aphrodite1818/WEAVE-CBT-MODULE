@@ -11,6 +11,7 @@ import {
 import { buildAcademicLevels, listSubjectsForLevel } from '../../../shared/academics/authoringScope'
 import { Icon } from '../../../shared/icons/Icon'
 import { Notice, SelectControl } from '../../../shared/ui'
+import { useOperationsMonitor } from '../useOperationsMonitor'
 import '../admin-exam-operations.css'
 
 const OPERATIONAL_STATUSES = new Set(['sealed', 'active', 'suspended', 'closing', 'cancelling', 'closed', 'cancelled'])
@@ -23,59 +24,71 @@ const TABS = [
   ['live', 'Live'],
   ['upcoming', 'Upcoming'],
   ['completed', 'Completed'],
+  ['all', 'All'],
 ]
 
-export function ExamOperations({ adminData, onNavigate }) {
+export function ExamOperations({ adminData, gateway, onNavigate }) {
   const [tab, setTab] = useState('today')
   const [query, setQuery] = useState('')
   const [levelId, setLevelId] = useState('all')
   const [subjectId, setSubjectId] = useState('all')
-
+  const [day, setDay] = useState(() => localDay(new Date()))
+  const [selectedLiveId, setSelectedLiveId] = useState('')
+  const [refreshing, setRefreshing] = useState(false)
+  const refreshExams = adminData.refreshExams
   const operationalExams = adminData.exams.filter((exam) => OPERATIONAL_STATUSES.has(exam.status))
-  const hasPollableExam = operationalExams.some((exam) => POLLABLE_STATUSES.has(exam.status))
   const levels = buildAcademicLevels(adminData.subjects)
   const levelSubjects = levelId === 'all' ? [] : listSubjectsForLevel(adminData.subjects, levelId)
-  const now = new Date()
-  const refreshExams = adminData.refreshExams
-
-  useEffect(() => {
-    if (!hasPollableExam) return undefined
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void refreshExams({ silent: true })
-    }, 5000)
-    return () => window.clearInterval(timer)
-  }, [hasPollableExam, refreshExams])
-
-  const counts = Object.fromEntries(
-    TABS.map(([key]) => [key, operationalExams.filter((exam) => matchesTab(exam, key, now)).length]),
-  )
-  const metrics = {
-    today: operationalExams.filter((exam) => isScheduledToday(exam, now)).length,
-    ready: operationalExams.filter((exam) => exam.status === 'sealed' && exam.rosterStatus === 'ready').length,
-    live: operationalExams.filter((exam) => LIVE_STATUSES.has(exam.status)).length,
-    attention: operationalExams.filter(needsAttention).length,
-  }
+  const date = new Date(`${day}T12:00:00`)
+  const isToday = day === localDay(new Date())
   const needle = query.trim().toLowerCase()
-  const filtered = operationalExams
-    .filter((exam) => matchesTab(exam, tab, now))
-    .filter((exam) => levelId === 'all' || exam.academicLevelId === levelId)
-    .filter((exam) => subjectId === 'all' || exam.curriculumSubjectId === subjectId)
-    .filter((exam) => !needle || `${exam.title} ${exam.academicLevelName} ${exam.subjectName} ${exam.assessmentName}`.toLowerCase().includes(needle))
-    .sort(compareOperationalExams)
+  const scoped = operationalExams.filter((exam) =>
+    (levelId === 'all' || exam.academicLevelId === levelId)
+    && (subjectId === 'all' || exam.curriculumSubjectId === subjectId)
+    && (!needle || `${exam.title} ${exam.academicLevelName} ${exam.subjectName} ${exam.assessmentName}`.toLowerCase().includes(needle)),
+  )
+  const scheduled = scoped.filter((exam) => isScheduledToday(exam, date))
+  const live = scoped.filter((exam) => LIVE_STATUSES.has(exam.status)).sort(compareOperationalExams)
+  const dayExams = scoped.filter((exam) => isScheduledToday(exam, date) || LIVE_STATUSES.has(exam.status))
+  const ready = scheduled.filter((exam) => exam.status === 'sealed' && exam.rosterStatus === 'ready')
+  const attention = dayExams.filter(needsAttention)
+  const selectedLive = live.find((exam) => exam.id === selectedLiveId) || live[0]
+  const monitor = useOperationsMonitor(selectedLive?.id, gateway?.exams?.listExamAttempts)
+  const connectionIssues = monitor.error ? [] : monitor.attempts.filter((attempt) => ['recently_disconnected', 'stale'].includes(attempt.connectivity))
+  const timeline = scoped.filter((exam) => matchesTab(exam, tab, date)).sort((a, b) =>
+    (Date.parse(a.scheduledStartAt) || Number.MAX_SAFE_INTEGER) - (Date.parse(b.scheduledStartAt) || Number.MAX_SAFE_INTEGER),
+  )
+  const counts = Object.fromEntries(TABS.map(([key]) => [key, scoped.filter((exam) => matchesTab(exam, key, date)).length]))
+  const events = scoped.flatMap((exam) => [
+    ['activatedAt', 'Examination activated', 'bolt'],
+    ['closedAt', 'Examination closed', 'check'],
+    ['cancelledAt', 'Sitting cancelled', 'flag'],
+    ['rosterPreparedAt', 'Candidate roster prepared', 'roster'],
+  ].flatMap(([field, label, icon]) => exam[field] && localDay(new Date(exam[field])) === day
+    ? [{ id: `${exam.id}-${field}`, exam, label, icon, at: exam[field] }] : []))
+    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 6)
+  const openExam = (exam) => onNavigate('operation-detail', { selectedExamId: exam.id })
 
-  const levelOptions = [
-    { value: 'all', label: 'All levels' },
-    ...levels.map((level) => ({ value: level.id, label: level.name })),
-  ]
-  const subjectOptions = [
-    { value: 'all', label: 'All subjects' },
-    ...levelSubjects.map((subject) => ({ value: subject.id, label: subject.name, description: subject.code || undefined })),
-  ]
+  // Poll even an empty day so newly sealed/activated exams appear without navigation.
+  useEffect(() => {
+    let stopped = false
+    let timer
+    const poll = async () => {
+      try {
+        if (document.visibilityState === 'visible') await refreshExams({ silent: true })
+      } finally {
+        if (!stopped) timer = window.setTimeout(poll, 10000)
+      }
+    }
+    timer = window.setTimeout(poll, 10000)
+    return () => { stopped = true; window.clearTimeout(timer) }
+  }, [refreshExams])
 
-  const changeLevel = (nextLevelId) => {
-    setLevelId(nextLevelId)
-    setSubjectId('all')
+  const refresh = async () => {
+    setRefreshing(true)
+    try { await refreshExams({ silent: true }) } finally { setRefreshing(false) }
   }
+  const metricValue = (value) => adminData.loading ? '?' : value
 
   return (
     <div className="teacher-reference-page admin-ops-page">
@@ -85,77 +98,146 @@ export function ExamOperations({ adminData, onNavigate }) {
             <span className="teacher-page-title-icon"><Icon name="operations" size={27} /></span>
             <h1>Exam Operations</h1>
           </div>
-          <p>Run scheduled examinations, control live sittings and respond to examination-day events.</p>
+          <p>Your exam-day overview. Monitor sittings, spot issues and keep candidates moving.</p>
+        </div>
+        <div className="admin-ops-toolbar">
+          <label className="admin-ops-date"><Icon name="calendar" size={19} /><span>Operations date<input aria-label="Operations date" type="date" value={day} onChange={(event) => { if (event.target.value) setDay(event.target.value) }} /></span></label>
+          <button type="button" className="admin-ops-button" disabled={refreshing || adminData.loading} onClick={refresh}><Icon name="sync" size={16} />{refreshing ? 'Refreshing...' : 'Refresh'}</button>
         </div>
       </div>
-
-      {adminData.error && <Notice tone="danger">{adminData.error}</Notice>}
+      {adminData.error && <div role="alert" className="admin-ops-inline-warning">{adminData.error} Displayed data may be out of date.</div>}
       {adminData.warning && <Notice tone="warning">{adminData.warning}</Notice>}
 
       <section className="admin-ops-metrics" aria-label="Examination operations summary">
-        <OperationsMetric icon="calendar" label="Scheduled today" value={metrics.today} helper="Operational papers on today's timetable" />
-        <OperationsMetric icon="check" label="Ready to start" value={metrics.ready} helper="Sealed papers with ready rosters" tone="ready" />
-        <OperationsMetric icon="bolt" label="Live examinations" value={metrics.live} helper="Active or transitioning sittings" tone="live" />
-        <OperationsMetric icon="flag" label="Need attention" value={metrics.attention} helper="Suspended or roster-health issues" tone={metrics.attention ? 'attention' : ''} />
+        <OperationsMetric icon="calendar" label={isToday ? 'Scheduled today' : 'Scheduled sittings'} value={metricValue(scheduled.length)} helper="On the selected day's schedule" />
+        <OperationsMetric icon="check" label="Ready to start" value={metricValue(ready.length)} helper="Scheduled with a ready roster" tone="ready" />
+        <OperationsMetric icon="bolt" label="Live examinations" value={metricValue(live.filter((exam) => exam.status === 'active').length)} helper="Currently active across all dates" tone="live" />
+        <OperationsMetric icon="flag" label="Need attention" value={metricValue(attention.length)} helper="Suspended or roster issues" tone={attention.length ? 'attention' : ''} />
+        <OperationsMetric icon="users" label="Roster places" value={metricValue(scheduled.reduce((sum, exam) => sum + (exam.rosterCandidateCount || 0), 0))} helper="Candidate places across sittings" />
+        <OperationsMetric icon="submission" label="Closed sittings" value={metricValue(scheduled.filter((exam) => exam.status === 'closed').length)} helper="From the selected schedule" tone="ready" />
       </section>
-
-      <nav className="teacher-tab-row admin-ops-tabs" aria-label="Operation views">
-        {TABS.map(([key, label]) => (
-          <button key={key} type="button" className={tab === key ? 'active' : ''} aria-current={tab === key ? 'page' : undefined} onClick={() => setTab(key)}>
-            {label} <span>{counts[key] || 0}</span>
-          </button>
-        ))}
-      </nav>
 
       <div className="admin-ops-filters">
-        <label className="teacher-search-control teacher-search-control--grow">
-          <RiSearchLine size={18} aria-hidden="true" />
-          <input
-            aria-label="Search operational examinations"
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search by exam, level, subject, or assessment..."
-          />
-        </label>
-        <SelectControl label="Operations level filter" value={levelId} options={levelOptions} onChange={changeLevel} />
-        <SelectControl
-          label="Operations subject filter"
-          value={subjectId}
-          options={subjectOptions}
-          onChange={setSubjectId}
-          disabled={levelId === 'all'}
-        />
+        <label className="teacher-search-control teacher-search-control--grow"><RiSearchLine size={18} aria-hidden="true" /><input aria-label="Search operational examinations" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find an exam, subject or level..." /></label>
+        <SelectControl label="Operations level filter" value={levelId} options={[{ value: 'all', label: 'All levels' }, ...levels.map((level) => ({ value: level.id, label: level.name }))]} onChange={(value) => { setLevelId(value); setSubjectId('all') }} />
+        <SelectControl label="Operations subject filter" value={subjectId} options={[{ value: 'all', label: 'All subjects' }, ...levelSubjects.map((subject) => ({ value: subject.id, label: subject.name }))]} onChange={setSubjectId} disabled={levelId === 'all'} />
       </div>
 
-      <section className="admin-ops-schedule" aria-label={`${TABS.find(([key]) => key === tab)?.[1] || 'Exam'} operations`} aria-busy={adminData.loading}>
-        <div className="admin-ops-schedule__heading">
-          <div>
-            <span>{TABS.find(([key]) => key === tab)?.[1]}</span>
-            <strong>{viewDescription(tab)}</strong>
-          </div>
-          <small>{filtered.length} {filtered.length === 1 ? 'examination' : 'examinations'}</small>
-        </div>
-
-        <div className="admin-ops-list">
-          {filtered.map((exam) => (
-            <OperationalExamRow key={exam.id} exam={exam} onOpen={() => onNavigate('operation-detail', { selectedExamId: exam.id })} />
-          ))}
-
-          {!adminData.loading && filtered.length === 0 && (
-            <div className="admin-ops-empty">
-              <span><Icon name="operations" size={28} /></span>
-              <div>
-                <strong>No examinations in this view</strong>
-                <p>{emptyCopy(tab, operationalExams.length)}</p>
-              </div>
+      <div className="admin-ops-dashboard-grid">
+        <div className="admin-ops-column admin-ops-column--schedule">
+          <section className="admin-ops-panel admin-ops-timeline" aria-label="Operations timeline" aria-busy={adminData.loading}>
+            <PanelHeading icon="calendar" title={isToday ? "Today's operations timeline" : 'Operations timeline'} badge={`${timeline.length} sittings`} />
+            <nav className="admin-ops-view-tabs" aria-label="Operation views">{TABS.map(([key, label]) => <button key={key} type="button" aria-pressed={tab === key} onClick={() => setTab(key)}>{key === 'today' && !isToday ? 'Selected day' : label}<span>{counts[key]}</span></button>)}</nav>
+            <div className="admin-ops-timeline__list">
+              {timeline.map((exam) => <OperationalExamRow key={exam.id} exam={exam} onOpen={() => openExam(exam)} />)}
+              {!timeline.length && <PanelEmpty icon="calendar" title={adminData.loading ? 'Loading the schedule...' : 'No examinations in this view'} copy={adminData.loading ? 'Fetching examination state.' : 'Change the date or filters to find another sitting.'} />}
             </div>
-          )}
-          {adminData.loading && <div className="admin-ops-empty"><div><strong>Loading examination operations…</strong></div></div>}
+            <div className="admin-ops-panel-foot">Live and paused sittings stay visible across dates.</div>
+          </section>
+
+          <section className="admin-ops-panel admin-ops-ready" aria-label="Ready sittings">
+            <PanelHeading icon="bolt" title="Launch readiness" badge={`${ready.length} ready`} />
+            {ready.length ? <div className="admin-ops-ready-list">{ready.map((exam) => <div key={exam.id}><div><strong>{exam.title}</strong><small>{formatClock(exam.scheduledStartAt)} · {exam.rosterCandidateCount || 0} candidates</small></div><button type="button" className="admin-ops-button admin-ops-button--primary" onClick={() => openExam(exam)}>Open controls<Icon name="chevronRight" size={15} /></button></div>)}</div> : <PanelEmpty icon="check" title="No sittings ready to launch" copy="Sealed exams scheduled for this day appear here when their rosters are ready." />}
+          </section>
         </div>
-      </section>
+        <div className="admin-ops-column admin-ops-column--monitor">
+          <section className="admin-ops-panel admin-ops-live" aria-label="Live exam status">
+            <PanelHeading icon="operations" title="Live exam status" badge={`${live.length} ongoing`} />
+            {selectedLive ? <>
+              {live.length > 1 && <div className="admin-ops-live-picker"><SelectControl label="Monitor examination" value={selectedLive.id} options={live.map((exam) => ({ value: exam.id, label: exam.title }))} onChange={setSelectedLiveId} /></div>}
+              <LiveSitting key={selectedLive.id} exam={selectedLive} monitor={monitor} onOpen={() => openExam(selectedLive)} onRoster={() => onNavigate('roster-detail', { selectedExamId: selectedLive.id })} />
+            </> : <PanelEmpty icon="operations" title={adminData.loading ? 'Loading live sittings...' : 'No live examinations'} copy="Once a sitting is activated, candidate activity and connection status appear here." />}
+          </section>
+
+          <section className="admin-ops-panel admin-ops-events" aria-label="Recent exam milestones">
+            <PanelHeading icon="fileText" title="Recent milestones" badge="Selected day" />
+            {events.length ? <ol className="admin-ops-event-list">{events.map((event) => <li key={event.id}><span><Icon name={event.icon} size={16} /></span><time dateTime={event.at}>{formatClock(event.at)}</time><div><strong>{event.label}</strong><button type="button" onClick={() => openExam(event.exam)}>{event.exam.title}</button></div></li>)}</ol> : <PanelEmpty icon="clock" title="No recorded milestones" copy="Roster preparation, activation and completion times will appear here." />}
+          </section>
+        </div>
+        <div className="admin-ops-column admin-ops-column--support">
+          <section className="admin-ops-panel admin-ops-attention" aria-label="Attention queue">
+            <PanelHeading icon="flag" title="Attention queue" badge={`${attention.length + (connectionIssues.length ? 1 : 0)} issues`} />
+            <div className="admin-ops-queue">
+              {connectionIssues.length > 0 && <QueueItem icon="operations" title={`${connectionIssues.length} ${connectionIssues.length === 1 ? 'candidate needs' : 'candidates need'} a connection check`} copy={`${selectedLive.title} · Based on recent heartbeats`} onClick={() => onNavigate('roster-detail', { selectedExamId: selectedLive.id })} />}
+              {attention.map((exam) => <QueueItem key={exam.id} icon={exam.status === 'suspended' ? 'clock' : 'flag'} title={attentionLabel(exam)} copy={exam.title} onClick={() => exam.rosterStatus === 'failed' || exam.rosterStatus === 'stale' ? onNavigate('roster-detail', { selectedExamId: exam.id }) : openExam(exam)} />)}
+              {!attention.length && !connectionIssues.length && <PanelEmpty icon="shield" title={adminData.loading ? 'Checking examination state...' : 'No exam-state issues'} copy="Suspensions, cancellations and roster problems appear here when they need attention." />}
+            </div>
+            <div className="admin-ops-panel-foot">Connection checks cover the selected live sitting.{monitor.error ? ' Candidate monitoring is unavailable.' : ''}</div>
+          </section>
+
+          <section className="admin-ops-panel admin-ops-shortcuts" aria-label="Operations shortcuts">
+            <PanelHeading icon="bolt" title="Operations shortcuts" />
+            <div className="admin-ops-shortcut-list">
+              <Shortcut icon="roster" label="Candidate rosters" copy="Review eligibility and late entry" onClick={() => onNavigate('roster')} />
+              <Shortcut icon="results" label="Review results" copy="Inspect completed examination results" onClick={() => onNavigate('results')} />
+              <Shortcut icon="calendar" label="Timetable" copy="View scheduled examinations by level" onClick={() => onNavigate('timetable')} />
+            </div>
+            <div className="admin-ops-panel-foot"><Icon name="sync" size={14} /> Exam state refreshes every 10 seconds while this page is visible.</div>
+          </section>
+        </div>
+      </div>
     </div>
   )
+}
+
+function PanelHeading({ icon, title, badge }) {
+  return <header className="admin-ops-panel-heading"><h2><Icon name={icon} size={20} />{title}</h2>{badge && <span>{badge}</span>}</header>
+}
+
+function PanelEmpty({ icon, title, copy }) {
+  return <div className="admin-ops-panel-empty"><span><Icon name={icon} size={25} /></span><strong>{title}</strong><p>{copy}</p></div>
+}
+
+function QueueItem({ icon, title, copy, onClick }) {
+  return <div className="admin-ops-queue-item"><span><Icon name={icon} size={20} /></span><div><strong>{title}</strong><small>{copy}</small></div><button type="button" className="admin-ops-button" onClick={onClick}>Review</button></div>
+}
+
+function Shortcut({ icon, label, copy, onClick }) {
+  return <button type="button" onClick={onClick}><span><Icon name={icon} size={19} /></span><div><strong>{label}</strong><small>{copy}</small></div><Icon name="chevronRight" size={16} /></button>
+}
+
+function attentionLabel(exam) {
+  if (exam.rosterStatus === 'failed') return 'Roster preparation failed'
+  if (exam.rosterStatus === 'stale') return 'Roster reconciliation required'
+  if (exam.status === 'suspended') return 'Examination is suspended'
+  return 'Cancellation in progress'
+}
+
+function localDay(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function LiveSitting({ exam, monitor, onOpen, onRoster }) {
+  const [page, setPage] = useState(0)
+  const available = Boolean(monitor.updatedAt)
+  const attempts = monitor.attempts
+  const online = attempts.filter((attempt) => attempt.connectivity === 'online').length
+  const submitted = attempts.filter((attempt) => attempt.status === 'submitted').length
+  const interrupted = attempts.filter((attempt) => attempt.status === 'interrupted').length
+  const terminated = attempts.filter((attempt) => attempt.status === 'terminated').length
+  const rosterCount = exam.rosterCandidateCount || 0
+  const progress = rosterCount ? Math.min(100, Math.round(submitted / rosterCount * 100)) : 0
+  const sorted = [...attempts].sort((a, b) => Number(attemptNeedsAttention(b)) - Number(attemptNeedsAttention(a)))
+  const maxPage = Math.max(0, Math.ceil(sorted.length / 5) - 1)
+  const currentPage = Math.min(page, maxPage)
+  return <div className="admin-ops-live-body">
+    <div className="admin-ops-live-identity"><div><h3>{exam.title}</h3><p>{[exam.academicLevelName, exam.subjectName].filter(Boolean).join(' \u00b7 ')}</p></div><ExamState status={exam.status} /></div>
+    <div className="admin-ops-live-schedule"><Icon name="clock" size={15} />{exam.durationMinutes || 0} min · Scheduled {formatSchedule(exam.scheduledStartAt)}</div>
+    {monitor.error && <div role="alert" className="admin-ops-inline-warning">{monitor.error}{available && ' Showing last known counts.'}</div>}
+    {!available && <p className="admin-ops-monitor-status" role="status">{monitor.loading ? 'Loading candidate activity...' : 'Candidate activity is unavailable.'}</p>}
+    <div className="admin-ops-live-counts"><div><strong>{available ? online : '\u2014'}<small> / {rosterCount}</small></strong><span>Online / roster</span></div><div><strong>{available ? submitted : '\u2014'}</strong><span>Submitted</span></div><div><strong>{available ? interrupted : '\u2014'}</strong><span>Interrupted</span></div></div>
+    {available && <><div className="admin-ops-progress-label"><span>Submissions received</span><strong>{progress}%</strong></div><progress className="admin-ops-progress" max="100" value={progress} aria-label="Roster submission progress" /><p className="admin-ops-monitor-status">{attempts.length} attempts started ? {terminated} terminated</p></>}
+    <div className="admin-ops-candidate-heading"><strong>Candidate activity</strong><button type="button" onClick={onRoster}>Open roster <Icon name="chevronRight" size={14} /></button></div>
+    {available && !attempts.length && <p className="admin-ops-monitor-status">No candidates have started this sitting yet.</p>}
+    <ul className="admin-ops-candidates">{sorted.slice(currentPage * 5, currentPage * 5 + 5).map((attempt) => <li key={attempt.id}><div><strong>{attempt.candidate_name || attempt.admission_number}</strong><small>{attempt.admission_number} · {titleCase(attempt.status)}</small></div><span className={attemptNeedsAttention(attempt) ? 'is-attention' : ''}>{attempt.connectivity === 'terminal' ? titleCase(attempt.status) : titleCase(attempt.connectivity)}<small>{attempt.connectivity !== 'terminal' ? `Seen ${Math.floor(attempt.heartbeat_age_seconds / 60)}m ago` : attempt.end_reason ? titleCase(attempt.end_reason) : 'Attempt ended'}</small></span></li>)}</ul>
+    {sorted.length > 5 && <div className="admin-ops-pagination"><button type="button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</button><span>{currentPage + 1} / {maxPage + 1}</span><button type="button" disabled={currentPage === maxPage} onClick={() => setPage(currentPage + 1)}>Next</button></div>}
+    <button type="button" className="admin-ops-button admin-ops-button--primary admin-ops-live-control" onClick={onOpen}>Open control room<Icon name="chevronRight" size={16} /></button>
+    <p className="admin-ops-monitor-status">{available ? `Last candidate update ${formatClock(monitor.updatedAt)}` : 'Waiting for candidate monitoring'} · Refreshes every 10s</p>
+  </div>
+}
+
+function attemptNeedsAttention(attempt) {
+  return attempt.status === 'interrupted' || ['recently_disconnected', 'stale'].includes(attempt.connectivity)
 }
 
 export function ExamOperationsDetail({ state, adminData, gateway, onNavigate }) {
@@ -333,29 +415,12 @@ function OperationsMetric({ icon, label, value, helper, tone = '' }) {
 }
 
 function OperationalExamRow({ exam, onOpen }) {
-  const schedule = exam.scheduledStartAt ? new Date(exam.scheduledStartAt) : null
   return (
-    <article className={`admin-ops-exam-row${needsAttention(exam) ? ' admin-ops-exam-row--attention' : ''}`}>
-      <div className="admin-ops-exam-row__time">
-        <strong>{schedule ? formatClock(exam.scheduledStartAt) : '—'}</strong>
-        <span>{schedule ? formatDay(exam.scheduledStartAt) : 'Unscheduled'}</span>
-      </div>
-      <div className="admin-ops-exam-row__main">
-        <div className="admin-ops-exam-row__topline">
-          <span>{[exam.academicLevelName, exam.subjectName].filter(Boolean).join(' · ') || 'Examination'}</span>
-          <ExamState status={exam.status} compact />
-        </div>
-        <h2>{exam.title}</h2>
-        <p>{exam.assessmentName} · {exam.durationMinutes || 0} min · {exam.questionCount || 0} questions</p>
-      </div>
-      <div className="admin-ops-exam-row__health">
-        <div><span>Roster</span><strong>{exam.rosterCandidateCount || 0} candidates</strong></div>
-        <RosterState status={exam.rosterStatus} />
-      </div>
-      <button className="admin-ops-exam-row__open" type="button" onClick={onOpen}>
-        <span>{LIVE_STATUSES.has(exam.status) ? 'Open control room' : exam.status === 'sealed' ? 'Prepare sitting' : 'View summary'}</span>
-        <Icon name="chevronRight" size={17} />
-      </button>
+    <article className={`admin-ops-timeline-row${needsAttention(exam) ? ' is-attention' : ''}`}>
+      <div className="admin-ops-timeline-time"><strong>{exam.scheduledStartAt ? formatClock(exam.scheduledStartAt) : '\u2014'}</strong><span>{formatDay(exam.scheduledStartAt)}</span></div>
+      <span className={`admin-ops-timeline-marker admin-ops-timeline-marker--${exam.status}`}><ControlStateIcon status={exam.status} /></span>
+      <button type="button" className="admin-ops-timeline-exam" onClick={onOpen}><strong>{exam.title}</strong><small>{exam.academicLevelName} · {exam.rosterCandidateCount || 0} candidates ? {exam.durationMinutes || 0} min</small><ExamState status={exam.status} compact /></button>
+      <button type="button" className="admin-ops-timeline-open" aria-label={`Open controls for ${exam.title}`} onClick={onOpen}><Icon name="chevronRight" size={18} /></button>
     </article>
   )
 }
@@ -430,7 +495,7 @@ function OperationConfirmModal({ exam, action, reason, setReason, error, busy, o
         </div>
       </section>
     </div>,
-    document.body,
+    document.querySelector('.admin-ops-detail') || document.body,
   )
 }
 
@@ -531,7 +596,7 @@ function terminalControlCopy(status) {
 
 function matchesTab(exam, tab, now) {
   if (tab === 'today') return isScheduledToday(exam, now) || LIVE_STATUSES.has(exam.status)
-  if (tab === 'ready') return exam.status === 'sealed'
+  if (tab === 'ready') return exam.status === 'sealed' && exam.rosterStatus === 'ready'
   if (tab === 'live') return LIVE_STATUSES.has(exam.status)
   if (tab === 'upcoming') return exam.status === 'sealed' && isFutureDay(exam.scheduledStartAt, now)
   if (tab === 'completed') return TERMINAL_STATUSES.has(exam.status)
@@ -562,23 +627,6 @@ function isFutureDay(value, now) {
   const date = new Date(value)
   const startOfTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
   return date >= startOfTomorrow
-}
-
-function viewDescription(tab) {
-  if (tab === 'today') return 'Today’s examination timetable'
-  if (tab === 'ready') return 'Sealed papers waiting for execution'
-  if (tab === 'live') return 'Active and transitioning examination sittings'
-  if (tab === 'upcoming') return 'Future sealed examinations'
-  return 'Closed and cancelled examination sittings'
-}
-
-function emptyCopy(tab, total) {
-  if (!total) return 'Operational examinations appear here after a paper is sealed.'
-  if (tab === 'today') return 'No operational examinations are scheduled for today. Check Ready or Upcoming for other sittings.'
-  if (tab === 'live') return 'There are no examinations currently running or transitioning.'
-  if (tab === 'ready') return 'There are no sealed examinations waiting for activation.'
-  if (tab === 'upcoming') return 'There are no future sealed examinations matching these filters.'
-  return 'There are no completed examination sittings matching these filters.'
 }
 
 function scheduleSentence(exam) {

@@ -404,6 +404,7 @@ export function useAppController({ application = "combined", gateway } = {}) {
       selectedQuestionId: state.staff.selectedQuestionId,
       selectedExamId: state.staff.selectedExamId,
       selectedBankId: state.staff.selectedBankId,
+      timetableLevelId: state.staff.timetableLevelId,
       questionPreviewOrigin: state.staff.questionPreviewOrigin,
       examStage: state.exam.stage,
     });
@@ -585,6 +586,7 @@ function routeToNavigation(route) {
     selectedQuestionId: route.selectedQuestionId,
     selectedExamId: route.selectedExamId,
     selectedBankId: route.selectedBankId,
+    timetableLevelId: route.timetableLevelId,
     questionPreviewOrigin: route.questionPreviewOrigin,
     examStage: route.examStage,
   };
@@ -715,6 +717,7 @@ function persistNavigationState({
   selectedQuestionId,
   selectedExamId,
   selectedBankId,
+  timetableLevelId,
   questionPreviewOrigin,
   examStage,
 }) {
@@ -727,6 +730,7 @@ function persistNavigationState({
         staffSection,
         selectedExamId,
         selectedBankId,
+        timetableLevelId,
         questionPreviewOrigin,
         selectedQuestionId:
           staffSection === "preview-question" ||

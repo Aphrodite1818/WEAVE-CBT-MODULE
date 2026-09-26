@@ -70,3 +70,40 @@
 - [x] Immediate, uncropped prompt and option image feedback.
 
 final result: passed
+
+---
+
+# Exam operations dashboard verification
+
+final result: blocked
+
+Implemented against the user-provided exam operations screenshot, adapted to the existing tenant theme and backend contracts.
+
+## Automated evidence
+- 11 focused tests passed across ExamOperations.test.jsx and OperationsMonitor.test.jsx.
+- Focused ESLint passed for dashboard, monitoring hook, API adapter, and changed tests.
+- Staff Vite production build passed.
+- Existing AdminWorkspace.jsx:95 react-hooks/set-state-in-effect lint error remains; that effect was not changed.
+
+## Visual verification blocker
+The in-app Browser runtime failed to start with `windows sandbox failed: helper_unknown_error: apply deny-read ACLs`. No application screenshots or viewport comparisons were possible. Build success is not visual verification.
+
+## Required fidelity surfaces
+- Typography: existing application font retained; readable panel headings and compact supporting text implemented. Rendered wrapping and contrast remain unverified.
+- Layout: six metrics, daily timeline, live sitting, attention queue, readiness, milestones, and shortcuts. Three-, two-, and one-column breakpoints implemented. Overflow and viewport proportions remain unverified.
+- Colors: tenant primary and shared surface/border/text tokens retained; semantic warning colors used. Rendered contrast remains unverified.
+- Assets: existing application branding and shared icons retained. No new decorative images required.
+- Copy: actual exam/roster state and paginated attempt-monitoring responses drive content. Counts are labeled by scope. Roster places are not unique or online candidates; connection checks cover only the selected live sitting. No fabricated invigilator attendance, client health, answered-question progress, hall assignment, or extend-time controls.
+
+## Remaining verification
+Open the admin operations page at 1672px, 1366px, and 390px widths; compare to the supplied reference; verify long titles, multiple live sittings, empty states, keyboard navigation, date/subject filters, and control-room/roster links. Browser QA must be completed before claiming visual acceptance.
+
+## Exam operations layout refinement
+
+- Regrouped panels into independent schedule/readiness, monitoring/milestones, and attention/shortcut columns to remove gaps caused by shared row heights.
+- Standardized the summary cards with aligned labels, values, and supporting text; consolidated filters into a single toolbar.
+- Added container queries so the layout responds to available content width and sidebar expansion.
+- Retained the existing backend data, controls, filtering, and polling behavior.
+- Focused JSX lint and the staff production build passed. Browser startup was retried and remains blocked by the Windows sandbox ACL error; no new visual acceptance claim is made.
+
+final result: blocked
