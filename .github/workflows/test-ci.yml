@@ -1,8 +1,0 @@
-# Temporary backend/frontend verification workflow.
-#
-# Intentionally disabled after the exam-operations verification pass.
-# Re-enable only when an explicit full backend/frontend CI run is required.
-#
-# The verification run used:
-#   backend: python -m pytest -q
-#   frontend: npm test
