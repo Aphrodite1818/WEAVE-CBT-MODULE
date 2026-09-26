@@ -4,8 +4,10 @@ from datetime import UTC, datetime
 from typing import cast
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.core.exceptions import AcademicAuthorizationError
 from app.domains.academics.models import StudentEnrollment
@@ -14,11 +16,10 @@ from app.domains.auth.models import LocalActor
 from app.domains.candidates.exceptions import CandidateRosterError
 from app.domains.candidates.models import (
     CandidateLateStartAuthorization,
+    CandidateMakeupAuthorization,
     CandidateStatus,
     ExamCandidate,
-    CandidateMakeupAuthorization,
 )
-
 from app.domains.candidates.repository import CandidateRepository
 from app.domains.candidates.schemas import (
     CandidateLateStartAuthorizationResponse,
@@ -28,10 +29,13 @@ from app.domains.candidates.schemas import (
     MissedCandidateListResponse,
     MissedCandidateResponse,
 )
-
 from app.domains.exams.exceptions import ExamNotFound
 from app.domains.exams.models import Exam, ExamRosterStatus, ExamStatus
 from app.domains.exams.repository import ExamRepository
+from app.domains.exams.timetable_service import (
+    OPERATIONAL_EXAM_STATUSES,
+    ExamTimetableService,
+)
 from app.domains.sync.repository import SyncRepository
 from app.domains.attempts.repository import AttemptRepository
 
@@ -59,8 +63,15 @@ class CandidateService:
 
     @staticmethod
     def _ensure_exam_mutable(exam_status: ExamStatus) -> None:
-        if exam_status in {ExamStatus.CANCELLED, ExamStatus.CLOSED}:
-            raise ValueError("Cancelled or closed examinations are read-only")
+        if exam_status in {
+            ExamStatus.CLOSING,
+            ExamStatus.CANCELLING,
+            ExamStatus.CANCELLED,
+            ExamStatus.CLOSED,
+        }:
+            raise ValueError(
+                "Finalizing, cancelled, or closed examinations are read-only"
+            )
 
     @staticmethod
     async def _require_can_view_roster(
@@ -131,6 +142,46 @@ class CandidateService:
             raise ExamNotFound("Examination does not exist")
 
         return candidate, exam
+
+    @staticmethod
+    async def _require_operational_unblock_safe(
+        db: AsyncSession,
+        *,
+        candidate: ExamCandidate,
+        exam: Exam,
+    ) -> None:
+        """Prevent unblocking from creating two operational exams for a student."""
+
+        if exam.status not in {ExamStatus.ACTIVE, ExamStatus.SUSPENDED}:
+            return
+
+        level_id = await ExamTimetableService.level_id(db, exam.curriculum_subject_id)
+        await ExamTimetableService.acquire_level_lock(
+            db,
+            session_id=exam.session_id,
+            term_id=exam.term_id,
+            level_id=level_id,
+        )
+
+        other_candidate = aliased(ExamCandidate)
+        other_exam = aliased(Exam)
+        conflict_exists = (
+            select(1)
+            .select_from(other_candidate)
+            .join(other_exam, other_exam.id == other_candidate.exam_id)
+            .where(
+                other_candidate.student_id == candidate.student_id,
+                other_candidate.exam_id != exam.id,
+                other_candidate.status == CandidateStatus.ELIGIBLE,
+                other_exam.status.in_(OPERATIONAL_EXAM_STATUSES),
+            )
+            .exists()
+        )
+        if bool(await db.scalar(select(conflict_exists))):
+            raise ValueError(
+                "Candidate cannot be unblocked because the student is already "
+                "assigned to another operational examination"
+            )
 
     @classmethod
     async def list_roster(
@@ -273,6 +324,12 @@ class CandidateService:
 
         if candidate.status != CandidateStatus.BLOCKED:
             raise ValueError("Only blocked candidates can be unblocked")
+
+        await cls._require_operational_unblock_safe(
+            db,
+            candidate=candidate,
+            exam=exam,
+        )
 
         try:
             candidate.status = CandidateStatus.ELIGIBLE
