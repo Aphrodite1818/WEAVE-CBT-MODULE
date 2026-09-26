@@ -27,24 +27,35 @@ async def enqueue_stale_roster_reconciliations() -> int:
     The query runs in a fresh session so this function can only observe roster
     invalidations that have already committed. Deterministic ARQ job IDs make
     duplicate delivery safe when maintenance discovers the same work later.
+
+    Delivery is best-effort. A database/Redis failure here must not turn a
+    successfully committed academic sync into an application failure because
+    the periodic maintenance sweep can reconstruct this work from PostgreSQL.
     """
 
-    async with async_session_factory() as db:
-        exam_ids = list(
-            (
-                await db.execute(
-                    select(Exam.id)
-                    .where(
-                        Exam.status == ExamStatus.SEALED,
-                        Exam.roster_status == ExamRosterStatus.STALE,
+    try:
+        async with async_session_factory() as db:
+            exam_ids = list(
+                (
+                    await db.execute(
+                        select(Exam.id)
+                        .where(
+                            Exam.status == ExamStatus.SEALED,
+                            Exam.roster_status == ExamRosterStatus.STALE,
+                        )
+                        .order_by(Exam.updated_at.asc(), Exam.id.asc())
                     )
-                    .order_by(Exam.updated_at.asc(), Exam.id.asc())
                 )
+                .scalars()
+                .all()
             )
-            .scalars()
-            .all()
+            await db.rollback()
+    except Exception:
+        logger.exception(
+            "Could not discover stale rosters for immediate reconciliation; "
+            "maintenance recovery will retry later"
         )
-        await db.rollback()
+        return 0
 
     queued = 0
     for exam_id in exam_ids:
