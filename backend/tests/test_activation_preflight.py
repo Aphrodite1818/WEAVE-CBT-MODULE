@@ -34,6 +34,7 @@ class ActivationPreflightTimingTests(unittest.IsolatedAsyncioTestCase):
         scheduled_start_at: datetime | None,
         duration_minutes: int = 60,
         class_subject_id=None,
+        activated_at: datetime | None = None,
     ):
         return SimpleNamespace(
             id=uuid4(),
@@ -45,7 +46,7 @@ class ActivationPreflightTimingTests(unittest.IsolatedAsyncioTestCase):
             scheduled_start_at=scheduled_start_at,
             latest_normal_start_at=None,
             duration_minutes=duration_minutes,
-            activated_at=None,
+            activated_at=activated_at,
         )
 
     async def run_preflight(
@@ -276,6 +277,48 @@ class ActivationPreflightTimingTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(preflight.can_activate)
         self.assertEqual(preflight.affected_exams, ())
+
+    async def test_active_exam_past_projected_finish_has_unknown_end_until_closed(self):
+        source = self.exam(
+            title="Chemistry",
+            status=ExamStatus.SEALED,
+            scheduled_start_at=self.checked_at - timedelta(minutes=40),
+        )
+        active = self.exam(
+            title="Earlier Science Sitting",
+            status=ExamStatus.ACTIVE,
+            scheduled_start_at=self.checked_at - timedelta(hours=2),
+            activated_at=self.checked_at - timedelta(hours=2),
+        )
+        physics = self.exam(
+            title="Physics",
+            status=ExamStatus.SEALED,
+            scheduled_start_at=self.checked_at + timedelta(minutes=20),
+        )
+        scopes = {
+            source.id: frozenset({self.science_class}),
+            active.id: frozenset({self.science_class}),
+            physics.id: frozenset({self.science_class}),
+        }
+
+        with patch.object(
+            ExamTimetableService,
+            "_suspension_state",
+            new=AsyncMock(return_value=({active.id: timedelta(0)}, set())),
+        ):
+            preflight = await self.run_preflight(
+                source=source,
+                rows=[active, physics],
+                scopes=scopes,
+                buffered=False,
+            )
+
+        impact = next(row for row in preflight.affected_exams if row.exam_id == physics.id)
+        self.assertIsNone(impact.suggested_start_at)
+        self.assertIsNone(impact.suggested_end_at)
+        self.assertIn("no reliable finish time", impact.reason)
+        self.assertIn(active.id, impact.blocked_by_exam_ids)
+        self.assertFalse(preflight.can_activate)
 
 
 class ActivationServiceGuardTests(unittest.IsolatedAsyncioTestCase):
