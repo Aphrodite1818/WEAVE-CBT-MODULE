@@ -864,6 +864,7 @@ class ExamTimetableService:
             exam_id=exam_id,
             proposed_activation_at=proposed_activation_at,
             include_conflict_details=False,
+            apply_recovery_buffer=False,
         )
         if "missing_schedule" in preflight.blockers:
             raise ExamStateError("Examination is missing a scheduled start time")
