@@ -121,6 +121,12 @@ class ExamCandidate(Base):
             "exam_id",
             "roster_version",
         ),
+        Index(
+            "ix_exam_candidates_eligible_student_exam",
+            "student_id",
+            "exam_id",
+            postgresql_where=sql_text("status = 'eligible'"),
+        ),
     )
 
 
