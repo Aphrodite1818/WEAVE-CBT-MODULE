@@ -175,12 +175,41 @@ class TimetableDeliveryScopeTests(unittest.IsolatedAsyncioTestCase):
                 )
 
 
-class TimetableActivationScopeTests(unittest.IsolatedAsyncioTestCase):
-    async def test_activation_allows_disjoint_candidate_rosters_with_one_exists_query(self):
+class TimetableOperationalScopeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_sealed_activation_delegates_to_full_preflight_guard(self):
+        db = AsyncMock()
+        current_exam = SimpleNamespace(
+            id=uuid4(),
+            status=ExamStatus.SEALED,
+        )
+
+        with (
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=current_exam),
+            ),
+            patch.object(
+                ExamTimetableService,
+                "require_activation_clear",
+                new=AsyncMock(),
+            ) as require_clear,
+        ):
+            await ExamTimetableService.require_level_free(
+                db,
+                exam_id=current_exam.id,
+            )
+
+        require_clear.assert_awaited_once()
+        self.assertEqual(require_clear.await_args.kwargs["exam_id"], current_exam.id)
+        self.assertIn("proposed_activation_at", require_clear.await_args.kwargs)
+
+    async def test_resume_allows_disjoint_candidate_rosters_with_one_exists_query(self):
         db = AsyncMock()
         db.scalar = AsyncMock(return_value=False)
         current_exam = SimpleNamespace(
             id=uuid4(),
+            status=ExamStatus.SUSPENDED,
             session_id=uuid4(),
             term_id=uuid4(),
             curriculum_subject_id=uuid4(),
@@ -225,11 +254,12 @@ class TimetableActivationScopeTests(unittest.IsolatedAsyncioTestCase):
         statement = db.scalar.await_args.args[0]
         self.assertIn("EXISTS", str(statement).upper())
 
-    async def test_activation_blocks_when_any_eligible_candidate_overlaps(self):
+    async def test_resume_blocks_when_any_eligible_candidate_overlaps(self):
         db = AsyncMock()
         db.scalar = AsyncMock(return_value=True)
         current_exam = SimpleNamespace(
             id=uuid4(),
+            status=ExamStatus.SUSPENDED,
             session_id=uuid4(),
             term_id=uuid4(),
             curriculum_subject_id=uuid4(),
