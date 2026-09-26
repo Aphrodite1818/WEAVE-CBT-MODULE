@@ -44,35 +44,6 @@ def _preflight_payload(preflight) -> dict:
     return ActivationPreflightResponse.model_validate(preflight).model_dump(mode="json")
 
 
-def _preflight_error(preflight) -> HTTPException:
-    if "too_early" in preflight.blockers:
-        message = "Examination cannot be activated before its scheduled start time"
-        code = "activation_too_early"
-    elif "candidate_scope_conflict" in preflight.blockers:
-        message = (
-            "One or more eligible candidates are already part of another "
-            "operational examination"
-        )
-        code = "candidate_scope_conflict"
-    elif preflight.affected_exams:
-        message = (
-            "Activation would disrupt downstream examinations; reschedule the "
-            "affected chain before activating"
-        )
-        code = "activation_schedule_impact"
-    else:
-        message = "Examination is not ready for activation"
-        code = "activation_preflight_failed"
-    return HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail={
-            "code": code,
-            "message": message,
-            "preflight": _preflight_payload(preflight),
-        },
-    )
-
-
 @router.post(
     "/{exam_id}/activation-preflight",
     response_model=ActivationPreflightResponse,
@@ -87,6 +58,7 @@ async def activation_preflight(
             db,
             actor=actor,
             exam_id=exam_id,
+            suggest_recovery_times=True,
         )
     except ExamNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -176,10 +148,13 @@ async def start_exam_batch(
             continue
 
         try:
+            # Batch-start is an execution action, not a suggestion surface, so
+            # validate against the real current time with no rolling headroom.
             preflight = await ExamOperationsService.activation_preflight(
                 db,
                 actor=actor,
                 exam_id=exam_id,
+                suggest_recovery_times=False,
             )
             if not preflight.can_activate:
                 if preflight.affected_exams:
