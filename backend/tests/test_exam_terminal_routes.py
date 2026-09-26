@@ -11,6 +11,7 @@ os.environ.setdefault(
     "postgresql+asyncpg://weave:weave@localhost:5432/weave_cbt_test",
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
+os.environ.setdefault("WEAVE_API_BASE_URL", "https://weave.invalid")
 os.environ["DEBUG"] = "false"
 
 from app.domains.exams.execution_service import ExamExecutionService  # noqa: E402
