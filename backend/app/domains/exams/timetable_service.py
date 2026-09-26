@@ -587,7 +587,7 @@ class ExamTimetableService:
                             suggested_end_at=None,
                             delay_seconds=None,
                             blocked_by_exam_ids=unique_causes,
-                            reason="A conflicting examination is suspended or finalizing, so no safe start can be calculated yet",
+                            reason="A conflicting operational examination has no reliable finish time yet, so no safe start can be calculated",
                         )
                     )
                     blockers.append(
@@ -789,13 +789,19 @@ class ExamTimetableService:
             )
             end_at = None
             if not unresolved:
-                end_at = cls.projected_end_for_actual_start(
+                projected_end = cls.projected_end_for_actual_start(
                     row,
                     actual_start_at=actual_start,
                     completed_pause=completed_pause.get(row.id, timedelta(0)),
                 )
-                if end_at < checked_at:
-                    end_at = checked_at
+                # An exam that is still ACTIVE after its projected finish has
+                # no trustworthy finish time. Treat it like any other unresolved
+                # operational sitting until it actually closes rather than
+                # manufacturing a safe time at "now".
+                if projected_end <= checked_at:
+                    unresolved = True
+                else:
+                    end_at = projected_end
             fixed_windows.append(
                 _ScopeWindow(
                     exam_id=row.id,
