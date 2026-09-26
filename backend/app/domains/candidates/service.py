@@ -152,9 +152,10 @@ class CandidateService:
     ) -> None:
         """Prevent unblocking from creating two operational exams for a student.
 
-        The caller acquires the level advisory lock before any candidate/exam
-        row locks. Keeping that order aligned with activation/rescheduling
-        avoids advisory-lock/row-lock inversion under concurrent admin actions.
+        The caller acquires the level advisory lock and global candidate-scope
+        lock before any candidate/exam row locks. Keeping that order aligned
+        with activation/rescheduling avoids lock inversion under concurrent
+        admin actions.
         """
 
         if exam.status not in {ExamStatus.ACTIVE, ExamStatus.SUSPENDED}:
@@ -312,10 +313,9 @@ class CandidateService:
         cls._require_admin(actor)
 
         # Resolve the immutable exam scope first without row locks, then acquire
-        # the same level advisory lock used by activation/rescheduling. Only
-        # after the advisory lock is held do we lock the candidate/exam rows.
-        # This keeps lock ordering consistent and prevents a row-lock/advisory-
-        # lock deadlock between concurrent admin operations.
+        # the same level advisory lock used by activation/rescheduling followed
+        # by the global candidate-scope lock. Only after both are held do we lock
+        # the candidate/exam rows.
         _preview_candidate, preview_exam = await cls._get_candidate_and_exam(
             db,
             candidate_id=candidate_id,
@@ -330,6 +330,7 @@ class CandidateService:
             term_id=preview_exam.term_id,
             level_id=level_id,
         )
+        await ExamTimetableService.acquire_operational_candidate_lock(db)
 
         candidate, exam = await cls._get_candidate_and_exam(
             db,
