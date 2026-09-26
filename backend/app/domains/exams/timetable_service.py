@@ -35,6 +35,12 @@ OPERATIONAL_EXAM_STATUSES = (
 # prevents the next sitting from becoming active while candidates remain busy.
 ACTIVATION_IMPACT_TOLERANCE = timedelta(minutes=1)
 
+# Suggested recovery times reserve a short operational window for the admin to
+# review/apply the proposed timetable and then start the delayed exam. Without
+# this headroom, a suggestion calculated at 11:40:00 could become invalid at
+# 11:40:10 simply because the projected finish moved by ten seconds.
+ACTIVATION_RECOVERY_BUFFER = timedelta(minutes=5)
+
 
 @dataclass(frozen=True)
 class TimetableImpact:
@@ -71,6 +77,7 @@ class ActivationPreflight:
     blockers: tuple[str, ...]
     conflicting_operational_exam_ids: tuple[UUID, ...]
     affected_exams: tuple[ActivationScheduleImpact, ...]
+    suggestion_valid_until_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -428,15 +435,27 @@ class ExamTimetableService:
 
     @classmethod
     async def require_level_free(cls, db: AsyncSession, *, exam_id: UUID) -> None:
-        """Retained compatibility guard used by resume operations.
-
-        The level lock serializes same-level state transitions, while the indexed
-        EXISTS query rejects only real candidate collisions.
-        """
+        """Enforce candidate and timetable safety for activation/resume hooks."""
 
         exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id)
         if exam is None:
             raise ExamNotFound("Examination does not exist")
+
+        # Activation must enforce the full schedule-impact contract at the
+        # service layer too. That prevents internal/background callers from
+        # bypassing the API preflight. The transaction-scoped advisory lock is
+        # acquired by activation_preflight itself.
+        if exam.status == ExamStatus.SEALED:
+            await cls.require_activation_clear(
+                db,
+                exam_id=exam.id,
+                proposed_activation_at=datetime.now(UTC),
+            )
+            return
+
+        # Resume does not rewrite the original activation timetable. It only
+        # needs to make sure none of this exam's candidates were assigned to a
+        # different operational exam while the sitting was suspended.
         level_id = await cls.level_id(db, exam.curriculum_subject_id)
         await cls.acquire_level_lock(
             db, session_id=exam.session_id, term_id=exam.term_id, level_id=level_id
@@ -642,12 +661,15 @@ class ExamTimetableService:
         proposed_activation_at: datetime | None = None,
         schedule_overrides: dict[UUID, datetime] | None = None,
         include_conflict_details: bool = True,
+        apply_recovery_buffer: bool = True,
     ) -> ActivationPreflight:
         """Calculate whether a SEALED exam can start without timetable damage.
 
         This method never mutates a schedule. ``schedule_overrides`` lets the
         operational reschedule endpoint validate an entire admin-proposed batch
-        against the exact same logic before saving any row.
+        against the exact same logic before saving any row. Late-exam recovery
+        suggestions reserve a five-minute activation window by default so a
+        suggestion does not become invalid while the admin is applying it.
         """
 
         exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id)
@@ -712,13 +734,19 @@ class ExamTimetableService:
 
         actual_projected_end: datetime | None = None
         impact_start = checked_at
+        suggestion_valid_until_at: datetime | None = None
+        source_is_due = scheduled is not None and checked_at >= scheduled
         if scheduled is not None:
             actual_projected_end = cls.projected_end_for_actual_start(
                 exam,
                 actual_start_at=checked_at,
             )
-            if timedelta(0) <= checked_at - scheduled <= ACTIVATION_IMPACT_TOLERANCE:
+            lateness = checked_at - scheduled
+            if timedelta(0) <= lateness <= ACTIVATION_IMPACT_TOLERANCE:
                 impact_start = scheduled
+            elif lateness > ACTIVATION_IMPACT_TOLERANCE and apply_recovery_buffer:
+                impact_start = checked_at + ACTIVATION_RECOVERY_BUFFER
+                suggestion_valid_until_at = impact_start
         elif source_scope:
             actual_projected_end = cls.projected_end_for_actual_start(
                 exam,
@@ -727,7 +755,7 @@ class ExamTimetableService:
 
         source_end = (
             cls.projected_end_for_actual_start(exam, actual_start_at=impact_start)
-            if source_scope
+            if source_scope and source_is_due
             else None
         )
         source_window = _ScopeWindow(
@@ -818,6 +846,7 @@ class ExamTimetableService:
             blockers=tuple(dict.fromkeys(blockers)),
             conflicting_operational_exam_ids=conflicting_ids,
             affected_exams=impacts,
+            suggestion_valid_until_at=suggestion_valid_until_at,
         )
 
     @classmethod
@@ -872,6 +901,7 @@ class ExamTimetableService:
             db,
             exam_id=exam.id,
             proposed_activation_at=exam.activated_at,
+            apply_recovery_buffer=False,
         )
         return [
             TimetableImpact(
