@@ -10,7 +10,7 @@ function exam(id, overrides = {}) {
 function data(exams = []) {
   return { exams, subjects: [{ academicLevelId: 'l1', academicLevelName: 'JSS1', academicLevelPosition: 1 }, { academicLevelId: 'l2', academicLevelName: 'JSS2', academicLevelPosition: 2 }], loading: false, refresh: vi.fn().mockResolvedValue(undefined) }
 }
-it('lists scheduled current revisions in chronological order and excludes cancelled and unscheduled exams', () => {
+it('lists only scheduled current revisions awaiting their start in chronological order', () => {
   render(<AdminTimetablePage levelId="l1" adminData={data([
     exam('Later', { scheduledStartAt: '2026-09-27T09:00:00Z' }),
     exam('Old revision', { curriculumSubjectId: 'revised', revisionNumber: 1 }),
@@ -18,12 +18,17 @@ it('lists scheduled current revisions in chronological order and excludes cancel
     exam('Unscheduled', { scheduledStartAt: null }),
     exam('Cancelled', { status: 'cancelled' }),
     exam('Cancelling', { status: 'cancelling' }),
+    exam('Closed', { status: 'closed' }),
+    exam('Closing', { status: 'closing' }),
+    exam('Active', { status: 'active' }),
+    exam('Suspended', { status: 'suspended' }),
     exam('Invalid date', { scheduledStartAt: 'invalid' }),
     exam('Scheduled draft', { status: 'draft', statusLabel: 'Draft' }),
+    exam('Scheduled submitted', { status: 'submitted', statusLabel: 'Submitted' }),
   ])} />)
-  expect(screen.getAllByRole('heading', { level: 4 }).map((node) => node.textContent)).toEqual(['Current revision', 'Scheduled draft', 'Later'])
+  expect(screen.getAllByRole('heading', { level: 4 }).map((node) => node.textContent)).toEqual(['Current revision', 'Scheduled draft', 'Scheduled submitted', 'Later'])
   expect(screen.getByText('Draft')).toBeInTheDocument()
-  expect(screen.getByRole('status')).toHaveTextContent('3 scheduled exams across 2 days')
+  expect(screen.getByRole('status')).toHaveTextContent('4 scheduled exams across 2 days')
 })
 function TimetableHarness({ adminData }) {
   const [levelId, setLevelId] = useState(null)
@@ -42,8 +47,9 @@ it('opens calendar collections without mixing papers from different levels and r
   expect(screen.getByText('Second level paper')).toBeInTheDocument()
   expect(screen.queryByText('First level paper')).not.toBeInTheDocument()
 })
-it('shows an empty schedule for a level with no scheduled exams', () => {
-  render(<TimetableHarness adminData={data()} />)
+it('shows zero pending exams and an empty schedule for a level with only closed exams', () => {
+  render(<TimetableHarness adminData={data([exam('Completed paper', { academicLevelId: 'l2', status: 'closed' })])} />)
+  expect(screen.getByRole('button', { name: 'Open JSS2 schedule' })).toHaveTextContent('0 scheduled exams')
   fireEvent.click(screen.getByRole('button', { name: 'Open JSS2 schedule' }))
   expect(screen.getByText('No scheduled examinations')).toBeInTheDocument()
 })

@@ -16,7 +16,7 @@ export function AdminTimetablePage({ adminData, levelId = null, onSelectLevel })
   const visibleLevels = levels.filter((level) => levelFilter === 'all' || level.id === levelFilter)
   const allScheduled = currentExamRevisions(adminData.exams)
     .filter((exam) => exam.scheduledStartAt && Number.isFinite(Date.parse(exam.scheduledStartAt))
-      && !['cancelled', 'cancelling'].includes(exam.status))
+      && ['draft', 'submitted', 'sealed'].includes(exam.status))
     .sort((a, b) => Date.parse(a.scheduledStartAt) - Date.parse(b.scheduledStartAt) || a.title.localeCompare(b.title))
   const scheduled = allScheduled.filter((exam) => exam.academicLevelId === levelId)
   const days = new Map()
@@ -41,7 +41,7 @@ export function AdminTimetablePage({ adminData, levelId = null, onSelectLevel })
       <header className="teacher-page-heading">
         <div>
           <div className="teacher-page-title-line"><span className="teacher-page-title-icon"><Icon name="calendar" size={27} /></span><h1>Timetable</h1></div>
-          <p>Scheduled examinations, organised by date and academic level.</p>
+          <p>Scheduled examinations awaiting their start, organised by date and academic level.</p>
         </div>
         <button type="button" className="teacher-secondary-action" disabled={adminData.loading || refreshing} onClick={refresh}><Icon name="sync" size={16} />{refreshing ? 'Refreshing...' : 'Refresh'}</button>
       </header>
