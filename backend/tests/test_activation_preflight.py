@@ -79,6 +79,11 @@ class ActivationPreflightTimingTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch.object(
                 ExamTimetableService,
+                "acquire_operational_candidate_lock",
+                new=AsyncMock(),
+            ),
+            patch.object(
+                ExamTimetableService,
                 "list_leaf_exams",
                 new=AsyncMock(return_value=rows),
             ),
@@ -277,6 +282,67 @@ class ActivationPreflightTimingTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(preflight.can_activate)
         self.assertEqual(preflight.affected_exams, ())
+
+    async def test_overdue_parallel_departments_merge_safely_into_general_subject(self):
+        source = self.exam(
+            title="Chemistry",
+            status=ExamStatus.SEALED,
+            scheduled_start_at=self.checked_at - timedelta(minutes=40),
+        )
+        literature = self.exam(
+            title="Literature",
+            status=ExamStatus.SEALED,
+            scheduled_start_at=self.checked_at - timedelta(minutes=40),
+        )
+        physics = self.exam(
+            title="Physics",
+            status=ExamStatus.SEALED,
+            scheduled_start_at=self.checked_at + timedelta(minutes=20),
+        )
+        government = self.exam(
+            title="Government",
+            status=ExamStatus.SEALED,
+            scheduled_start_at=self.checked_at + timedelta(minutes=20),
+        )
+        english = self.exam(
+            title="English",
+            status=ExamStatus.SEALED,
+            scheduled_start_at=self.checked_at + timedelta(hours=1, minutes=20),
+        )
+        scopes = {
+            source.id: frozenset({self.science_class}),
+            literature.id: frozenset({self.arts_class}),
+            physics.id: frozenset({self.science_class}),
+            government.id: frozenset({self.arts_class}),
+            english.id: frozenset({self.science_class, self.arts_class}),
+        }
+
+        preflight = await self.run_preflight(
+            source=source,
+            rows=[literature, physics, government, english],
+            scopes=scopes,
+            buffered=False,
+        )
+        impacts = {impact.exam_id: impact for impact in preflight.affected_exams}
+
+        # Chemistry and the still-pending Literature sitting are both projected
+        # from 11:40. Their separate next subjects therefore move to 12:40, and
+        # the general English sitting waits for both branches until 13:40.
+        self.assertNotIn(literature.id, impacts)
+        self.assertEqual(
+            impacts[physics.id].suggested_start_at,
+            self.checked_at + timedelta(hours=1),
+        )
+        self.assertEqual(
+            impacts[government.id].suggested_start_at,
+            self.checked_at + timedelta(hours=1),
+        )
+        self.assertEqual(
+            impacts[english.id].suggested_start_at,
+            self.checked_at + timedelta(hours=2),
+        )
+        self.assertIn("schedule_reschedule_required", preflight.blockers)
+        self.assertFalse(preflight.can_activate)
 
     async def test_active_exam_past_projected_finish_has_unknown_end_until_closed(self):
         source = self.exam(
