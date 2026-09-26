@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from fastapi import Response
@@ -19,7 +20,7 @@ class SyncRouterTests(unittest.IsolatedAsyncioTestCase):
     async def test_reconcile_uses_incremental_cursor_path_by_default(self) -> None:
         db = object()
         response = Response()
-        expected = object()
+        expected = SimpleNamespace(bootstrapped=False, changes_applied=0)
 
         with (
             patch.object(
@@ -48,7 +49,7 @@ class SyncRouterTests(unittest.IsolatedAsyncioTestCase):
     async def test_reconcile_force_full_reinstalls_authoritative_snapshot(self) -> None:
         db = object()
         response = Response()
-        expected = object()
+        expected = SimpleNamespace(bootstrapped=True, changes_applied=0)
 
         with (
             patch.object(
@@ -61,6 +62,10 @@ class SyncRouterTests(unittest.IsolatedAsyncioTestCase):
                 "bootstrap",
                 new=AsyncMock(return_value=expected),
             ) as bootstrap,
+            patch(
+                "app.domains.sync.router.enqueue_roster_reconciliation_after_sync",
+                new=AsyncMock(),
+            ),
         ):
             result = await sync_router.reconcile_now(
                 db,  # type: ignore[arg-type]
