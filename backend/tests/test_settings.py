@@ -10,6 +10,7 @@ TEST_ENVIRONMENT = {
     "DEBUG": "false",
     "REDIS_URL": "redis://localhost:6379/0",
     "TASKIQ_REDIS_URL": "redis://localhost:6379/1",
+    "WEAVE_API_BASE_URL": "https://weave.invalid",
 }
 
 with patch.dict(os.environ, TEST_ENVIRONMENT):
@@ -25,6 +26,7 @@ class DatabaseSettingsTests(unittest.TestCase):
         self.required_settings = {
             "REDIS_URL": "redis://localhost:6379/0",
             "TASKIQ_REDIS_URL": "redis://localhost:6379/1",
+            "WEAVE_API_BASE_URL": "https://weave.invalid",
         }
 
     def test_database_url_is_required(self):
