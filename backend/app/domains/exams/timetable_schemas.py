@@ -69,6 +69,7 @@ class ActivationPreflightResponse(BaseModel):
     affected_exams: list[ActivationScheduleImpactResponse] | tuple[
         ActivationScheduleImpactResponse, ...
     ]
+    suggestion_valid_until_at: datetime | None = None
 
 
 class ActivationRescheduleItem(BaseModel):
