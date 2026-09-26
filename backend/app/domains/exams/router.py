@@ -12,6 +12,7 @@ from app.domains.exams.exceptions import (
     ExamNotFound,
     ExamStateError,
 )
+from app.domains.exams.execution_service import ExamExecutionService
 from app.domains.exams.schemas import (
     AcademicTeacherResponse,
     ExamAuthoringAction,
@@ -315,12 +316,18 @@ async def close_exam(
     db: DbSession,
     actor: CurrentLocalActor,
 ) -> ExamResponse:
+    """Request durable exam closure; finalization is completed by the worker."""
+
     try:
-        exam = await ExamService.close_exam(db, actor=actor, exam_id=exam_id)
+        exam = await ExamExecutionService.request_close(
+            db,
+            actor=actor,
+            exam_id=exam_id,
+        )
     except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
 
-    await arq_producer.enqueue("sync_exam_results", str(exam.id))
+    await arq_producer.enqueue("finalize_exam_close", str(exam.id))
     return ExamResponse.model_validate(exam)
 
 
@@ -331,8 +338,10 @@ async def cancel_exam(
     db: DbSession,
     actor: CurrentLocalActor,
 ) -> ExamResponse:
+    """Request durable exam cancellation; finalization is completed by the worker."""
+
     try:
-        exam = await ExamService.cancel_exam(
+        exam = await ExamExecutionService.request_cancel(
             db,
             actor=actor,
             exam_id=exam_id,
@@ -340,6 +349,8 @@ async def cancel_exam(
         )
     except DOMAIN_ERRORS as exc:
         raise _domain_http_error(exc) from exc
+
+    await arq_producer.enqueue("finalize_exam_cancellation", str(exam.id))
     return ExamResponse.model_validate(exam)
 
 
