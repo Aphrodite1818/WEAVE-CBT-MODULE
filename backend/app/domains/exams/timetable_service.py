@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import and_, select, text
@@ -13,8 +13,13 @@ from sqlalchemy.orm import aliased
 from app.domains.academics.eligibility import AcademicEligibilityService
 from app.domains.academics.models import Curriculum, CurriculumSubject
 from app.domains.candidates.models import CandidateStatus, ExamCandidate
-from app.domains.exams.exceptions import ExamNotFound, ExamStateError
-from app.domains.exams.models import Exam, ExamStatus
+from app.domains.exams.exceptions import ExamNotFound, ExamScheduleImpactError, ExamStateError
+from app.domains.exams.models import (
+    Exam,
+    ExamStatus,
+    ExamSuspension,
+    ExamTargetClass,
+)
 from app.domains.exams.repository import ExamRepository
 
 
@@ -25,6 +30,11 @@ OPERATIONAL_EXAM_STATUSES = (
     ExamStatus.CANCELLING,
 )
 
+# A few seconds of API/UI latency must not force a school to reschedule an
+# entire back-to-back timetable. Runtime candidate-overlap protection still
+# prevents the next sitting from becoming active while candidates remain busy.
+ACTIVATION_IMPACT_TOLERANCE = timedelta(minutes=1)
+
 
 @dataclass(frozen=True)
 class TimetableImpact:
@@ -33,6 +43,53 @@ class TimetableImpact:
     original_start_at: datetime
     proposed_start_at: datetime
     proposed_end_at: datetime
+
+
+@dataclass(frozen=True)
+class ActivationScheduleImpact:
+    exam_id: UUID
+    title: str
+    status: ExamStatus
+    scheduled_start_at: datetime | None
+    scheduled_end_at: datetime | None
+    suggested_start_at: datetime | None
+    suggested_end_at: datetime | None
+    delay_seconds: int | None
+    blocked_by_exam_ids: tuple[UUID, ...]
+    reason: str
+
+
+@dataclass(frozen=True)
+class ActivationPreflight:
+    exam_id: UUID
+    checked_at: datetime
+    scheduled_start_at: datetime | None
+    proposed_activation_at: datetime
+    projected_end_at: datetime | None
+    delay_seconds: int
+    can_activate: bool
+    blockers: tuple[str, ...]
+    conflicting_operational_exam_ids: tuple[UUID, ...]
+    affected_exams: tuple[ActivationScheduleImpact, ...]
+
+
+@dataclass(frozen=True)
+class _ScopeWindow:
+    exam_id: UUID
+    title: str
+    class_ids: frozenset[UUID]
+    start_at: datetime
+    end_at: datetime | None
+
+
+@dataclass(frozen=True)
+class _PlannedNode:
+    exam_id: UUID
+    title: str
+    status: ExamStatus
+    class_ids: frozenset[UUID]
+    scheduled_start_at: datetime | None
+    window_duration: timedelta
 
 
 class ExamTimetableService:
@@ -53,6 +110,37 @@ class ExamTimetableService:
 
         candidate_start = latest_normal_start_at or scheduled_start_at
         return candidate_start + timedelta(minutes=duration_minutes)
+
+    @staticmethod
+    def entry_grace(exam: Exam) -> timedelta:
+        """Return the configured normal-entry grace window for one exam."""
+
+        if exam.scheduled_start_at is None or exam.latest_normal_start_at is None:
+            return timedelta(0)
+        grace = exam.latest_normal_start_at - exam.scheduled_start_at
+        return max(grace, timedelta(0))
+
+    @classmethod
+    def projected_end_for_actual_start(
+        cls,
+        exam: Exam,
+        *,
+        actual_start_at: datetime,
+        completed_pause: timedelta = timedelta(0),
+    ) -> datetime:
+        """Project the last normal finish from a real operational start.
+
+        The calculation preserves the configured late-entry window and adds any
+        completed suspension time. It deliberately does not guess an end while
+        an exam is currently suspended/finalizing.
+        """
+
+        return (
+            actual_start_at
+            + cls.entry_grace(exam)
+            + timedelta(minutes=exam.duration_minutes)
+            + completed_pause
+        )
 
     @staticmethod
     async def level_id(db: AsyncSession, curriculum_subject_id: UUID) -> UUID:
@@ -145,6 +233,76 @@ class ExamTimetableService:
         return {target.class_id for target in targets}
 
     @classmethod
+    async def _scope_map_for_exams(
+        cls,
+        db: AsyncSession,
+        exams: list[Exam],
+    ) -> dict[UUID, frozenset[UUID]]:
+        """Resolve exam delivery scopes without one target-class query per exam."""
+
+        result: dict[UUID, frozenset[UUID]] = {}
+        frozen_exams = [
+            exam
+            for exam in exams
+            if exam.status not in {ExamStatus.DRAFT, ExamStatus.SUBMITTED}
+        ]
+        if frozen_exams:
+            exam_ids = [exam.id for exam in frozen_exams]
+            rows = await db.execute(
+                select(ExamTargetClass.exam_id, ExamTargetClass.class_id).where(
+                    ExamTargetClass.exam_id.in_(exam_ids)
+                )
+            )
+            mutable: dict[UUID, set[UUID]] = {exam_id: set() for exam_id in exam_ids}
+            for exam_id, class_id in rows.all():
+                mutable[exam_id].add(class_id)
+            result.update(
+                {exam_id: frozenset(class_ids) for exam_id, class_ids in mutable.items()}
+            )
+
+        derived_cache: dict[tuple[UUID, UUID], frozenset[UUID]] = {}
+        for exam in exams:
+            if exam.status not in {ExamStatus.DRAFT, ExamStatus.SUBMITTED}:
+                continue
+            key = (exam.curriculum_subject_id, exam.term_id)
+            if key not in derived_cache:
+                class_ids = await cls._derived_delivery_class_ids(
+                    db,
+                    curriculum_subject_id=exam.curriculum_subject_id,
+                    term_id=exam.term_id,
+                )
+                derived_cache[key] = frozenset(class_ids)
+            result[exam.id] = derived_cache[key]
+
+        return result
+
+    @staticmethod
+    async def _suspension_state(
+        db: AsyncSession,
+        exam_ids: list[UUID],
+    ) -> tuple[dict[UUID, timedelta], set[UUID]]:
+        """Return completed pause duration and exams with an open suspension."""
+
+        if not exam_ids:
+            return {}, set()
+        rows = await db.execute(
+            select(
+                ExamSuspension.exam_id,
+                ExamSuspension.suspended_at,
+                ExamSuspension.resumed_at,
+            ).where(ExamSuspension.exam_id.in_(exam_ids))
+        )
+        completed: dict[UUID, timedelta] = {exam_id: timedelta(0) for exam_id in exam_ids}
+        open_ids: set[UUID] = set()
+        for exam_id, suspended_at, resumed_at in rows.all():
+            if resumed_at is None:
+                open_ids.add(exam_id)
+                continue
+            if resumed_at > suspended_at:
+                completed[exam_id] += resumed_at - suspended_at
+        return completed, open_ids
+
+    @classmethod
     async def require_planned_slot_available(
         cls,
         db: AsyncSession,
@@ -211,29 +369,12 @@ class ExamTimetableService:
                 f"is already planned for this slot: {row.title}"
             )
 
-    @classmethod
-    async def require_level_free(cls, db: AsyncSession, *, exam_id: UUID) -> None:
-        """Keep the level lock, but reject only real candidate-scope collisions.
-
-        The method name is retained for compatibility with existing lifecycle hooks.
-        The level advisory lock serializes same-level activation/resume operations,
-        while the indexed EXISTS query lets disjoint department/class rosters run
-        concurrently without materializing candidate UUIDs in Python.
-        """
-
-        exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id)
-        if exam is None:
-            raise ExamNotFound("Examination does not exist")
-        level_id = await cls.level_id(db, exam.curriculum_subject_id)
-        await cls.acquire_level_lock(
-            db, session_id=exam.session_id, term_id=exam.term_id, level_id=level_id
-        )
-
+    @staticmethod
+    def _candidate_overlap_exists_statement(exam_id: UUID):
         current_candidate = aliased(ExamCandidate)
         busy_candidate = aliased(ExamCandidate)
         busy_exam = aliased(Exam)
-
-        overlap_exists = (
+        return (
             select(1)
             .select_from(current_candidate)
             .join(
@@ -246,65 +387,502 @@ class ExamTimetableService:
             )
             .join(busy_exam, busy_exam.id == busy_candidate.exam_id)
             .where(
-                current_candidate.exam_id == exam.id,
+                current_candidate.exam_id == exam_id,
                 current_candidate.status == CandidateStatus.ELIGIBLE,
                 busy_exam.status.in_(OPERATIONAL_EXAM_STATUSES),
             )
             .exists()
         )
 
+    @classmethod
+    async def _candidate_conflict_exam_ids(
+        cls,
+        db: AsyncSession,
+        *,
+        exam_id: UUID,
+    ) -> tuple[UUID, ...]:
+        current_candidate = aliased(ExamCandidate)
+        busy_candidate = aliased(ExamCandidate)
+        busy_exam = aliased(Exam)
+        rows = await db.execute(
+            select(busy_exam.id)
+            .select_from(current_candidate)
+            .join(
+                busy_candidate,
+                and_(
+                    busy_candidate.student_id == current_candidate.student_id,
+                    busy_candidate.exam_id != current_candidate.exam_id,
+                    busy_candidate.status == CandidateStatus.ELIGIBLE,
+                ),
+            )
+            .join(busy_exam, busy_exam.id == busy_candidate.exam_id)
+            .where(
+                current_candidate.exam_id == exam_id,
+                current_candidate.status == CandidateStatus.ELIGIBLE,
+                busy_exam.status.in_(OPERATIONAL_EXAM_STATUSES),
+            )
+            .distinct()
+            .order_by(busy_exam.id.asc())
+        )
+        return tuple(rows.scalars().all())
+
+    @classmethod
+    async def require_level_free(cls, db: AsyncSession, *, exam_id: UUID) -> None:
+        """Retained compatibility guard used by resume operations.
+
+        The level lock serializes same-level state transitions, while the indexed
+        EXISTS query rejects only real candidate collisions.
+        """
+
+        exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id)
+        if exam is None:
+            raise ExamNotFound("Examination does not exist")
+        level_id = await cls.level_id(db, exam.curriculum_subject_id)
+        await cls.acquire_level_lock(
+            db, session_id=exam.session_id, term_id=exam.term_id, level_id=level_id
+        )
+        overlap_exists = cls._candidate_overlap_exists_statement(exam.id)
         if bool(await db.scalar(select(overlap_exists))):
             raise ExamStateError(
                 "One or more eligible candidates are already assigned to another "
                 "active, suspended, or finalizing examination"
             )
 
+    @staticmethod
+    def _cascade_planned_windows(
+        *,
+        source_window: _ScopeWindow,
+        fixed_windows: list[_ScopeWindow],
+        planned_nodes: list[_PlannedNode],
+        checked_at: datetime,
+    ) -> tuple[ActivationScheduleImpact, ...]:
+        """Resolve a scope-aware forward timetable without mutating exam rows.
+
+        Every resolved planned exam becomes a blocker for later exams. That is
+        what allows a delayed specialized subject to move a general subject and
+        the delayed general subject to then propagate into another department.
+        """
+
+        blockers: list[_ScopeWindow] = [source_window, *fixed_windows]
+        impacts: list[ActivationScheduleImpact] = []
+
+        for node in sorted(
+            planned_nodes,
+            key=lambda item: (
+                item.scheduled_start_at or datetime.max.replace(tzinfo=UTC),
+                str(item.exam_id),
+            ),
+        ):
+            scheduled = node.scheduled_start_at
+            if scheduled is None:
+                relevant = [
+                    blocker.exam_id
+                    for blocker in blockers
+                    if not node.class_ids.isdisjoint(blocker.class_ids)
+                ]
+                if relevant:
+                    impacts.append(
+                        ActivationScheduleImpact(
+                            exam_id=node.exam_id,
+                            title=node.title,
+                            status=node.status,
+                            scheduled_start_at=None,
+                            scheduled_end_at=None,
+                            suggested_start_at=None,
+                            suggested_end_at=None,
+                            delay_seconds=None,
+                            blocked_by_exam_ids=tuple(dict.fromkeys(relevant)),
+                            reason="Affected sealed examination has no usable schedule",
+                        )
+                    )
+                    blockers.append(
+                        _ScopeWindow(
+                            exam_id=node.exam_id,
+                            title=node.title,
+                            class_ids=node.class_ids,
+                            start_at=checked_at,
+                            end_at=None,
+                        )
+                    )
+                continue
+
+            scheduled_end = scheduled + node.window_duration
+            proposed_start = scheduled
+            causes: list[UUID] = []
+
+            # A still-SEALED exam whose slot is already in the past and whose
+            # candidates intersect the exam being activated must be moved after
+            # the source instead of being silently leapfrogged.
+            if (
+                scheduled < checked_at
+                and not node.class_ids.isdisjoint(source_window.class_ids)
+            ):
+                if source_window.end_at is None:
+                    impacts.append(
+                        ActivationScheduleImpact(
+                            exam_id=node.exam_id,
+                            title=node.title,
+                            status=node.status,
+                            scheduled_start_at=scheduled,
+                            scheduled_end_at=scheduled_end,
+                            suggested_start_at=None,
+                            suggested_end_at=None,
+                            delay_seconds=None,
+                            blocked_by_exam_ids=(source_window.exam_id,),
+                            reason="Overdue examination conflicts with an unresolved operational sitting",
+                        )
+                    )
+                    blockers.append(
+                        _ScopeWindow(
+                            exam_id=node.exam_id,
+                            title=node.title,
+                            class_ids=node.class_ids,
+                            start_at=scheduled,
+                            end_at=None,
+                        )
+                    )
+                    continue
+                proposed_start = max(proposed_start, source_window.end_at)
+                causes.append(source_window.exam_id)
+
+            while True:
+                proposed_end = proposed_start + node.window_duration
+                unresolved = [
+                    blocker
+                    for blocker in blockers
+                    if blocker.end_at is None
+                    and not node.class_ids.isdisjoint(blocker.class_ids)
+                    and proposed_end > blocker.start_at
+                ]
+                if unresolved:
+                    causes.extend(blocker.exam_id for blocker in unresolved)
+                    unique_causes = tuple(dict.fromkeys(causes))
+                    impacts.append(
+                        ActivationScheduleImpact(
+                            exam_id=node.exam_id,
+                            title=node.title,
+                            status=node.status,
+                            scheduled_start_at=scheduled,
+                            scheduled_end_at=scheduled_end,
+                            suggested_start_at=None,
+                            suggested_end_at=None,
+                            delay_seconds=None,
+                            blocked_by_exam_ids=unique_causes,
+                            reason="A conflicting examination is suspended or finalizing, so no safe start can be calculated yet",
+                        )
+                    )
+                    blockers.append(
+                        _ScopeWindow(
+                            exam_id=node.exam_id,
+                            title=node.title,
+                            class_ids=node.class_ids,
+                            start_at=proposed_start,
+                            end_at=None,
+                        )
+                    )
+                    break
+
+                finite_conflicts = [
+                    blocker
+                    for blocker in blockers
+                    if blocker.end_at is not None
+                    and not node.class_ids.isdisjoint(blocker.class_ids)
+                    and ExamTimetableService.intervals_overlap(
+                        proposed_start,
+                        proposed_end,
+                        blocker.start_at,
+                        blocker.end_at,
+                    )
+                ]
+                if not finite_conflicts:
+                    if proposed_start > scheduled:
+                        unique_causes = tuple(dict.fromkeys(causes))
+                        impacts.append(
+                            ActivationScheduleImpact(
+                                exam_id=node.exam_id,
+                                title=node.title,
+                                status=node.status,
+                                scheduled_start_at=scheduled,
+                                scheduled_end_at=scheduled_end,
+                                suggested_start_at=proposed_start,
+                                suggested_end_at=proposed_end,
+                                delay_seconds=int(
+                                    (proposed_start - scheduled).total_seconds()
+                                ),
+                                blocked_by_exam_ids=unique_causes,
+                                reason="Scheduled students are still occupied by an earlier operational or displaced examination",
+                            )
+                        )
+                    blockers.append(
+                        _ScopeWindow(
+                            exam_id=node.exam_id,
+                            title=node.title,
+                            class_ids=node.class_ids,
+                            start_at=proposed_start,
+                            end_at=proposed_end,
+                        )
+                    )
+                    break
+
+                causes.extend(blocker.exam_id for blocker in finite_conflicts)
+                proposed_start = max(
+                    blocker.end_at
+                    for blocker in finite_conflicts
+                    if blocker.end_at is not None
+                )
+
+        return tuple(impacts)
+
     @classmethod
-    async def impact_after_start(
-        cls, db: AsyncSession, *, exam_id: UUID
-    ) -> list[TimetableImpact]:
+    async def activation_preflight(
+        cls,
+        db: AsyncSession,
+        *,
+        exam_id: UUID,
+        proposed_activation_at: datetime | None = None,
+        schedule_overrides: dict[UUID, datetime] | None = None,
+        include_conflict_details: bool = True,
+    ) -> ActivationPreflight:
+        """Calculate whether a SEALED exam can start without timetable damage.
+
+        This method never mutates a schedule. ``schedule_overrides`` lets the
+        operational reschedule endpoint validate an entire admin-proposed batch
+        against the exact same logic before saving any row.
+        """
+
         exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id)
         if exam is None:
             raise ExamNotFound("Examination does not exist")
-        if exam.activated_at is None:
-            return []
+
+        checked_at = proposed_activation_at or datetime.now(UTC)
+        if checked_at.tzinfo is None or checked_at.utcoffset() is None:
+            raise ValueError("proposed_activation_at must include a timezone")
+        checked_at = checked_at.astimezone(UTC)
+
         level_id = await cls.level_id(db, exam.curriculum_subject_id)
+        await cls.acquire_level_lock(
+            db,
+            session_id=exam.session_id,
+            term_id=exam.term_id,
+            level_id=level_id,
+        )
+
+        blockers: list[str] = []
+        scheduled = exam.scheduled_start_at
+        delay_seconds = 0
+        if scheduled is None:
+            blockers.append("missing_schedule")
+        else:
+            scheduled = scheduled.astimezone(UTC)
+            if checked_at < scheduled:
+                blockers.append("too_early")
+            else:
+                delay_seconds = int((checked_at - scheduled).total_seconds())
+
+        overlap_exists = cls._candidate_overlap_exists_statement(exam.id)
+        has_candidate_conflict = bool(await db.scalar(select(overlap_exists)))
+        conflicting_ids: tuple[UUID, ...] = ()
+        if has_candidate_conflict:
+            blockers.append("candidate_scope_conflict")
+            if include_conflict_details:
+                conflicting_ids = await cls._candidate_conflict_exam_ids(
+                    db,
+                    exam_id=exam.id,
+                )
+
         rows = await cls.list_leaf_exams(
             db,
             session_id=exam.session_id,
             term_id=exam.term_id,
             level_id=level_id,
             exclude_exam_id=exam.id,
-            statuses=(ExamStatus.DRAFT, ExamStatus.SUBMITTED, ExamStatus.SEALED),
+            statuses=(
+                ExamStatus.SEALED,
+                ExamStatus.ACTIVE,
+                ExamStatus.SUSPENDED,
+                ExamStatus.CLOSING,
+                ExamStatus.CANCELLING,
+            ),
         )
-        current_class_ids = await cls._exam_delivery_class_ids(db, exam=exam)
-        current_end = exam.activated_at + timedelta(minutes=exam.duration_minutes)
-        impacts: list[TimetableImpact] = []
-        for row in rows:
-            if row.scheduled_start_at is None:
-                continue
-            if (
-                exam.scheduled_start_at is not None
-                and row.scheduled_start_at <= exam.scheduled_start_at
-            ):
-                continue
-            if row.scheduled_start_at >= current_end:
-                break
+        all_exams = [exam, *rows]
+        scope_map = await cls._scope_map_for_exams(db, all_exams)
+        source_scope = scope_map.get(exam.id, frozenset())
+        if not source_scope:
+            blockers.append("missing_delivery_scope")
 
-            row_class_ids = await cls._exam_delivery_class_ids(db, exam=row)
-            if current_class_ids.isdisjoint(row_class_ids):
-                continue
+        actual_projected_end: datetime | None = None
+        impact_start = checked_at
+        if scheduled is not None:
+            actual_projected_end = cls.projected_end_for_actual_start(
+                exam,
+                actual_start_at=checked_at,
+            )
+            if timedelta(0) <= checked_at - scheduled <= ACTIVATION_IMPACT_TOLERANCE:
+                impact_start = scheduled
+        elif source_scope:
+            actual_projected_end = cls.projected_end_for_actual_start(
+                exam,
+                actual_start_at=checked_at,
+            )
 
-            proposed_start = current_end
-            proposed_end = proposed_start + timedelta(minutes=row.duration_minutes)
-            impacts.append(
-                TimetableImpact(
-                    row.id,
-                    row.title,
-                    row.scheduled_start_at,
-                    proposed_start,
-                    proposed_end,
+        source_end = (
+            cls.projected_end_for_actual_start(exam, actual_start_at=impact_start)
+            if source_scope
+            else None
+        )
+        source_window = _ScopeWindow(
+            exam_id=exam.id,
+            title=exam.title,
+            class_ids=source_scope,
+            start_at=impact_start,
+            end_at=source_end,
+        )
+
+        operational = [row for row in rows if row.status in OPERATIONAL_EXAM_STATUSES]
+        completed_pause, open_suspensions = await cls._suspension_state(
+            db,
+            [row.id for row in operational],
+        )
+
+        fixed_windows: list[_ScopeWindow] = []
+        for row in operational:
+            row_scope = scope_map.get(row.id, frozenset())
+            actual_start = row.activated_at or row.scheduled_start_at or checked_at
+            actual_start = actual_start.astimezone(UTC)
+            unresolved = (
+                row.status
+                in {
+                    ExamStatus.SUSPENDED,
+                    ExamStatus.CLOSING,
+                    ExamStatus.CANCELLING,
+                }
+                or row.id in open_suspensions
+                or row.activated_at is None
+            )
+            end_at = None
+            if not unresolved:
+                end_at = cls.projected_end_for_actual_start(
+                    row,
+                    actual_start_at=actual_start,
+                    completed_pause=completed_pause.get(row.id, timedelta(0)),
+                )
+                if end_at < checked_at:
+                    end_at = checked_at
+            fixed_windows.append(
+                _ScopeWindow(
+                    exam_id=row.id,
+                    title=row.title,
+                    class_ids=row_scope,
+                    start_at=actual_start,
+                    end_at=end_at,
                 )
             )
-            current_end = proposed_end
-        return impacts
+
+        overrides = schedule_overrides or {}
+        planned_nodes: list[_PlannedNode] = []
+        for row in rows:
+            if row.status != ExamStatus.SEALED:
+                continue
+            base_start = overrides.get(row.id, row.scheduled_start_at)
+            window_duration = timedelta(minutes=row.duration_minutes) + cls.entry_grace(row)
+            planned_nodes.append(
+                _PlannedNode(
+                    exam_id=row.id,
+                    title=row.title,
+                    status=row.status,
+                    class_ids=scope_map.get(row.id, frozenset()),
+                    scheduled_start_at=base_start,
+                    window_duration=window_duration,
+                )
+            )
+
+        impacts: tuple[ActivationScheduleImpact, ...] = ()
+        if source_scope and source_end is not None:
+            impacts = cls._cascade_planned_windows(
+                source_window=source_window,
+                fixed_windows=fixed_windows,
+                planned_nodes=planned_nodes,
+                checked_at=checked_at,
+            )
+        if impacts:
+            blockers.append("schedule_reschedule_required")
+
+        return ActivationPreflight(
+            exam_id=exam.id,
+            checked_at=checked_at,
+            scheduled_start_at=scheduled,
+            proposed_activation_at=checked_at,
+            projected_end_at=actual_projected_end,
+            delay_seconds=delay_seconds,
+            can_activate=not blockers,
+            blockers=tuple(dict.fromkeys(blockers)),
+            conflicting_operational_exam_ids=conflicting_ids,
+            affected_exams=impacts,
+        )
+
+    @classmethod
+    async def require_activation_clear(
+        cls,
+        db: AsyncSession,
+        *,
+        exam_id: UUID,
+        proposed_activation_at: datetime,
+    ) -> ActivationPreflight:
+        """Enforce the preflight again inside the activation transaction."""
+
+        preflight = await cls.activation_preflight(
+            db,
+            exam_id=exam_id,
+            proposed_activation_at=proposed_activation_at,
+            include_conflict_details=False,
+        )
+        if "missing_schedule" in preflight.blockers:
+            raise ExamStateError("Examination is missing a scheduled start time")
+        if "too_early" in preflight.blockers:
+            raise ExamStateError(
+                "Examination cannot be activated before its scheduled start time"
+            )
+        if "missing_delivery_scope" in preflight.blockers:
+            raise ExamStateError("Examination has no frozen delivery scope")
+        if "candidate_scope_conflict" in preflight.blockers:
+            raise ExamStateError(
+                "One or more eligible candidates are already assigned to another "
+                "active, suspended, or finalizing examination"
+            )
+        if preflight.affected_exams:
+            raise ExamScheduleImpactError(
+                "Activation would disrupt one or more downstream examinations; "
+                "reschedule the affected chain before activating",
+                preflight=preflight,
+            )
+        return preflight
+
+    @classmethod
+    async def impact_after_start(
+        cls, db: AsyncSession, *, exam_id: UUID
+    ) -> list[TimetableImpact]:
+        """Backward-compatible simplified view of the current impact chain."""
+
+        exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id)
+        if exam is None:
+            raise ExamNotFound("Examination does not exist")
+        if exam.activated_at is None:
+            return []
+        preflight = await cls.activation_preflight(
+            db,
+            exam_id=exam.id,
+            proposed_activation_at=exam.activated_at,
+        )
+        return [
+            TimetableImpact(
+                exam_id=impact.exam_id,
+                title=impact.title,
+                original_start_at=impact.scheduled_start_at,
+                proposed_start_at=impact.suggested_start_at,
+                proposed_end_at=impact.suggested_end_at,
+            )
+            for impact in preflight.affected_exams
+            if impact.scheduled_start_at is not None
+            and impact.suggested_start_at is not None
+            and impact.suggested_end_at is not None
+        ]
