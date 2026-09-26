@@ -33,6 +33,7 @@ jobs:
         env:
           DATABASE_URL: postgresql+asyncpg://weave:weave@localhost:5432/weave_cbt_test
           REDIS_URL: redis://localhost:6379/15
+          WEAVE_API_BASE_URL: https://weave.invalid
           DEBUG: 'false'
         run: python -m pytest -q
 
