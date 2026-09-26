@@ -79,6 +79,10 @@
 
 .admin-roster-action-dialog {
   width: min(500px, 100%);
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
   max-height: calc(100vh - 48px);
   overflow-y: auto;
   border: 1px solid rgb(var(--color-border));
@@ -103,7 +107,7 @@
 .admin-roster-action-dialog__header > div > span {
   display: block;
   color: rgb(var(--color-primary));
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: .055em;
   text-transform: uppercase;
@@ -112,14 +116,14 @@
 .admin-roster-action-dialog__header h2 {
   margin: 4px 0 3px;
   color: rgb(var(--color-text));
-  font-size: 18px;
+  font-size: 20px;
   line-height: 1.25;
 }
 
 .admin-roster-action-dialog__header p {
   margin: 0;
   color: rgb(var(--color-text-muted));
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.4;
 }
 
@@ -145,6 +149,7 @@
 
 .admin-roster-action-dialog__body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   padding: 17px 18px 18px;
 }
@@ -152,7 +157,7 @@
 .admin-roster-dialog-copy {
   margin: 0;
   color: rgb(var(--color-text-muted));
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.55;
 }
 
@@ -162,12 +167,14 @@
 
 .admin-roster-dialog-field {
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
 
 .admin-roster-dialog-field > span {
   color: rgb(var(--color-text));
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 720;
 }
 
@@ -179,13 +186,15 @@
 .admin-roster-dialog-field textarea,
 .admin-roster-dialog-field input {
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   border: 1px solid rgb(var(--color-border));
   border-radius: 8px;
   background: rgb(var(--color-surface));
   color: rgb(var(--color-text));
   padding: 9px 10px;
   font: inherit;
-  font-size: 12px;
+  font-size: 14px;
   outline: none;
   transition: border-color 140ms ease, box-shadow 140ms ease;
 }
@@ -207,11 +216,12 @@
   background: rgb(var(--color-surface-muted));
   color: rgb(var(--color-text-muted));
   padding: 11px 12px;
-  font-size: 11.5px;
+  font-size: 13px;
 }
 
 .admin-roster-dialog-footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
@@ -226,7 +236,7 @@
   border-radius: 8px;
   padding: 7px 11px;
   font: inherit;
-  font-size: 11.5px;
+  font-size: 13px;
   font-weight: 720;
   cursor: pointer;
 }
@@ -263,6 +273,7 @@
 
 .admin-roster-authorization-card {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   border: 1px solid #b7e4c7;
   border-radius: 10px;
@@ -279,7 +290,7 @@
 
 .admin-roster-authorization-card__header strong {
   color: #11713e;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .admin-roster-authorization-card__header span {
@@ -290,7 +301,7 @@
 .admin-roster-authorization-card > p {
   margin: 0;
   color: #315c42;
-  font-size: 11.5px;
+  font-size: 13px;
   line-height: 1.5;
 }
 

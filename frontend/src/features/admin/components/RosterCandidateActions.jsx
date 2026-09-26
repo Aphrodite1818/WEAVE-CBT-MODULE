@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { RiRefreshLine } from '@remixicon/react'
 import { Notice } from '../../../shared/ui'
 import '../admin-roster-actions.css'
@@ -289,7 +290,7 @@ export function RosterCandidateActionButton({ candidate, exam, gateway, onChange
 }
 
 function ActionDialog({ title, candidate, busy, onClose, children }) {
-  return (
+  return createPortal(
     <div
       className="admin-roster-action-modal"
       role="presentation"
@@ -308,7 +309,8 @@ function ActionDialog({ title, candidate, busy, onClose, children }) {
         </header>
         <div className="admin-roster-action-dialog__body">{children}</div>
       </section>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
