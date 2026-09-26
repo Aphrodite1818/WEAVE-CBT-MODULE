@@ -234,6 +234,11 @@ class TimetableOperationalScopeTests(unittest.IsolatedAsyncioTestCase):
             ) as acquire_lock,
             patch.object(
                 ExamTimetableService,
+                "acquire_operational_candidate_lock",
+                new=AsyncMock(),
+            ) as acquire_candidate_lock,
+            patch.object(
+                ExamTimetableService,
                 "list_leaf_exams",
                 new=AsyncMock(),
             ) as list_leaf,
@@ -249,6 +254,7 @@ class TimetableOperationalScopeTests(unittest.IsolatedAsyncioTestCase):
             term_id=current_exam.term_id,
             level_id=level_id,
         )
+        acquire_candidate_lock.assert_awaited_once_with(db)
         db.scalar.assert_awaited_once()
         list_leaf.assert_not_awaited()
         statement = db.scalar.await_args.args[0]
@@ -279,6 +285,11 @@ class TimetableOperationalScopeTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 ExamTimetableService,
                 "acquire_level_lock",
+                new=AsyncMock(),
+            ),
+            patch.object(
+                ExamTimetableService,
+                "acquire_operational_candidate_lock",
                 new=AsyncMock(),
             ),
         ):
