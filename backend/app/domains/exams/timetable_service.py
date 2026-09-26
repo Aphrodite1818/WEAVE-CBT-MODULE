@@ -6,14 +6,24 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import select, text
+from sqlalchemy import and_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from app.domains.academics.eligibility import AcademicEligibilityService
 from app.domains.academics.models import Curriculum, CurriculumSubject
+from app.domains.candidates.models import CandidateStatus, ExamCandidate
 from app.domains.exams.exceptions import ExamNotFound, ExamStateError
 from app.domains.exams.models import Exam, ExamStatus
 from app.domains.exams.repository import ExamRepository
+
+
+OPERATIONAL_EXAM_STATUSES = (
+    ExamStatus.ACTIVE,
+    ExamStatus.SUSPENDED,
+    ExamStatus.CLOSING,
+    ExamStatus.CANCELLING,
+)
 
 
 @dataclass(frozen=True)
@@ -99,6 +109,41 @@ class ExamTimetableService:
         )
         return list(result.scalars().all())
 
+    @staticmethod
+    async def _derived_delivery_class_ids(
+        db: AsyncSession,
+        *,
+        curriculum_subject_id: UUID,
+        term_id: UUID,
+    ) -> set[UUID]:
+        """Resolve the current academic delivery scope before an exam is sealed."""
+
+        classes = await AcademicEligibilityService.list_eligible_classes(
+            db,
+            curriculum_subject_id=curriculum_subject_id,
+            academic_term_id=term_id,
+        )
+        return {classroom.id for classroom in classes}
+
+    @classmethod
+    async def _exam_delivery_class_ids(
+        cls,
+        db: AsyncSession,
+        *,
+        exam: Exam,
+    ) -> set[UUID]:
+        """Return mutable academic scope pre-seal or frozen scope after sealing."""
+
+        if exam.status in {ExamStatus.DRAFT, ExamStatus.SUBMITTED}:
+            return await cls._derived_delivery_class_ids(
+                db,
+                curriculum_subject_id=exam.curriculum_subject_id,
+                term_id=exam.term_id,
+            )
+
+        targets = await ExamRepository.list_target_classes_for_exam(db, exam.id)
+        return {target.class_id for target in targets}
+
     @classmethod
     async def require_planned_slot_available(
         cls,
@@ -122,6 +167,11 @@ class ExamTimetableService:
             scheduled_start_at=scheduled_start_at,
             latest_normal_start_at=latest_normal_start_at,
             duration_minutes=duration_minutes,
+        )
+        proposed_class_ids = await cls._derived_delivery_class_ids(
+            db,
+            curriculum_subject_id=curriculum_subject_id,
+            term_id=term_id,
         )
         rows = await cls.list_leaf_exams(
             db,
@@ -147,15 +197,30 @@ class ExamTimetableService:
                 latest_normal_start_at=row.latest_normal_start_at,
                 duration_minutes=row.duration_minutes,
             )
-            if cls.intervals_overlap(
+            if not cls.intervals_overlap(
                 scheduled_start_at, proposed_end, row.scheduled_start_at, row_end
             ):
-                raise ExamStateError(
-                    f"Academic level already has a planned examination overlapping this slot: {row.title}"
-                )
+                continue
+
+            row_class_ids = await cls._exam_delivery_class_ids(db, exam=row)
+            if proposed_class_ids.isdisjoint(row_class_ids):
+                continue
+
+            raise ExamStateError(
+                "Another examination with an overlapping student delivery scope "
+                f"is already planned for this slot: {row.title}"
+            )
 
     @classmethod
     async def require_level_free(cls, db: AsyncSession, *, exam_id: UUID) -> None:
+        """Keep the level lock, but reject only real candidate-scope collisions.
+
+        The method name is retained for compatibility with existing lifecycle hooks.
+        The level advisory lock serializes same-level activation/resume operations,
+        while the indexed EXISTS query lets disjoint department/class rosters run
+        concurrently without materializing candidate UUIDs in Python.
+        """
+
         exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id)
         if exam is None:
             raise ExamNotFound("Examination does not exist")
@@ -163,22 +228,35 @@ class ExamTimetableService:
         await cls.acquire_level_lock(
             db, session_id=exam.session_id, term_id=exam.term_id, level_id=level_id
         )
-        rows = await cls.list_leaf_exams(
-            db,
-            session_id=exam.session_id,
-            term_id=exam.term_id,
-            level_id=level_id,
-            exclude_exam_id=exam.id,
-            statuses=(
-                ExamStatus.ACTIVE,
-                ExamStatus.SUSPENDED,
-                ExamStatus.CLOSING,
-                ExamStatus.CANCELLING,
-            ),
+
+        current_candidate = aliased(ExamCandidate)
+        busy_candidate = aliased(ExamCandidate)
+        busy_exam = aliased(Exam)
+
+        overlap_exists = (
+            select(1)
+            .select_from(current_candidate)
+            .join(
+                busy_candidate,
+                and_(
+                    busy_candidate.student_id == current_candidate.student_id,
+                    busy_candidate.exam_id != current_candidate.exam_id,
+                    busy_candidate.status == CandidateStatus.ELIGIBLE,
+                ),
+            )
+            .join(busy_exam, busy_exam.id == busy_candidate.exam_id)
+            .where(
+                current_candidate.exam_id == exam.id,
+                current_candidate.status == CandidateStatus.ELIGIBLE,
+                busy_exam.status.in_(OPERATIONAL_EXAM_STATUSES),
+            )
+            .exists()
         )
-        if rows:
+
+        if bool(await db.scalar(select(overlap_exists))):
             raise ExamStateError(
-                "Another examination for this academic level is already active, suspended, or finalizing"
+                "One or more eligible candidates are already assigned to another "
+                "active, suspended, or finalizing examination"
             )
 
     @classmethod
@@ -199,6 +277,7 @@ class ExamTimetableService:
             exclude_exam_id=exam.id,
             statuses=(ExamStatus.DRAFT, ExamStatus.SUBMITTED, ExamStatus.SEALED),
         )
+        current_class_ids = await cls._exam_delivery_class_ids(db, exam=exam)
         current_end = exam.activated_at + timedelta(minutes=exam.duration_minutes)
         impacts: list[TimetableImpact] = []
         for row in rows:
@@ -211,6 +290,11 @@ class ExamTimetableService:
                 continue
             if row.scheduled_start_at >= current_end:
                 break
+
+            row_class_ids = await cls._exam_delivery_class_ids(db, exam=row)
+            if current_class_ids.isdisjoint(row_class_ids):
+                continue
+
             proposed_start = current_end
             proposed_end = proposed_start + timedelta(minutes=row.duration_minutes)
             impacts.append(
