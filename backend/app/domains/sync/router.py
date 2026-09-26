@@ -8,6 +8,7 @@ from app.core.database import DbSession
 from app.domains.auth.dependencies import CurrentLocalAdmin
 from app.domains.sync.schemas import SyncReconcileResponse, SyncStatusResponse
 from app.domains.sync.service import sync_service
+from app.workers.roster_delivery import enqueue_roster_reconciliation_after_sync
 
 router = APIRouter(prefix="/sync", tags=["Synchronization"])
 
@@ -45,5 +46,12 @@ async def reconcile_now(
 
     response.headers["Cache-Control"] = "no-store"
     if force_full:
-        return await sync_service.bootstrap(db, force=True)
-    return await sync_service.reconcile(db)
+        result = await sync_service.bootstrap(db, force=True)
+    else:
+        result = await sync_service.reconcile(db)
+
+    # The synchronization transaction has committed before this point. Any
+    # SEALED + READY rosters invalidated by enrollment changes are therefore
+    # durably STALE before we ask Redis/ARQ to reconcile them.
+    await enqueue_roster_reconciliation_after_sync(result)
+    return result
