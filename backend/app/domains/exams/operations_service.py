@@ -77,13 +77,13 @@ class ExamOperationsService:
         actor: LocalActor,
         exam_id: UUID,
         proposed_activation_at: datetime | None = None,
-        suggest_recovery_times: bool = True,
+        suggest_recovery_times: bool = False,
     ) -> ActivationPreflight:
         """Validate static readiness and calculate activation/timetable state.
 
-        UI preflight calls leave ``suggest_recovery_times`` enabled so proposed
-        recovery slots include operational headroom. Actual activation calls set
-        it to ``False`` and enforce only the real current-time state.
+        Enforcement calls use the real current-time state by default. UI
+        preflight calls explicitly enable ``suggest_recovery_times`` so proposed
+        recovery slots include operational headroom.
         """
 
         cls._require_admin(actor)
