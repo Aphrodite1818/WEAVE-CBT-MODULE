@@ -77,7 +77,15 @@ class ExamOperationsService:
         actor: LocalActor,
         exam_id: UUID,
         proposed_activation_at: datetime | None = None,
+        suggest_recovery_times: bool = True,
     ) -> ActivationPreflight:
+        """Validate static readiness and calculate activation/timetable state.
+
+        UI preflight calls leave ``suggest_recovery_times`` enabled so proposed
+        recovery slots include operational headroom. Actual activation calls set
+        it to ``False`` and enforce only the real current-time state.
+        """
+
         cls._require_admin(actor)
         exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id, lock=True)
         if exam is None:
@@ -88,6 +96,7 @@ class ExamOperationsService:
             exam_id=exam.id,
             proposed_activation_at=proposed_activation_at,
             include_conflict_details=True,
+            apply_recovery_buffer=suggest_recovery_times,
         )
 
     @classmethod
@@ -124,11 +133,14 @@ class ExamOperationsService:
             raise ExamNotFound("Examination does not exist")
         await cls._require_activation_static_readiness(db, source)
 
+        # First obtain the conservative UI-facing chain so only currently
+        # affected examinations may be changed by this recovery endpoint.
         current = await ExamTimetableService.activation_preflight(
             db,
             exam_id=source.id,
             proposed_activation_at=checked_at,
             include_conflict_details=True,
+            apply_recovery_buffer=True,
         )
         if "too_early" in current.blockers:
             raise ExamStateError(
@@ -180,12 +192,16 @@ class ExamOperationsService:
         overrides = {
             exam_id: value.astimezone(UTC) for exam_id, value in changes.items()
         }
+        # Validation uses the real current activation time, not a fresh rolling
+        # suggestion buffer. This makes the backend suggestion stable while the
+        # admin applies it and still validates custom times rigorously.
         proposed = await ExamTimetableService.activation_preflight(
             db,
             exam_id=source.id,
             proposed_activation_at=checked_at,
             schedule_overrides=overrides,
             include_conflict_details=True,
+            apply_recovery_buffer=False,
         )
         if "candidate_scope_conflict" in proposed.blockers:
             raise ExamStateError(
