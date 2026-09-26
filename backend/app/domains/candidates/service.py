@@ -150,18 +150,15 @@ class CandidateService:
         candidate: ExamCandidate,
         exam: Exam,
     ) -> None:
-        """Prevent unblocking from creating two operational exams for a student."""
+        """Prevent unblocking from creating two operational exams for a student.
+
+        The caller acquires the level advisory lock before any candidate/exam
+        row locks. Keeping that order aligned with activation/rescheduling
+        avoids advisory-lock/row-lock inversion under concurrent admin actions.
+        """
 
         if exam.status not in {ExamStatus.ACTIVE, ExamStatus.SUSPENDED}:
             return
-
-        level_id = await ExamTimetableService.level_id(db, exam.curriculum_subject_id)
-        await ExamTimetableService.acquire_level_lock(
-            db,
-            session_id=exam.session_id,
-            term_id=exam.term_id,
-            level_id=level_id,
-        )
 
         other_candidate = aliased(ExamCandidate)
         other_exam = aliased(Exam)
@@ -313,6 +310,26 @@ class CandidateService:
         candidate_id: UUID,
     ) -> CandidateResponse:
         cls._require_admin(actor)
+
+        # Resolve the immutable exam scope first without row locks, then acquire
+        # the same level advisory lock used by activation/rescheduling. Only
+        # after the advisory lock is held do we lock the candidate/exam rows.
+        # This keeps lock ordering consistent and prevents a row-lock/advisory-
+        # lock deadlock between concurrent admin operations.
+        _preview_candidate, preview_exam = await cls._get_candidate_and_exam(
+            db,
+            candidate_id=candidate_id,
+        )
+        level_id = await ExamTimetableService.level_id(
+            db,
+            preview_exam.curriculum_subject_id,
+        )
+        await ExamTimetableService.acquire_level_lock(
+            db,
+            session_id=preview_exam.session_id,
+            term_id=preview_exam.term_id,
+            level_id=level_id,
+        )
 
         candidate, exam = await cls._get_candidate_and_exam(
             db,
