@@ -16,7 +16,7 @@ from sqlalchemy import select
 from app.core.database import async_session_factory
 from app.domains.exams.models import Exam, ExamRosterStatus, ExamStatus
 from app.domains.sync.schemas import SyncReconcileResponse
-from app.workers.producer import arq_producer
+from app.workers.producer import arq_producer, roster_reconcile_job_id
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +25,10 @@ async def enqueue_stale_roster_reconciliations() -> int:
     """Immediately enqueue every durable SEALED + STALE roster.
 
     The query runs in a fresh session so this function can only observe roster
-    invalidations that have already committed. Deterministic ARQ job IDs make
-    duplicate delivery safe when maintenance discovers the same work later.
+    invalidations that have already committed. Each automatic reconciliation is
+    deduplicated by exam ID + current roster version. Repeated discovery of the
+    same stale generation collapses to one ARQ job, while a later enrollment
+    change against a newer roster version receives a fresh job ID immediately.
 
     Delivery is best-effort. A database/Redis failure here must not turn a
     successfully committed academic sync into an application failure because
@@ -35,10 +37,10 @@ async def enqueue_stale_roster_reconciliations() -> int:
 
     try:
         async with async_session_factory() as db:
-            exam_ids = list(
+            roster_generations = list(
                 (
                     await db.execute(
-                        select(Exam.id)
+                        select(Exam.id, Exam.roster_version)
                         .where(
                             Exam.status == ExamStatus.SEALED,
                             Exam.roster_status == ExamRosterStatus.STALE,
@@ -46,7 +48,7 @@ async def enqueue_stale_roster_reconciliations() -> int:
                         .order_by(Exam.updated_at.asc(), Exam.id.asc())
                     )
                 )
-                .scalars()
+                .tuples()
                 .all()
             )
             await db.rollback()
@@ -58,18 +60,19 @@ async def enqueue_stale_roster_reconciliations() -> int:
         return 0
 
     queued = 0
-    for exam_id in exam_ids:
+    for exam_id, roster_version in roster_generations:
         delivered = await arq_producer.enqueue(
             "reconcile_exam_roster",
             str(exam_id),
+            _job_id=roster_reconcile_job_id(exam_id, roster_version),
         )
         if delivered:
             queued += 1
 
-    if exam_ids:
+    if roster_generations:
         logger.info(
             "Immediate roster reconciliation delivery requested for %s stale exam(s); %s accepted by ARQ",
-            len(exam_ids),
+            len(roster_generations),
             queued,
         )
 
