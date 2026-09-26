@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 
 from app.core.database import DbSession
+from app.core.exceptions import AcademicAuthorizationError
 from app.domains.auth.dependencies import CurrentLocalActor
-from app.domains.exams.exceptions import ExamNotFound, ExamStateError
+from app.domains.exams.exceptions import (
+    ExamNotFound,
+    ExamScheduleImpactError,
+    ExamStateError,
+)
+from app.domains.exams.operations_service import ExamOperationsService
 from app.domains.exams.repository import ExamRepository
 from app.domains.exams.service import ExamService
 from app.domains.exams.timetable_schemas import (
+    ActivationPreflightResponse,
+    ActivationRescheduleRequest,
+    ActivationRescheduleResponse,
     BatchExamStartItemResponse,
     BatchExamStartRequest,
     BatchExamStartResponse,
@@ -30,6 +38,104 @@ def _require_admin(actor) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="School administrator access required.",
         )
+
+
+def _preflight_payload(preflight) -> dict:
+    return ActivationPreflightResponse.model_validate(preflight).model_dump(mode="json")
+
+
+def _preflight_error(preflight) -> HTTPException:
+    if "too_early" in preflight.blockers:
+        message = "Examination cannot be activated before its scheduled start time"
+        code = "activation_too_early"
+    elif "candidate_scope_conflict" in preflight.blockers:
+        message = (
+            "One or more eligible candidates are already part of another "
+            "operational examination"
+        )
+        code = "candidate_scope_conflict"
+    elif preflight.affected_exams:
+        message = (
+            "Activation would disrupt downstream examinations; reschedule the "
+            "affected chain before activating"
+        )
+        code = "activation_schedule_impact"
+    else:
+        message = "Examination is not ready for activation"
+        code = "activation_preflight_failed"
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": code,
+            "message": message,
+            "preflight": _preflight_payload(preflight),
+        },
+    )
+
+
+@router.post(
+    "/{exam_id}/activation-preflight",
+    response_model=ActivationPreflightResponse,
+)
+async def activation_preflight(
+    exam_id: UUID,
+    db: DbSession,
+    actor: CurrentLocalActor,
+) -> ActivationPreflightResponse:
+    try:
+        preflight = await ExamOperationsService.activation_preflight(
+            db,
+            actor=actor,
+            exam_id=exam_id,
+        )
+    except ExamNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AcademicAuthorizationError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except (ExamStateError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return ActivationPreflightResponse.model_validate(preflight)
+
+
+@router.post(
+    "/{exam_id}/activation-reschedule",
+    response_model=ActivationRescheduleResponse,
+)
+async def reschedule_activation_impact(
+    exam_id: UUID,
+    payload: ActivationRescheduleRequest,
+    db: DbSession,
+    actor: CurrentLocalActor,
+) -> ActivationRescheduleResponse:
+    changes = {item.exam_id: item.scheduled_start_at for item in payload.changes}
+    try:
+        exams, preflight = await ExamOperationsService.reschedule_activation_impact(
+            db,
+            actor=actor,
+            source_exam_id=exam_id,
+            changes=changes,
+            reason=payload.reason,
+        )
+    except ExamScheduleImpactError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "recovery_schedule_still_conflicts",
+                "message": str(exc),
+                "preflight": _preflight_payload(exc.preflight),
+            },
+        ) from exc
+    except ExamNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AcademicAuthorizationError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except (ExamStateError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    return ActivationRescheduleResponse(
+        rescheduled_exam_ids=[exam.id for exam in exams],
+        preflight=ActivationPreflightResponse.model_validate(preflight),
+    )
 
 
 @router.get("/{exam_id}/timetable-impact", response_model=list[TimetableImpactResponse])
@@ -52,22 +158,13 @@ async def start_exam_batch(
     db: DbSession,
     actor: CurrentLocalActor,
 ) -> BatchExamStartResponse:
-    _require_admin(actor)
+    """Start any mutually compatible exams, including parallel same-level scopes."""
 
-    exams = {}
-    levels = {}
-    for exam_id in payload.exam_ids:
-        exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id)
-        if exam is not None:
-            exams[exam_id] = exam
-            levels[exam_id] = await ExamTimetableService.level_id(
-                db, exam.curriculum_subject_id
-            )
-    level_counts = Counter(levels.values())
+    _require_admin(actor)
 
     results: list[BatchExamStartItemResponse] = []
     for exam_id in payload.exam_ids:
-        exam = exams.get(exam_id)
+        exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id)
         if exam is None:
             results.append(
                 BatchExamStartItemResponse(
@@ -77,25 +174,41 @@ async def start_exam_batch(
                 )
             )
             continue
-        if level_counts[levels[exam_id]] > 1:
-            results.append(
-                BatchExamStartItemResponse(
-                    exam_id=exam_id,
-                    started=False,
-                    error="Select at most one examination per academic level in a batch",
-                )
-            )
-            continue
+
         try:
+            preflight = await ExamOperationsService.activation_preflight(
+                db,
+                actor=actor,
+                exam_id=exam_id,
+            )
+            if not preflight.can_activate:
+                if preflight.affected_exams:
+                    error = (
+                        "Activation requires downstream timetable rescheduling: "
+                        + ", ".join(
+                            impact.title for impact in preflight.affected_exams
+                        )
+                    )
+                elif "candidate_scope_conflict" in preflight.blockers:
+                    error = "Candidates overlap another operational examination"
+                elif "too_early" in preflight.blockers:
+                    error = "Examination is not yet scheduled to start"
+                else:
+                    error = "Examination failed activation preflight"
+                results.append(
+                    BatchExamStartItemResponse(
+                        exam_id=exam_id,
+                        started=False,
+                        error=error,
+                    )
+                )
+                continue
+
             await ExamService.activate_exam(db, actor=actor, exam_id=exam_id)
-            impacts = await ExamTimetableService.impact_after_start(db, exam_id=exam_id)
             results.append(
                 BatchExamStartItemResponse(
                     exam_id=exam_id,
                     started=True,
-                    impacts=[
-                        TimetableImpactResponse(**impact.__dict__) for impact in impacts
-                    ],
                 )
             )
         except (ExamNotFound, ExamStateError, ValueError) as exc:
