@@ -17,6 +17,7 @@ from app.domains.candidates.models import CandidateStatus, ExamCandidate
 from app.domains.exams.exceptions import ExamNotFound, ExamScheduleImpactError, ExamStateError
 from app.domains.exams.models import (
     Exam,
+    ExamRosterStatus,
     ExamStatus,
     ExamSuspension,
     ExamTargetClass,
@@ -260,6 +261,27 @@ class ExamTimetableService:
         targets = await ExamRepository.list_target_classes_for_exam(db, exam.id)
         return {target.class_id for target in targets}
 
+    @staticmethod
+    def _uses_materialized_candidate_audience(exam: Exam) -> bool:
+        """Return whether frozen candidate rows are authoritative for conflicts.
+
+        Operational exams always use their frozen roster. A sealed exam may use
+        candidate rows only while its roster is READY. Selection/enrollment sync
+        moves READY rosters to STALE, at which point current Weave projections
+        become the source for pre-activation conflict checks until reconciliation.
+
+        The READY fallback keeps historical unit-test fixtures that predate the
+        explicit roster-status field equivalent to the old sealed-roster behavior;
+        real persisted Exam rows always carry a roster status.
+        """
+
+        if exam.status in OPERATIONAL_EXAM_STATUSES:
+            return True
+        if exam.status != ExamStatus.SEALED:
+            return False
+        roster_status = getattr(exam, "roster_status", ExamRosterStatus.READY)
+        return roster_status == ExamRosterStatus.READY
+
     @classmethod
     async def _projected_audience_ids(
         cls,
@@ -267,9 +289,9 @@ class ExamTimetableService:
         *,
         exam: Exam,
     ) -> set[UUID]:
-        """Return the best available student audience for timetable conflict checks."""
+        """Return the authoritative audience for one timetable conflict check."""
 
-        if exam.status not in {ExamStatus.DRAFT, ExamStatus.SUBMITTED}:
+        if cls._uses_materialized_candidate_audience(exam):
             rows = await db.execute(
                 select(ExamCandidate.student_id).where(
                     ExamCandidate.exam_id == exam.id,
@@ -278,11 +300,7 @@ class ExamTimetableService:
             )
             return set(rows.scalars().all())
 
-        class_ids = await cls._derived_delivery_class_ids(
-            db,
-            curriculum_subject_id=exam.curriculum_subject_id,
-            term_id=exam.term_id,
-        )
+        class_ids = await cls._exam_delivery_class_ids(db, exam=exam)
         return await ElectiveEligibilityService.projected_student_ids_for_classes(
             db,
             curriculum_subject_id=exam.curriculum_subject_id,
@@ -296,16 +314,21 @@ class ExamTimetableService:
         db: AsyncSession,
         exams: list[Exam],
     ) -> dict[UUID, frozenset[UUID]]:
-        """Resolve candidate audiences for activation/recovery in bounded queries."""
+        """Resolve current/frozen student audiences for activation and recovery.
+
+        READY sealed and operational exams are frozen candidate evidence. Draft,
+        submitted, and non-READY sealed exams are still pre-execution and are
+        resolved from the current Weave projection. This makes an elective choice
+        change visible immediately to activation preflight while preserving
+        immutable execution evidence once an exam has begun.
+        """
 
         result: dict[UUID, frozenset[UUID]] = {}
-        frozen_exams = [
-            exam
-            for exam in exams
-            if exam.status not in {ExamStatus.DRAFT, ExamStatus.SUBMITTED}
+        materialized = [
+            exam for exam in exams if cls._uses_materialized_candidate_audience(exam)
         ]
-        if frozen_exams:
-            exam_ids = [exam.id for exam in frozen_exams]
+        if materialized:
+            exam_ids = [exam.id for exam in materialized]
             rows = await db.execute(
                 select(ExamCandidate.exam_id, ExamCandidate.student_id).where(
                     ExamCandidate.exam_id.in_(exam_ids),
@@ -319,25 +342,29 @@ class ExamTimetableService:
                 {exam_id: frozenset(student_ids) for exam_id, student_ids in mutable.items()}
             )
 
-        derived_cache: dict[tuple[UUID, UUID, UUID], frozenset[UUID]] = {}
+        projected_cache: dict[
+            tuple[UUID, UUID, UUID, tuple[UUID, ...]], frozenset[UUID]
+        ] = {}
         for exam in exams:
-            if exam.status not in {ExamStatus.DRAFT, ExamStatus.SUBMITTED}:
+            if cls._uses_materialized_candidate_audience(exam):
                 continue
-            key = (exam.curriculum_subject_id, exam.term_id, exam.session_id)
-            if key not in derived_cache:
-                class_ids = await cls._derived_delivery_class_ids(
-                    db,
-                    curriculum_subject_id=exam.curriculum_subject_id,
-                    term_id=exam.term_id,
-                )
+            class_ids = await cls._exam_delivery_class_ids(db, exam=exam)
+            class_scope = tuple(sorted(class_ids, key=str))
+            key = (
+                exam.curriculum_subject_id,
+                exam.term_id,
+                exam.session_id,
+                class_scope,
+            )
+            if key not in projected_cache:
                 student_ids = await ElectiveEligibilityService.projected_student_ids_for_classes(
                     db,
                     curriculum_subject_id=exam.curriculum_subject_id,
-                    class_ids=tuple(class_ids),
+                    class_ids=class_scope,
                     academic_session_id=exam.session_id,
                 )
-                derived_cache[key] = frozenset(student_ids)
-            result[exam.id] = derived_cache[key]
+                projected_cache[key] = frozenset(student_ids)
+            result[exam.id] = projected_cache[key]
 
         return result
 
