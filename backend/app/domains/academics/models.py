@@ -266,6 +266,7 @@ class CurriculumSubject(WeaveProjectionMixin, Base):
     is_elective: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false"), index=True
     )
+    elective_group_id: Mapped[UUID | None] = mapped_column(nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true"), index=True
     )
@@ -317,6 +318,48 @@ class CurriculumSubjectDepartment(WeaveProjectionMixin, Base):
         Index(
             "ix_curriculum_subject_departments_live_department",
             "department_id",
+            postgresql_where=text("source_deleted_at IS NULL"),
+        ),
+    )
+
+
+class StudentElectiveSelection(WeaveProjectionMixin, Base):
+    """Authoritative current elective choice projected from Weave.
+
+    Selection rows are current intent, not historical exam evidence. CBT uses
+    them only while deriving or reconciling pre-execution candidate rosters.
+    Once an exam begins, the frozen candidate/attempt/result records remain the
+    local execution truth even if a later Cloud selection changes.
+    """
+
+    __tablename__ = "student_elective_selections"
+
+    student_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
+    elective_group_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
+    curriculum_subject_id: Mapped[UUID] = mapped_column(
+        ForeignKey("curriculum_subjects.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+
+    __table_args__ = (
+        Index(
+            "uq_student_elective_selections_live_student_subject",
+            "student_id",
+            "curriculum_subject_id",
+            unique=True,
+            postgresql_where=text("source_deleted_at IS NULL"),
+        ),
+        Index(
+            "ix_student_elective_selections_live_group_student",
+            "elective_group_id",
+            "student_id",
+            postgresql_where=text("source_deleted_at IS NULL"),
+        ),
+        Index(
+            "ix_student_elective_selections_live_subject_student",
+            "curriculum_subject_id",
+            "student_id",
             postgresql_where=text("source_deleted_at IS NULL"),
         ),
     )
