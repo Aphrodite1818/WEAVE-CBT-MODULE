@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 from uuid import uuid4
 
 import pytest
@@ -135,7 +135,7 @@ async def test_candidate_roster_intersects_frozen_classes_with_elective_choice()
 
     assert result == {selected.student_id: selected}
     enrollments.assert_awaited_once_with(
-        pytest.ANY,
+        ANY,
         [class_id],
         academic_session_id=session_id,
     )
