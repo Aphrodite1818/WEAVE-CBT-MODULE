@@ -1,3 +1,4 @@
+import { ToastHost } from '../src/shared/ui/ToastHost'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { AdminResultDetailPage, AdminResultsPage } from '../src/features/admin/pages/AdminResultsPage'
@@ -199,6 +200,7 @@ describe('Admin result review workspace', () => {
   })
 
   it('requires an audit reason before voiding the whole result set', async () => {
+    render(<ToastHost />)
     const exam = makeExam()
     const gateway = makeGateway()
 

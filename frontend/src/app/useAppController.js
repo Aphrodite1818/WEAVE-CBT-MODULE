@@ -211,6 +211,16 @@ export function useAppController({ application = "combined", gateway } = {}) {
     }
 
     const route = routeFromPath(location.pathname + location.search, application);
+    // Pairing state can commit before the router finishes its navigation.
+    // Preserve the success screen while the old pairing URL is still current.
+    if (application !== "student" && (
+      route.view === "paired-success" ||
+      (route.view === "pairing" && stateRef.current.view === "paired-success")
+    )) {
+      rawDispatch({ type: "view", view: "paired-success" });
+      if (route.view !== "paired-success") navigate("/setup/paired-success", { replace: true });
+      return;
+    }
     if (setupViews.has(route.view)) {
       rawDispatch({ type: "view", view: "landing" });
       navigate("/", { replace: true });

@@ -84,7 +84,7 @@ describe('Admin grouped sidebar navigation', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Examinations$/i }))
     fireEvent.click(screen.getByRole('button', { name: /^Roster$/i }))
 
-    expect(dispatch).toHaveBeenCalledWith({ type: 'staff', patch: { section: 'roster' } })
+    expect(dispatch).toHaveBeenCalledWith({ type: 'staff', patch: { section: 'roster', timetableLevelId: null } })
     expect(screen.getByRole('button', { name: /^Examinations$/i })).toHaveAttribute('aria-expanded', 'true')
   })
 })

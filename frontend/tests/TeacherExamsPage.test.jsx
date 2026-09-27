@@ -287,7 +287,7 @@ describe('Teacher exams', () => {
   it('requires confirmation before clearing saved manual selections when switching a draft to random', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
     const updateExam = vi.fn().mockResolvedValue({ authoring_version: 4 })
-    const configureExamQuestions = vi.fn().mockResolvedValue({ authoring_version: 5 })
+    const saveExamQuestionAuthoring = vi.fn().mockResolvedValue({ authoring_version: 5 })
     const selections = [
       { question_id: 'question-1', added_by_actor_id: 'actor-1' },
       { question_id: 'question-2', added_by_actor_id: 'actor-2' },
@@ -298,7 +298,7 @@ describe('Teacher exams', () => {
         getExam: vi.fn().mockResolvedValue({ authoring_version: 3 }),
         listManualQuestions: vi.fn().mockResolvedValue(selections),
         updateExam,
-        configureExamQuestions,
+        saveExamQuestionAuthoring,
       },
     }
     const editState = { ...teacherState, staff: { selectedExamId: 'exam-1' } }
@@ -310,17 +310,17 @@ describe('Teacher exams', () => {
     await waitFor(() => expect(confirmSpy).toHaveBeenCalledTimes(1))
     expect(confirmSpy.mock.calls[0][0]).toContain('2 manually selected questions from 2 contributors')
     expect(updateExam).not.toHaveBeenCalled()
-    expect(configureExamQuestions).not.toHaveBeenCalled()
+    expect(saveExamQuestionAuthoring).not.toHaveBeenCalled()
 
     await waitFor(() => expect(screen.getByRole('button', { name: /save changes/i })).toBeEnabled())
     confirmSpy.mockReturnValue(true)
     fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
 
-    await waitFor(() => expect(configureExamQuestions).toHaveBeenCalledWith('exam-1', {
+    await waitFor(() => expect(saveExamQuestionAuthoring).toHaveBeenCalledWith('exam-1', {
       question_bank_id: 'bank-1',
       question_selection_mode: 'random',
       question_count: 30,
-      clear_existing_manual_selections: true,
+      manual_question_ids: [],
       expected_authoring_version: 4,
     }))
     expect(updateExam).toHaveBeenCalledTimes(1)
@@ -376,7 +376,7 @@ it('shows preserved revisions on a dedicated page with an authorized draft edito
   expect(screen.queryByRole('textbox', { name: 'Exam title' })).not.toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Revision 1' })).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Revision 2' })).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: /Edit draft/ }))
+  fireEvent.click(screen.getByRole('button', { name: /Edit current draft/ }))
   expect(dispatch).toHaveBeenCalledWith({ type: 'staff', patch: { section: 'create-exam', selectedExamId: 'revision-2', examAuthoringNotice: '' } })
 })
 

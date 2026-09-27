@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { AdminWorkspace } from '../src/features/admin/AdminWorkspace'
 import { TeacherLayout } from '../src/features/teacher/TeacherLayout'
@@ -48,7 +48,7 @@ describe('Dashboard shell headers', () => {
     expect(account).toHaveClass('dashboard-account__trigger')
     expect(account.querySelector('.dashboard-account__avatar')).toHaveTextContent('M')
     expect(screen.queryByText('teacher@brightfield.test')).not.toBeInTheDocument()
-    expect(screen.getAllByText('Brightfield Academy')).toHaveLength(2)
+    expect(within(account.closest('header')).getByText('Brightfield Academy')).toBeInTheDocument()
 
     const serverName = screen.getByText('Main CBT Lab')
     expect(serverName.closest('.dashboard-server-identity')).toBeInTheDocument()
@@ -88,7 +88,7 @@ describe('Dashboard shell headers', () => {
     expect(account).toHaveClass('dashboard-account__trigger')
     expect(account.querySelector('.dashboard-account__avatar')).toHaveTextContent('A')
     expect(screen.queryByText('admin@brightfield.test')).not.toBeInTheDocument()
-    expect(screen.getAllByText('Brightfield Academy')).toHaveLength(2)
+    expect(within(account.closest('header')).getByText('Brightfield Academy')).toBeInTheDocument()
 
     const serverName = screen.getByText('Main CBT Lab')
     expect(serverName.closest('.dashboard-server-identity')).toBeInTheDocument()

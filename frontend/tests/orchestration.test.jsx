@@ -29,7 +29,9 @@ function routes(overrides = {}) {
 
 async function openSetup() {
   await screen.findByRole('heading', { name: /welcome to/i })
+  await waitFor(() => expect(window.location.pathname).toBe('/setup'))
   fireEvent.click(screen.getByRole('button', { name: /get started/i }))
+  await screen.findByLabelText(/pairing code/i)
 }
 
 function renderApp() {
@@ -40,6 +42,7 @@ async function submitCode() {
   await openSetup()
   fireEvent.change(screen.getByLabelText(/pairing code/i), { target: { value: 'CBT12345' } })
   fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+  await screen.findByLabelText(/server name/i)
 }
 
 async function openStaff() {
@@ -109,7 +112,7 @@ describe('Weave setup and first sync orchestration', () => {
     fireEvent.change(screen.getByLabelText(/server name/i), { target: { value: 'Main CBT Lab' } })
     fireEvent.click(screen.getByRole('button', { name: /complete setup/i }))
     expect(screen.getByRole('heading', { name: /pairing with weave/i })).toBeInTheDocument()
-    expect(screen.getByText(/processing the pairing request/i)).toBeInTheDocument()
+    expect(screen.getByText(/verifying your code and connecting/i)).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /successfully paired/i })).not.toBeInTheDocument()
     expect(JSON.parse(fetchMock.mock.calls.find(([url]) => url === '/api/v1/installation/pair')[1].body)).toEqual({ pairing_code: 'CBT12345', server_name: 'Main CBT Lab' })
     finish(new Response(JSON.stringify(paired), { status: 201 }))
@@ -154,7 +157,8 @@ describe('Weave setup and first sync orchestration', () => {
     const { container } = render(<BrowserRouter><App /></BrowserRouter>)
     await screen.findByRole('button', { name: /login as staff/i })
     await waitFor(() => expect(container.firstChild.style.getPropertyValue('--color-primary')).toBe('4 120 87'))
-    expect(screen.getByAltText(/brightfield academy logo/i).getAttribute('src')).toBe('/api/v1/branding/logo?v=logo-revision')
+    fireEvent.click(screen.getByRole('button', { name: /login as staff/i }))
+    expect(container.querySelector('.weave-login-tenant-logo')).toHaveAttribute('src', '/api/v1/branding/logo?v=logo-revision')
   })
 
   it('routes landing actions to separate staff and student pages with no role selector', async () => {
@@ -207,9 +211,10 @@ describe('Weave setup and first sync orchestration', () => {
     await openStaff()
     const teacherNavigation = await screen.findByRole('navigation', { name: /teacher navigation/i })
     expect(within(teacherNavigation).getByRole('button', { name: /question banks/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /good morning, mrs\./i })).toBeInTheDocument()
-    expect(screen.getByRole('navigation', { name: /teacher quick actions/i })).toBeInTheDocument()
-    expect(screen.getByText(/no draft exams right now/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /good (morning|afternoon|evening), mrs\./i })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /quick actions/i }))
+    expect(screen.getByRole('menu', { name: /teacher quick actions/i })).toBeInTheDocument()
+    expect(await screen.findByText(/no draft exams right now/i)).toBeInTheDocument()
     expect(within(screen.getByLabelText(/teacher workspace summary/i)).queryByText('320')).not.toBeInTheDocument()
     expect(fetchMock.mock.calls.some(([url]) => url === '/api/v1/sync/status')).toBe(false)
   })

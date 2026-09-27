@@ -69,6 +69,7 @@ function installFetch() {
     const routes = {
       'GET /api/v1/installation/status': () => jsonResponse(pairedStatus),
       'POST /api/v1/auth/login': () => jsonResponse(teacherLogin),
+      'GET /api/v1/questions/manageable': () => jsonResponse([question]),
       'GET /api/v1/questions/banks/authorable': () => jsonResponse([bank]),
       [`GET /api/v1/questions/banks/${bankId}/items`]: () => jsonResponse([question]),
       [`GET /api/v1/questions/${questionId}`]: () => jsonResponse(question),
@@ -101,8 +102,8 @@ describe('teacher question edit routing', () => {
     expect(await screen.findByText(question.prompt)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /^edit$/i }))
 
-    await waitFor(() => expect(window.location.pathname).toBe('/teacher/edit-question'))
-    expect(await screen.findByRole('heading', { name: 'Edit Question' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Question prompt')).toHaveValue(question.prompt)
+    await waitFor(() => expect(window.location.pathname).toBe(`/teacher/questions/${questionId}/edit`))
+    expect(await screen.findByRole('heading', { name: 'Question content' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('Question prompt')).toHaveValue(question.prompt))
   })
 })
