@@ -106,21 +106,12 @@ async def test_candidate_roster_intersects_frozen_classes_with_elective_choice()
     session_id = uuid4()
     curriculum_subject_id = uuid4()
     selected = SimpleNamespace(
-        id=uuid4(),
-        student_id=uuid4(),
-        class_id=class_id,
-        academic_session_id=session_id,
+        id=uuid4(), student_id=uuid4(), class_id=class_id, academic_session_id=session_id
     )
     unselected = SimpleNamespace(
-        id=uuid4(),
-        student_id=uuid4(),
-        class_id=class_id,
-        academic_session_id=session_id,
+        id=uuid4(), student_id=uuid4(), class_id=class_id, academic_session_id=session_id
     )
-    exam = SimpleNamespace(
-        session_id=session_id,
-        curriculum_subject_id=curriculum_subject_id,
-    )
+    exam = SimpleNamespace(session_id=session_id, curriculum_subject_id=curriculum_subject_id)
 
     with (
         patch(
@@ -133,17 +124,11 @@ async def test_candidate_roster_intersects_frozen_classes_with_elective_choice()
         ) as elective_filter,
     ):
         result = await CandidateService._eligible_enrollments_for_frozen_classes(
-            SimpleNamespace(),
-            exam=exam,
-            target_classes=[SimpleNamespace(class_id=class_id)],
+            SimpleNamespace(), exam=exam, target_classes=[SimpleNamespace(class_id=class_id)]
         )
 
     assert result == {selected.student_id: selected}
-    enrollments.assert_awaited_once_with(
-        ANY,
-        [class_id],
-        academic_session_id=session_id,
-    )
+    enrollments.assert_awaited_once_with(ANY, [class_id], academic_session_id=session_id)
     elective_filter.assert_awaited_once()
 
 
@@ -201,11 +186,7 @@ async def test_ready_sealed_roster_keeps_frozen_candidate_audience() -> None:
     db = SimpleNamespace(execute=AsyncMock(return_value=result))
 
     with (
-        patch.object(
-            ExamTimetableService,
-            "_exam_delivery_class_ids",
-            new=AsyncMock(),
-        ) as class_scope,
+        patch.object(ExamTimetableService, "_exam_delivery_class_ids", new=AsyncMock()) as class_scope,
         patch.object(
             ElectiveEligibilityService,
             "projected_student_ids_for_classes",
@@ -265,10 +246,7 @@ async def test_activation_scope_rechecks_stale_sibling_against_current_selection
             new=AsyncMock(return_value={shared_student_id}),
         ),
     ):
-        scopes = await ExamTimetableService._scope_map_for_exams(
-            db,
-            [source, sibling],
-        )
+        scopes = await ExamTimetableService._scope_map_for_exams(db, [source, sibling])
 
     assert scopes[source.id] == frozenset({shared_student_id})
     assert scopes[sibling.id] == frozenset({shared_student_id})
@@ -305,13 +283,12 @@ async def test_planning_allows_disjoint_grouped_electives_in_same_class_slot() -
     now = datetime.now(UTC)
     class_id = uuid4()
     proposed_subject_id = uuid4()
-    existing_subject_id = uuid4()
     existing_exam = SimpleNamespace(
         id=uuid4(),
         title="French",
         session_id=uuid4(),
         term_id=uuid4(),
-        curriculum_subject_id=existing_subject_id,
+        curriculum_subject_id=uuid4(),
         status=ExamStatus.SUBMITTED,
         scheduled_start_at=now,
         latest_normal_start_at=now,
@@ -322,35 +299,21 @@ async def test_planning_allows_disjoint_grouped_electives_in_same_class_slot() -
         patch.object(ExamTimetableService, "level_id", new=AsyncMock(return_value=uuid4())),
         patch.object(ExamTimetableService, "acquire_level_lock", new=AsyncMock()),
         patch.object(
-            ExamTimetableService,
-            "_derived_delivery_class_ids",
-            new=AsyncMock(return_value={class_id}),
+            ExamTimetableService, "_derived_delivery_class_ids", new=AsyncMock(return_value={class_id})
+        ),
+        patch.object(ExamTimetableService, "list_leaf_exams", new=AsyncMock(return_value=[existing_exam])),
+        patch.object(
+            ExamTimetableService, "_exam_delivery_class_ids", new=AsyncMock(return_value={class_id})
         ),
         patch.object(
-            ExamTimetableService,
-            "list_leaf_exams",
-            new=AsyncMock(return_value=[existing_exam]),
-        ),
-        patch.object(
-            ExamTimetableService,
-            "_exam_delivery_class_ids",
-            new=AsyncMock(return_value={class_id}),
-        ),
-        patch.object(
-            ElectiveEligibilityService,
-            "subject_requires_selection",
-            new=AsyncMock(return_value=True),
+            ElectiveEligibilityService, "subject_requires_selection", new=AsyncMock(return_value=True)
         ),
         patch.object(
             ElectiveEligibilityService,
             "projected_student_ids_for_classes",
             new=AsyncMock(return_value={uuid4()}),
         ),
-        patch.object(
-            ExamTimetableService,
-            "_projected_audience_ids",
-            new=AsyncMock(return_value={uuid4()}),
-        ),
+        patch.object(ExamTimetableService, "_projected_audience_ids", new=AsyncMock(return_value={uuid4()})),
     ):
         await ExamTimetableService.require_planned_slot_available(
             SimpleNamespace(),
@@ -385,24 +348,14 @@ async def test_planning_rejects_grouped_electives_when_student_audiences_interse
         patch.object(ExamTimetableService, "level_id", new=AsyncMock(return_value=uuid4())),
         patch.object(ExamTimetableService, "acquire_level_lock", new=AsyncMock()),
         patch.object(
-            ExamTimetableService,
-            "_derived_delivery_class_ids",
-            new=AsyncMock(return_value={class_id}),
+            ExamTimetableService, "_derived_delivery_class_ids", new=AsyncMock(return_value={class_id})
+        ),
+        patch.object(ExamTimetableService, "list_leaf_exams", new=AsyncMock(return_value=[existing_exam])),
+        patch.object(
+            ExamTimetableService, "_exam_delivery_class_ids", new=AsyncMock(return_value={class_id})
         ),
         patch.object(
-            ExamTimetableService,
-            "list_leaf_exams",
-            new=AsyncMock(return_value=[existing_exam]),
-        ),
-        patch.object(
-            ExamTimetableService,
-            "_exam_delivery_class_ids",
-            new=AsyncMock(return_value={class_id}),
-        ),
-        patch.object(
-            ElectiveEligibilityService,
-            "subject_requires_selection",
-            new=AsyncMock(return_value=True),
+            ElectiveEligibilityService, "subject_requires_selection", new=AsyncMock(return_value=True)
         ),
         patch.object(
             ElectiveEligibilityService,
