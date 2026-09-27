@@ -10,6 +10,7 @@ from sqlalchemy import and_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from app.domains.academics.electives import ElectiveEligibilityService
 from app.domains.academics.eligibility import AcademicEligibilityService
 from app.domains.academics.models import Curriculum, CurriculumSubject
 from app.domains.candidates.models import CandidateStatus, ExamCandidate
@@ -84,6 +85,10 @@ class ActivationPreflight:
 class _ScopeWindow:
     exam_id: UUID
     title: str
+    # Historically this field held class IDs. It now carries student audience
+    # IDs for activation/recovery calculations so parallel elective sittings are
+    # judged by actual candidate intersection. The name is retained to keep the
+    # internal cascade structure stable.
     class_ids: frozenset[UUID]
     start_at: datetime
     end_at: datetime | None
@@ -256,12 +261,42 @@ class ExamTimetableService:
         return {target.class_id for target in targets}
 
     @classmethod
+    async def _projected_audience_ids(
+        cls,
+        db: AsyncSession,
+        *,
+        exam: Exam,
+    ) -> set[UUID]:
+        """Return the best available student audience for timetable conflict checks."""
+
+        if exam.status not in {ExamStatus.DRAFT, ExamStatus.SUBMITTED}:
+            rows = await db.execute(
+                select(ExamCandidate.student_id).where(
+                    ExamCandidate.exam_id == exam.id,
+                    ExamCandidate.status == CandidateStatus.ELIGIBLE,
+                )
+            )
+            return set(rows.scalars().all())
+
+        class_ids = await cls._derived_delivery_class_ids(
+            db,
+            curriculum_subject_id=exam.curriculum_subject_id,
+            term_id=exam.term_id,
+        )
+        return await ElectiveEligibilityService.projected_student_ids_for_classes(
+            db,
+            curriculum_subject_id=exam.curriculum_subject_id,
+            class_ids=tuple(class_ids),
+            academic_session_id=exam.session_id,
+        )
+
+    @classmethod
     async def _scope_map_for_exams(
         cls,
         db: AsyncSession,
         exams: list[Exam],
     ) -> dict[UUID, frozenset[UUID]]:
-        """Resolve exam delivery scopes without one target-class query per exam."""
+        """Resolve candidate audiences for activation/recovery in bounded queries."""
 
         result: dict[UUID, frozenset[UUID]] = {}
         frozen_exams = [
@@ -272,29 +307,36 @@ class ExamTimetableService:
         if frozen_exams:
             exam_ids = [exam.id for exam in frozen_exams]
             rows = await db.execute(
-                select(ExamTargetClass.exam_id, ExamTargetClass.class_id).where(
-                    ExamTargetClass.exam_id.in_(exam_ids)
+                select(ExamCandidate.exam_id, ExamCandidate.student_id).where(
+                    ExamCandidate.exam_id.in_(exam_ids),
+                    ExamCandidate.status == CandidateStatus.ELIGIBLE,
                 )
             )
             mutable: dict[UUID, set[UUID]] = {exam_id: set() for exam_id in exam_ids}
-            for exam_id, class_id in rows.all():
-                mutable[exam_id].add(class_id)
+            for exam_id, student_id in rows.all():
+                mutable[exam_id].add(student_id)
             result.update(
-                {exam_id: frozenset(class_ids) for exam_id, class_ids in mutable.items()}
+                {exam_id: frozenset(student_ids) for exam_id, student_ids in mutable.items()}
             )
 
-        derived_cache: dict[tuple[UUID, UUID], frozenset[UUID]] = {}
+        derived_cache: dict[tuple[UUID, UUID, UUID], frozenset[UUID]] = {}
         for exam in exams:
             if exam.status not in {ExamStatus.DRAFT, ExamStatus.SUBMITTED}:
                 continue
-            key = (exam.curriculum_subject_id, exam.term_id)
+            key = (exam.curriculum_subject_id, exam.term_id, exam.session_id)
             if key not in derived_cache:
                 class_ids = await cls._derived_delivery_class_ids(
                     db,
                     curriculum_subject_id=exam.curriculum_subject_id,
                     term_id=exam.term_id,
                 )
-                derived_cache[key] = frozenset(class_ids)
+                student_ids = await ElectiveEligibilityService.projected_student_ids_for_classes(
+                    db,
+                    curriculum_subject_id=exam.curriculum_subject_id,
+                    class_ids=tuple(class_ids),
+                    academic_session_id=exam.session_id,
+                )
+                derived_cache[key] = frozenset(student_ids)
             result[exam.id] = derived_cache[key]
 
         return result
@@ -354,6 +396,13 @@ class ExamTimetableService:
             curriculum_subject_id=curriculum_subject_id,
             term_id=term_id,
         )
+        proposed_is_grouped_elective = (
+            await ElectiveEligibilityService.subject_requires_selection(
+                db,
+                curriculum_subject_id,
+            )
+        )
+        proposed_student_ids: set[UUID] | None = None
         rows = await cls.list_leaf_exams(
             db,
             session_id=session_id,
@@ -386,6 +435,29 @@ class ExamTimetableService:
             row_class_ids = await cls._exam_delivery_class_ids(db, exam=row)
             if proposed_class_ids.isdisjoint(row_class_ids):
                 continue
+
+            # Preserve the existing conservative class-overlap rule for normal
+            # subjects. The only exception is two grouped elective exams whose
+            # authoritative student audiences do not intersect.
+            row_is_grouped_elective = (
+                await ElectiveEligibilityService.subject_requires_selection(
+                    db,
+                    row.curriculum_subject_id,
+                )
+            )
+            if proposed_is_grouped_elective and row_is_grouped_elective:
+                if proposed_student_ids is None:
+                    proposed_student_ids = (
+                        await ElectiveEligibilityService.projected_student_ids_for_classes(
+                            db,
+                            curriculum_subject_id=curriculum_subject_id,
+                            class_ids=tuple(proposed_class_ids),
+                            academic_session_id=session_id,
+                        )
+                    )
+                row_student_ids = await cls._projected_audience_ids(db, exam=row)
+                if proposed_student_ids.isdisjoint(row_student_ids):
+                    continue
 
             raise ExamStateError(
                 "Another examination with an overlapping student delivery scope "
@@ -457,10 +529,6 @@ class ExamTimetableService:
         if exam is None:
             raise ExamNotFound("Examination does not exist")
 
-        # Activation must enforce the full schedule-impact contract at the
-        # service layer too. That prevents internal/background callers from
-        # bypassing the API preflight. The transaction-scoped advisory lock is
-        # acquired by activation_preflight itself.
         if exam.status == ExamStatus.SEALED:
             await cls.require_activation_clear(
                 db,
@@ -469,9 +537,6 @@ class ExamTimetableService:
             )
             return
 
-        # Resume does not rewrite the original activation timetable. It only
-        # needs to make sure none of this exam's candidates were assigned to a
-        # different operational exam while the sitting was suspended.
         level_id = await cls.level_id(db, exam.curriculum_subject_id)
         await cls.acquire_level_lock(
             db, session_id=exam.session_id, term_id=exam.term_id, level_id=level_id
@@ -546,9 +611,6 @@ class ExamTimetableService:
             proposed_start = scheduled
             causes: list[UUID] = []
 
-            # A still-SEALED exam whose slot is already in the past and whose
-            # candidates intersect the exam being activated must be moved after
-            # the source instead of being silently leapfrogged.
             if (
                 scheduled < checked_at
                 and not node.class_ids.isdisjoint(source_window.class_ids)
@@ -812,10 +874,6 @@ class ExamTimetableService:
                     actual_start_at=actual_start,
                     completed_pause=completed_pause.get(row.id, timedelta(0)),
                 )
-                # An exam that is still ACTIVE after its projected finish has
-                # no trustworthy finish time. Treat it like any other unresolved
-                # operational sitting until it actually closes rather than
-                # manufacturing a safe time at "now".
                 if projected_end <= checked_at:
                     unresolved = True
                 else:
@@ -838,12 +896,6 @@ class ExamTimetableService:
             else checked_at
         )
 
-        # A parallel department exam may be overdue but still SEALED when this
-        # source exam is preflighted. It is safe to run concurrently when its
-        # delivery scope is disjoint, but later general subjects depend on both
-        # branches. Project that pending parallel sitting from the same recovery
-        # window so downstream suggestions account for the branch instead of
-        # pretending its missed slot already happened.
         for row in rows:
             if row.status != ExamStatus.SEALED:
                 continue
