@@ -36,17 +36,36 @@ def upgrade() -> None:
         "student_elective_selections",
         sa.Column("student_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("elective_group_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("curriculum_subject_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("synced_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "curriculum_subject_id",
+            postgresql.UUID(as_uuid=True),
+            nullable=False,
+        ),
+        sa.Column(
+            "synced_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.Column("source_deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.ForeignKeyConstraint(
             ["curriculum_subject_id"],
             ["curriculum_subjects.id"],
             ondelete="RESTRICT",
-            name="fk_student_elective_selections_curriculum_subject_id_curriculum_subjects",
+            name="fk_elective_selection_curriculum_subject",
         ),
         sa.PrimaryKeyConstraint("id", name="pk_student_elective_selections"),
     )
@@ -94,6 +113,19 @@ def upgrade() -> None:
         ["curriculum_subject_id", "student_id"],
         unique=False,
         postgresql_where=sa.text("source_deleted_at IS NULL"),
+    )
+
+    # The wire contract remains v5 for compatibility with the Weave endpoint,
+    # but existing CBT installations may already have a completed v5 cursor from
+    # before elective selections were projected locally. Clearing the bootstrap
+    # marker forces exactly one authoritative snapshot on the next reconciliation
+    # without discarding the durable cursor or inventing a second wire version.
+    op.execute(
+        sa.text(
+            "UPDATE sync_states "
+            "SET bootstrap_completed_at = NULL, bootstrap_snapshot_id = NULL "
+            "WHERE scope = 'academics'"
+        )
     )
 
 
