@@ -236,7 +236,9 @@ class WeaveAcademicBootstrap(SyncContractBase):
     teachers: list[WeaveTeacherSnapshot]
     teacher_assignments: list[WeaveTeacherAssignmentSnapshot]
     student_enrollments: list[WeaveStudentEnrollmentSnapshot]
-    student_elective_selections: list[WeaveStudentElectiveSelectionSnapshot]
+    student_elective_selections: list[WeaveStudentElectiveSelectionSnapshot] = Field(
+        default_factory=list
+    )
 
     @model_validator(mode="after")
     def require_supported_schema(self) -> "WeaveAcademicBootstrap":
