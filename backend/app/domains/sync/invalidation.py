@@ -11,18 +11,19 @@ from app.domains.exams.models import Exam, ExamRosterStatus, ExamStatus
 class SyncInvalidationRepository:
     """Invalidate local derived state when synchronized academic truth changes.
 
-    Candidate rosters are derived from synchronized student enrollment. Once an
-    exam is ACTIVE the roster is execution evidence and must not be rewritten by
-    later Cloud changes. SEALED + READY rosters, however, are still pre-execution
-    materializations and must be refreshed when enrollment truth changes.
+    Candidate rosters are derived from synchronized enrollment and elective
+    selection truth. Once an exam is ACTIVE the roster is execution evidence and
+    must not be rewritten by later Cloud changes. SEALED + READY rosters,
+    however, are still pre-execution materializations and must be refreshed when
+    eligibility truth changes.
 
     The sync transaction already owns the global sync advisory lock. Candidate
     roster builders historically lock the exam row before waiting for that sync
     lock, so waiting on the same exam row here would create an inverse lock order.
     We therefore lock only currently available exam rows with SKIP LOCKED. A
     skipped exam is being changed by another transaction; after sync commits that
-    transaction must acquire the sync lock before reading enrollment truth, so it
-    will materialize from the newly committed academic state itself.
+    transaction must acquire the sync lock before reading academic truth, so it
+    will materialize from the newly committed state itself.
     """
 
     @staticmethod
@@ -50,7 +51,7 @@ class SyncInvalidationRepository:
             .values(
                 roster_status=ExamRosterStatus.STALE,
                 roster_error=(
-                    "Synchronized student enrollment changed; candidate roster "
+                    "Synchronized academic eligibility changed; candidate roster "
                     "must be reconciled before activation"
                 ),
             )

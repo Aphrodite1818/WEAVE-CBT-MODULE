@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.core.exceptions import AcademicAuthorizationError
+from app.domains.academics.electives import ElectiveEligibilityService
 from app.domains.academics.models import StudentEnrollment
 from app.domains.academics.repository import AcademicRepository
 from app.domains.auth.models import LocalActor
@@ -509,12 +510,13 @@ class CandidateService:
         exam: Exam,
         target_classes: list,
     ) -> dict[UUID, StudentEnrollment]:
-        """Return current active students inside the classes frozen at sealing.
+        """Return authoritative students inside the classes frozen at sealing.
 
-        ExamTargetClass is the approved academic audience snapshot. Candidate
-        membership is derived only from current active enrollment in those
-        classes for the exam's academic session. The removed subject-offering
-        contract has no role in candidate eligibility.
+        Compulsory subjects preserve the class-enrollment behavior. For grouped
+        electives, current Weave selection is intersected with those enrollments
+        before a candidate row is materialized. This method is only called while
+        the exam is SEALED, so later Cloud choice changes never rewrite running
+        attempts or completed result evidence.
         """
 
         class_ids = [target.class_id for target in target_classes]
@@ -522,6 +524,11 @@ class CandidateService:
             db,
             class_ids,
             academic_session_id=exam.session_id,
+        )
+        enrollments = await ElectiveEligibilityService.filter_enrollments(
+            db,
+            curriculum_subject_id=exam.curriculum_subject_id,
+            enrollments=enrollments,
         )
 
         return {
@@ -612,7 +619,7 @@ class CandidateService:
         *,
         exam_id: UUID,
     ):
-        """Refresh a stale roster against current enrollment in frozen classes."""
+        """Refresh a stale roster against current enrollment/elective truth."""
 
         exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id, lock=True)
         if exam is None:
@@ -674,6 +681,8 @@ class CandidateService:
             existing.display_name = cls._display_name(enrollment)
             existing.roster_version = next_roster_version
 
+            # Preserve explicit administrator blocks across automatic academic
+            # reconciliation. Eligible/withdrawn rows can follow Weave truth.
             if existing.status != CandidateStatus.BLOCKED:
                 existing.status = CandidateStatus.ELIGIBLE
                 existing.status_reason = None

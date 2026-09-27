@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domains.academics.electives import ElectiveProjectionRepository
 from app.domains.academics.models import (
     AcademicAdmin,
     AcademicClass,
@@ -35,6 +36,7 @@ from app.domains.academics.models import (
     CurriculumSubjectDepartment,
     Department,
     SchoolProfile,
+    StudentElectiveSelection,
     StudentEnrollment,
     TeacherAssignment,
 )
@@ -65,6 +67,7 @@ from app.integrations.weave.schemas import (
     WeaveCurriculumSubjectDepartmentSnapshot,
     WeaveCurriculumSubjectSnapshot,
     WeaveDepartmentSnapshot,
+    WeaveStudentElectiveSelectionSnapshot,
     WeaveStudentEnrollmentSnapshot,
     WeaveSubjectSnapshot,
     WeaveSyncChange,
@@ -95,6 +98,7 @@ ENTITY_SCHEMAS: dict[str, type[BaseModel]] = {
     "teacher": WeaveTeacherSnapshot,
     "teacher_assignment": WeaveTeacherAssignmentSnapshot,
     "student_enrollment": WeaveStudentEnrollmentSnapshot,
+    "student_elective_selection": WeaveStudentElectiveSelectionSnapshot,
 }
 
 ENTITY_MODELS: dict[str, type] = {
@@ -115,6 +119,7 @@ ENTITY_MODELS: dict[str, type] = {
     "teacher": AcademicTeacher,
     "teacher_assignment": TeacherAssignment,
     "student_enrollment": StudentEnrollment,
+    "student_elective_selection": StudentElectiveSelection,
 }
 
 UPSERT_ORDER = tuple(ENTITY_MODELS)
@@ -136,6 +141,7 @@ BOOTSTRAP_SECTIONS = (
     ("teacher", "teachers"),
     ("teacher_assignment", "teacher_assignments"),
     ("student_enrollment", "student_enrollments"),
+    ("student_elective_selection", "student_elective_selections"),
 )
 
 
@@ -186,6 +192,13 @@ class SyncService:
             db,
             deleted_at=payload.metadata.generated_at,
         )
+        # Student elective selections were introduced after the original
+        # projection-model registry. Tombstone them explicitly so a bootstrap
+        # cannot leave a stale local choice that Weave no longer returns.
+        await ElectiveProjectionRepository.mark_all_deleted(
+            db,
+            deleted_at=payload.metadata.generated_at,
+        )
         for entity_type, attribute in BOOTSTRAP_SECTIONS:
             snapshots = getattr(payload, attribute)
             await AcademicRepository.bulk_upsert_projections(
@@ -195,8 +208,8 @@ class SyncService:
                 synced_at=payload.metadata.generated_at,
             )
 
-        # A full bootstrap may replace enrollment truth wholesale. Any roster
-        # that has been prepared but has not started execution must be rebuilt.
+        # A full bootstrap may replace enrollment/elective truth wholesale. Any
+        # roster prepared before execution must be rebuilt from the new snapshot.
         await SyncInvalidationRepository.mark_pre_execution_rosters_stale(db)
 
         # Weave omits staff who are no longer authorized from the active
@@ -351,7 +364,12 @@ class SyncService:
                 synced_at=max(change.occurred_at for change, _ in entries),
             )
 
-        if any(change.entity_type == "student_enrollment" for change in effective):
+        eligibility_entities = {
+            "student_enrollment",
+            "student_elective_selection",
+            "curriculum_subject",
+        }
+        if any(change.entity_type in eligibility_entities for change in effective):
             await SyncInvalidationRepository.mark_pre_execution_rosters_stale(db)
 
         staff_changes = [

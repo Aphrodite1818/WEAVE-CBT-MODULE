@@ -145,6 +145,7 @@ class WeaveCurriculumSubjectSnapshot(SyncContractBase):
     curriculum_id: UUID
     subject_id: UUID
     is_elective: bool
+    elective_group_id: UUID | None = None
     is_active: bool
 
 
@@ -207,6 +208,13 @@ class WeaveStudentEnrollmentSnapshot(SyncContractBase):
     student_status: str
 
 
+class WeaveStudentElectiveSelectionSnapshot(SyncContractBase):
+    id: UUID
+    student_id: UUID
+    elective_group_id: UUID
+    curriculum_subject_id: UUID
+
+
 class WeaveAcademicBootstrap(SyncContractBase):
     metadata: WeaveSyncMetadata
     school: WeaveSchoolSnapshot
@@ -228,6 +236,9 @@ class WeaveAcademicBootstrap(SyncContractBase):
     teachers: list[WeaveTeacherSnapshot]
     teacher_assignments: list[WeaveTeacherAssignmentSnapshot]
     student_enrollments: list[WeaveStudentEnrollmentSnapshot]
+    student_elective_selections: list[WeaveStudentElectiveSelectionSnapshot] = Field(
+        default_factory=list
+    )
 
     @model_validator(mode="after")
     def require_supported_schema(self) -> "WeaveAcademicBootstrap":
@@ -256,6 +267,7 @@ WeaveSyncEntityType = Literal[
     "teacher",
     "teacher_assignment",
     "student_enrollment",
+    "student_elective_selection",
 ]
 WeaveSyncOperation = Literal["created", "updated", "deleted"]
 
