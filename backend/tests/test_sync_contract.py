@@ -15,16 +15,20 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from app import model_registry  # noqa: E402,F401
-from app.core.database import Base  # noqa: E402
-from app.domains.academics.models import CurriculumSubjectDepartment  # noqa: E402
-from app.domains.academics.repository import AcademicRepository  # noqa: E402
-from app.domains.node.identity_store import node_identity_store  # noqa: E402
-from app.domains.sync.invalidation import SyncInvalidationRepository  # noqa: E402
-from app.domains.sync.repository import SyncRepository  # noqa: E402
-from app.domains.sync.service import ENTITY_MODELS, ENTITY_SCHEMAS, SyncService  # noqa: E402
-from app.integrations.weave.exceptions import WeaveRequestRejectedError  # noqa: E402
-from app.integrations.weave.schemas import (  # noqa: E402
+from app import model_registry  # noqa: F401
+from app.core.database import Base
+from app.domains.academics.models import CurriculumSubjectDepartment
+from app.domains.academics.repository import AcademicRepository
+from app.domains.node.identity_store import node_identity_store
+from app.domains.sync.invalidation import SyncInvalidationRepository
+from app.domains.sync.repository import SyncRepository
+from app.domains.sync.service import (
+    ENTITY_MODELS,
+    ENTITY_SCHEMAS,
+    SyncService,
+)
+from app.integrations.weave.exceptions import WeaveRequestRejectedError
+from app.integrations.weave.schemas import (
     SYNC_SCHEMA_VERSION,
     WeaveAcademicBootstrap,
     WeaveCurriculumSubjectDepartmentSnapshot,
@@ -112,6 +116,7 @@ class SyncContractTests(unittest.TestCase):
             "teacher",
             "teacher_assignment",
             "student_enrollment",
+            "student_elective_selection",
         }
         self.assertEqual(set(ENTITY_MODELS), expected)
         self.assertEqual(set(ENTITY_SCHEMAS), expected)

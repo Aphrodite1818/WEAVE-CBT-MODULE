@@ -10,10 +10,11 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from app.domains.exams.exceptions import ExamStateError  # noqa: E402
-from app.domains.exams.models import ExamStatus  # noqa: E402
-from app.domains.exams.repository import ExamRepository  # noqa: E402
-from app.domains.exams.timetable_service import ExamTimetableService  # noqa: E402
+from app.domains.academics.repository import AcademicRepository
+from app.domains.exams.exceptions import ExamStateError
+from app.domains.exams.models import ExamStatus
+from app.domains.exams.repository import ExamRepository
+from app.domains.exams.timetable_service import ExamTimetableService
 
 
 class TimetableIntervalTests(unittest.TestCase):
@@ -86,6 +87,17 @@ class TimetableDeliveryScopeTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(
+                AcademicRepository,
+                "get_curriculum_subject_by_id",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(
+                        is_active=True,
+                        is_elective=False,
+                        elective_group_id=None,
+                    )
+                ),
+            ),
+            patch.object(
                 ExamTimetableService,
                 "level_id",
                 new=AsyncMock(return_value=level_id),
@@ -139,6 +151,17 @@ class TimetableDeliveryScopeTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(
+                AcademicRepository,
+                "get_curriculum_subject_by_id",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(
+                        is_active=True,
+                        is_elective=False,
+                        elective_group_id=None,
+                    )
+                ),
+            ),
+            patch.object(
                 ExamTimetableService,
                 "level_id",
                 new=AsyncMock(return_value=level_id),
@@ -160,19 +183,19 @@ class TimetableDeliveryScopeTests(unittest.IsolatedAsyncioTestCase):
                     side_effect=[{shared_class_id}, {shared_class_id}],
                 ),
             ),
-        ):
-            with self.assertRaisesRegex(
+            self.assertRaisesRegex(
                 ExamStateError,
                 "overlapping student delivery scope",
-            ):
-                await ExamTimetableService.require_planned_slot_available(
-                    db,
-                    session_id=session_id,
-                    term_id=term_id,
-                    curriculum_subject_id=subject_id,
-                    scheduled_start_at=start,
-                    duration_minutes=60,
-                )
+            ),
+        ):
+            await ExamTimetableService.require_planned_slot_available(
+                db,
+                session_id=session_id,
+                term_id=term_id,
+                curriculum_subject_id=subject_id,
+                scheduled_start_at=start,
+                duration_minutes=60,
+            )
 
 
 class TimetableOperationalScopeTests(unittest.IsolatedAsyncioTestCase):
@@ -292,15 +315,15 @@ class TimetableOperationalScopeTests(unittest.IsolatedAsyncioTestCase):
                 "acquire_operational_candidate_lock",
                 new=AsyncMock(),
             ),
-        ):
-            with self.assertRaisesRegex(
+            self.assertRaisesRegex(
                 ExamStateError,
                 "eligible candidates are already assigned",
-            ):
-                await ExamTimetableService.require_level_free(
-                    db,
-                    exam_id=current_exam.id,
-                )
+            ),
+        ):
+            await ExamTimetableService.require_level_free(
+                db,
+                exam_id=current_exam.id,
+            )
 
         db.scalar.assert_awaited_once()
 

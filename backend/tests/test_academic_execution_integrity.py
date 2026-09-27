@@ -13,13 +13,13 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from app.domains.academics.repository import AcademicRepository  # noqa: E402
-from app.domains.candidates.models import CandidateStatus  # noqa: E402
-from app.domains.candidates.repository import CandidateRepository  # noqa: E402
-from app.domains.candidates.service import CandidateService  # noqa: E402
-from app.domains.exams.models import ExamRosterStatus, ExamStatus  # noqa: E402
-from app.domains.exams.repository import ExamRepository  # noqa: E402
-from app.domains.sync.repository import SyncRepository  # noqa: E402
+from app.domains.academics.repository import AcademicRepository
+from app.domains.candidates.models import CandidateStatus
+from app.domains.candidates.repository import CandidateRepository
+from app.domains.candidates.service import CandidateService
+from app.domains.exams.models import ExamRosterStatus, ExamStatus
+from app.domains.exams.repository import ExamRepository
+from app.domains.sync.repository import SyncRepository
 
 
 def enrollment(*, student_id=None, class_id=None, session_id=None, admission="STD-001"):
@@ -41,6 +41,7 @@ def sealed_exam(**overrides):
     values = {
         "id": uuid4(),
         "session_id": uuid4(),
+        "curriculum_subject_id": uuid4(),
         "status": ExamStatus.SEALED,
         "roster_status": ExamRosterStatus.PENDING,
         "roster_version": 0,
@@ -79,6 +80,17 @@ class CandidateAcademicIntegrityTests(unittest.IsolatedAsyncioTestCase):
             return rows
 
         with (
+            patch.object(
+                AcademicRepository,
+                "get_curriculum_subject_by_id",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(
+                        is_active=True,
+                        is_elective=False,
+                        elective_group_id=None,
+                    )
+                ),
+            ),
             patch.object(
                 ExamRepository,
                 "get_exam_by_id",
@@ -171,6 +183,17 @@ class CandidateAcademicIntegrityTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with (
+            patch.object(
+                AcademicRepository,
+                "get_curriculum_subject_by_id",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(
+                        is_active=True,
+                        is_elective=False,
+                        elective_group_id=None,
+                    )
+                ),
+            ),
             patch.object(
                 ExamRepository,
                 "get_exam_by_id",

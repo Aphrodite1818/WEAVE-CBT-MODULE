@@ -17,12 +17,13 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ["DEBUG"] = "false"
 
 from app.core.exceptions import AcademicAuthorizationError
+from app.domains.attempts.repository import AttemptRepository
 from app.domains.candidates.models import CandidateStatus
 from app.domains.candidates.repository import CandidateRepository
 from app.domains.candidates.service import CandidateService
-from app.domains.attempts.repository import AttemptRepository
 from app.domains.exams.models import ExamRosterStatus, ExamStatus
 from app.domains.exams.repository import ExamRepository
+from app.domains.exams.timetable_service import ExamTimetableService
 
 
 def actor(*, role: str = "admin", membership_id=None) -> SimpleNamespace:
@@ -40,6 +41,9 @@ def exam(**overrides) -> SimpleNamespace:
     values = {
         "id": uuid4(),
         "title": "Mathematics CA 1",
+        "curriculum_subject_id": uuid4(),
+        "session_id": uuid4(),
+        "term_id": uuid4(),
         "status": ExamStatus.SEALED,
         "roster_status": ExamRosterStatus.READY,
         "roster_version": 2,
@@ -301,6 +305,15 @@ class CandidateServiceTests(unittest.IsolatedAsyncioTestCase):
         db = AsyncMock()
         with (
             patch.object(
+                ExamTimetableService, "level_id", new=AsyncMock(return_value=uuid4())
+            ),
+            patch.object(ExamTimetableService, "acquire_level_lock", new=AsyncMock()),
+            patch.object(
+                ExamTimetableService,
+                "acquire_operational_candidate_lock",
+                new=AsyncMock(),
+            ),
+            patch.object(
                 CandidateRepository,
                 "get_candidate_by_id",
                 new=AsyncMock(return_value=blocked),
@@ -355,6 +368,15 @@ class CandidateServiceTests(unittest.IsolatedAsyncioTestCase):
         db = AsyncMock()
         row = candidate(status=CandidateStatus.WITHDRAWN)
         with (
+            patch.object(
+                ExamTimetableService, "level_id", new=AsyncMock(return_value=uuid4())
+            ),
+            patch.object(ExamTimetableService, "acquire_level_lock", new=AsyncMock()),
+            patch.object(
+                ExamTimetableService,
+                "acquire_operational_candidate_lock",
+                new=AsyncMock(),
+            ),
             patch.object(
                 CandidateRepository,
                 "get_candidate_by_id",
