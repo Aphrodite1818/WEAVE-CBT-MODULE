@@ -75,19 +75,6 @@ class CandidateService:
             )
 
     @staticmethod
-    async def _require_current_roster_revision(
-        db: AsyncSession,
-        exam: Exam,
-    ) -> None:
-        """Reject roster mutations after a newer examination revision exists."""
-
-        child_revision = await ExamRepository.get_latest_child_revision(db, exam.id)
-        if child_revision is not None:
-            raise CandidateRosterError(
-                "This roster belongs to a superseded examination revision and is read-only"
-            )
-
-    @staticmethod
     async def _require_can_view_roster(
         db: AsyncSession,
         *,
@@ -300,7 +287,6 @@ class CandidateService:
             lock_exam=True,
         )
         cls._ensure_exam_mutable(exam.status)
-        await cls._require_current_roster_revision(db, exam)
 
         if candidate.status != CandidateStatus.ELIGIBLE:
             raise ValueError("Only eligible candidates can be blocked")
@@ -354,7 +340,6 @@ class CandidateService:
             lock_exam=True,
         )
         cls._ensure_exam_mutable(exam.status)
-        await cls._require_current_roster_revision(db, exam)
 
         if candidate.status != CandidateStatus.BLOCKED:
             raise ValueError("Only blocked candidates can be unblocked")
@@ -560,7 +545,6 @@ class CandidateService:
         if exam is None:
             raise ExamNotFound("Examination does not exist")
 
-        await cls._require_current_roster_revision(db, exam)
         if exam.status != ExamStatus.SEALED:
             raise CandidateRosterError(
                 "Candidate roster can only be prepared for a SEALED examination"
@@ -640,8 +624,6 @@ class CandidateService:
         exam = await ExamRepository.get_exam_by_id(db, exam_id=exam_id, lock=True)
         if exam is None:
             raise ExamNotFound("Examination does not exist")
-
-        await cls._require_current_roster_revision(db, exam)
         if exam.status != ExamStatus.SEALED:
             raise CandidateRosterError(
                 "Candidate roster can only be reconciled for a SEALED examination"
