@@ -10,12 +10,19 @@ from app.domains.candidates.exceptions import CandidateRosterError
 from app.domains.candidates.service import CandidateService
 from app.domains.exams.models import (
     ROSTER_ERROR_MAX_LENGTH,
+    Exam,
     ExamRosterStatus,
     ExamStatus,
 )
 from app.domains.exams.repository import ExamRepository
 
 logger = logging.getLogger(__name__)
+
+
+async def _is_superseded_revision(db, exam: Exam) -> bool:
+    """Return whether this roster belongs to an older exam revision."""
+
+    return await ExamRepository.get_latest_child_revision(db, exam.id) is not None
 
 
 async def _mark_roster_failed(
@@ -33,6 +40,11 @@ async def _mark_roster_failed(
         )
 
         if exam is None:
+            return
+
+        # Historical revisions are immutable. A stale queued job from an older
+        # deployment must not even rewrite the old snapshot to FAILED.
+        if await _is_superseded_revision(db, exam):
             return
 
         # Do not overwrite a roster another execution already completed.
@@ -73,6 +85,13 @@ async def prepare_exam_roster(
             if exam is None:
                 logger.warning(
                     "Roster job ignored because exam %s no longer exists",
+                    parsed_exam_id,
+                )
+                return
+
+            if await _is_superseded_revision(db, exam):
+                logger.info(
+                    "Roster preparation ignored for historical exam revision %s",
                     parsed_exam_id,
                 )
                 return
@@ -127,7 +146,8 @@ async def reconcile_exam_roster(
 
     Delivery is intentionally idempotent. PostgreSQL owns the roster lifecycle;
     duplicate or delayed ARQ jobs simply exit when another execution has already
-    completed the reconciliation or the exam has moved beyond SEALED.
+    completed the reconciliation, the exam has moved beyond SEALED, or the
+    revision has been superseded and become historical evidence.
     """
 
     try:
@@ -146,6 +166,13 @@ async def reconcile_exam_roster(
             if exam is None:
                 logger.warning(
                     "Roster reconciliation ignored because exam %s no longer exists",
+                    parsed_exam_id,
+                )
+                return
+
+            if await _is_superseded_revision(db, exam):
+                logger.info(
+                    "Roster reconciliation ignored for historical exam revision %s",
                     parsed_exam_id,
                 )
                 return
