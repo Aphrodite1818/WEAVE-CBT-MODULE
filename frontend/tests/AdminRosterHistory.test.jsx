@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { expect, it, vi } from 'vitest'
-import { AdminRosterDetailPage, AdminRostersPage } from '../src/features/admin/pages/AdminRostersPage'
+import { AdminRosterDetailPage } from '../src/features/admin/pages/AdminRostersPage'
+import { AdminCurrentRostersPage, AdminRosterHistoryPage } from '../src/features/admin/pages/AdminRosterViews'
 
 function makeSubject() {
   return {
@@ -17,14 +18,15 @@ function makeSubject() {
 function makeExam(overrides = {}) {
   return {
     id: 'exam-r1',
-    termId: 'term-1',
     title: 'JSS1 ENGLISH EXAM',
+    sessionId: 'session-1',
+    termId: 'term-1',
     academicLevelId: 'jss1',
     academicLevelName: 'JSS1',
     subjectName: 'English',
     subjectCode: 'ENG',
     curriculumSubjectId: 'jss1-english',
-    assessmentComponentId: 'component-exam',
+    assessmentComponentId: 'exam-component',
     assessmentName: 'Exam',
     status: 'sealed',
     statusLabel: 'Sealed',
@@ -53,7 +55,7 @@ function makeAdminData(exams) {
   }
 }
 
-it('shows only the latest operational revision in current rosters and groups earlier revisions in history', () => {
+function threeRevisionLineage() {
   const revision1 = makeExam({
     id: 'english-r1',
     revisionNumber: 1,
@@ -80,11 +82,17 @@ it('shows only the latest operational revision in current rosters and groups ear
     createdAt: '2026-09-28T16:30:00Z',
     updatedAt: '2026-09-28T17:10:00Z',
   })
+  return [revision1, revision2, revision3]
+}
+
+it('keeps the main roster page operational-only and links to roster history', () => {
+  const onNavigate = vi.fn()
+  const [revision1, revision2, revision3] = threeRevisionLineage()
 
   render(
-    <AdminRostersPage
+    <AdminCurrentRostersPage
       adminData={makeAdminData([revision1, revision2, revision3])}
-      onNavigate={vi.fn()}
+      onNavigate={onNavigate}
     />,
   )
 
@@ -92,20 +100,35 @@ it('shows only the latest operational revision in current rosters and groups ear
   expect(within(current).getByRole('button', { name: /open roster for jss1 english exam revision 3/i })).toBeInTheDocument()
   expect(within(current).queryByRole('button', { name: /revision 1/i })).not.toBeInTheDocument()
   expect(within(current).queryByRole('button', { name: /revision 2/i })).not.toBeInTheDocument()
-  expect(within(current).getByText('Revision 3')).toBeInTheDocument()
-  expect(within(current).getByText('v1')).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: /^roster history$/i })).not.toBeInTheDocument()
 
+  fireEvent.click(screen.getByRole('button', { name: /view roster history/i }))
+  expect(onNavigate).toHaveBeenCalledWith('roster-history')
+})
+
+it('groups previous revisions together on the dedicated history page', () => {
+  const [revision1, revision2, revision3] = threeRevisionLineage()
+
+  render(
+    <AdminRosterHistoryPage
+      adminData={makeAdminData([revision1, revision2, revision3])}
+      onNavigate={vi.fn()}
+    />,
+  )
+
+  expect(screen.getByRole('heading', { name: /^roster history$/i })).toBeInTheDocument()
   const history = screen.getByRole('region', { name: /roster history/i })
   expect(within(history).getByText('2 historical rosters')).toBeInTheDocument()
   expect(within(history).getByRole('button', { name: /open historical roster for jss1 english exam revision 2/i })).toBeInTheDocument()
   expect(within(history).getByRole('button', { name: /open historical roster for jss1 english exam revision 1/i })).toBeInTheDocument()
+  expect(within(history).queryByRole('button', { name: /revision 3/i })).not.toBeInTheDocument()
 })
 
-it('moves closed and cancelled latest rosters to history instead of the current listing', () => {
+it('filters historical rosters by lifecycle kind', () => {
   const closed = makeExam({
     id: 'closed-exam',
     title: 'JSS1 ENGLISH TEST',
-    assessmentComponentId: 'component-test',
+    assessmentComponentId: 'test-component',
     assessmentName: 'Test',
     status: 'closed',
     statusLabel: 'Closed',
@@ -113,28 +136,27 @@ it('moves closed and cancelled latest rosters to history instead of the current 
   const cancelled = makeExam({
     id: 'cancelled-exam',
     title: 'JSS1 ENGLISH PRACTICE',
-    assessmentComponentId: 'component-practice',
+    assessmentComponentId: 'practice-component',
     assessmentName: 'Practice',
     status: 'cancelled',
     statusLabel: 'Cancelled',
   })
 
   render(
-    <AdminRostersPage
+    <AdminRosterHistoryPage
       adminData={makeAdminData([closed, cancelled])}
       onNavigate={vi.fn()}
     />,
   )
 
-  const current = screen.getByRole('region', { name: /current rosters/i })
-  expect(within(current).queryByText('JSS1 ENGLISH TEST')).not.toBeInTheDocument()
-  expect(within(current).queryByText('JSS1 ENGLISH PRACTICE')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /open historical roster for jss1 english test revision 1/i })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /open historical roster for jss1 english practice revision 1/i })).toBeInTheDocument()
 
-  const history = screen.getByRole('region', { name: /roster history/i })
-  expect(within(history).getByRole('button', { name: /open historical roster for jss1 english test revision 1/i })).toBeInTheDocument()
-  expect(within(history).getByRole('button', { name: /open historical roster for jss1 english practice revision 1/i })).toBeInTheDocument()
-  expect(within(history).getByText('Closed')).toBeInTheDocument()
-  expect(within(history).getByText('Cancelled')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('combobox', { name: /roster history type filter/i }))
+  fireEvent.click(screen.getByRole('option', { name: /^Closed exams$/i }))
+
+  expect(screen.getByRole('button', { name: /open historical roster for jss1 english test revision 1/i })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /open historical roster for jss1 english practice revision 1/i })).not.toBeInTheDocument()
 })
 
 it('opens the exact historical revision rather than the current exam revision', () => {
@@ -149,7 +171,7 @@ it('opens the exact historical revision rather than the current exam revision', 
   })
 
   render(
-    <AdminRostersPage
+    <AdminRosterHistoryPage
       adminData={makeAdminData([revision1, revision2])}
       onNavigate={onNavigate}
     />,
