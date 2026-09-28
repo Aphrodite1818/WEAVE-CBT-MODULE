@@ -24,6 +24,7 @@ from app.domains.auth.student_schemas import (
 from app.domains.candidates.makeup_service import CandidateMakeupService
 from app.domains.candidates.models import CandidateStatus, ExamCandidate
 from app.domains.candidates.repository import CandidateRepository
+from app.domains.exams.lineage import latest_exam_revision_clause
 from app.domains.exams.models import Exam, ExamRosterStatus, ExamStatus
 
 STUDENT_SESSION_TOKEN_BYTES = 48
@@ -144,6 +145,7 @@ class StudentAuthService:
                 ExamCandidate.status == CandidateStatus.ELIGIBLE,
                 Exam.status.in_(statuses),
                 Exam.roster_status == ExamRosterStatus.READY,
+                latest_exam_revision_clause(),
             )
             .order_by(Exam.scheduled_start_at.asc().nulls_last(), Exam.id.asc())
         )
