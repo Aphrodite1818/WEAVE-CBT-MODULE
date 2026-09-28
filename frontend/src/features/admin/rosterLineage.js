@@ -1,3 +1,8 @@
+import {
+  currentExamRevisions,
+  examRevisionHistory,
+} from '../../shared/exams/examLineage'
+
 const CURRENT_ROSTER_EXAM_STATES = new Set([
   'sealed',
   'active',
@@ -29,42 +34,29 @@ function compareRevisionDesc(left, right) {
 
 export function buildRosterLineageIndex(exams = []) {
   const rows = Array.isArray(exams) ? exams : []
-  const byId = new Map(rows.map((exam) => [exam.id, exam]))
-  const parentIds = new Set(
-    rows.map((exam) => exam.revisionOfExamId).filter(Boolean),
-  )
+  const currentRows = currentExamRevisions(rows)
+  const currentIds = new Set(currentRows.map((exam) => exam.id))
+  const lineageByCurrentId = new Map()
+  const currentIdByExamId = new Map()
 
-  const rootIdFor = (exam) => {
-    let current = exam
-    const visited = new Set()
-    while (
-      current?.revisionOfExamId &&
-      byId.has(current.revisionOfExamId) &&
-      !visited.has(current.revisionOfExamId)
-    ) {
-      visited.add(current.id)
-      current = byId.get(current.revisionOfExamId)
-    }
-    return current?.id || exam.id
+  for (const current of currentRows) {
+    const lineage = examRevisionHistory(rows, current)
+    lineageByCurrentId.set(current.id, lineage)
+    for (const exam of lineage) currentIdByExamId.set(exam.id, current.id)
   }
 
-  const lineageByRoot = new Map()
-  for (const exam of rows) {
-    const rootId = rootIdFor(exam)
-    const lineage = lineageByRoot.get(rootId) || []
-    lineage.push(exam)
-    lineageByRoot.set(rootId, lineage)
+  return {
+    currentRows,
+    currentIds,
+    lineageByCurrentId,
+    currentIdFor: (exam) => currentIdByExamId.get(exam?.id) || exam?.id,
   }
-  for (const lineage of lineageByRoot.values()) {
-    lineage.sort(compareRevisionDesc)
-  }
-
-  return { byId, parentIds, lineageByRoot, rootIdFor }
 }
 
 export function isSupersededRevision(exam, exams = []) {
   if (!exam) return false
-  return buildRosterLineageIndex(exams).parentIds.has(exam.id)
+  const index = buildRosterLineageIndex(exams)
+  return index.currentIdFor(exam) !== exam.id
 }
 
 export function rosterHistoryKind(exam, exams = []) {
@@ -81,13 +73,11 @@ export function isHistoricalRoster(exam, exams = []) {
 export function partitionRosterExams(exams = []) {
   const rows = Array.isArray(exams) ? exams : []
   const index = buildRosterLineageIndex(rows)
-  const prepared = rows.filter(hasPreparedRoster)
 
-  const current = prepared
+  const current = index.currentRows
     .filter(
       (exam) =>
-        !index.parentIds.has(exam.id) &&
-        CURRENT_ROSTER_EXAM_STATES.has(exam.status),
+        hasPreparedRoster(exam) && CURRENT_ROSTER_EXAM_STATES.has(exam.status),
     )
     .sort((left, right) => {
       const leftTime = timeValue(left.scheduledStartAt) || timeValue(left.createdAt)
@@ -95,33 +85,29 @@ export function partitionRosterExams(exams = []) {
       return rightTime - leftTime
     })
 
-  const historyByRoot = new Map()
-  for (const exam of prepared) {
-    const historical =
-      index.parentIds.has(exam.id) || TERMINAL_EXAM_STATES.has(exam.status)
-    if (!historical) continue
+  const historyGroups = index.currentRows
+    .map((representative) => {
+      const lineage = index.lineageByCurrentId.get(representative.id) || [representative]
+      const entries = lineage
+        .filter(hasPreparedRoster)
+        .filter(
+          (exam) =>
+            exam.id !== representative.id || TERMINAL_EXAM_STATES.has(exam.status),
+        )
+        .sort(compareRevisionDesc)
 
-    const rootId = index.rootIdFor(exam)
-    const group = historyByRoot.get(rootId) || []
-    group.push(exam)
-    historyByRoot.set(rootId, group)
-  }
-
-  const historyGroups = [...historyByRoot.entries()]
-    .map(([rootId, entries]) => {
-      entries.sort(compareRevisionDesc)
-      const lineage = index.lineageByRoot.get(rootId) || entries
-      const representative = lineage[0] || entries[0]
+      if (!entries.length) return null
       return {
-        id: rootId,
-        title: representative?.title || 'Examination roster',
-        academicLevelName: representative?.academicLevelName || '',
-        subjectName: representative?.subjectName || '',
-        assessmentName: representative?.assessmentName || '',
+        id: representative.id,
+        title: representative.title || 'Examination roster',
+        academicLevelName: representative.academicLevelName || '',
+        subjectName: representative.subjectName || '',
+        assessmentName: representative.assessmentName || '',
         latestRevisionNumber: revisionNumber(representative),
         entries,
       }
     })
+    .filter(Boolean)
     .sort((left, right) => {
       const leftExam = left.entries[0]
       const rightExam = right.entries[0]
