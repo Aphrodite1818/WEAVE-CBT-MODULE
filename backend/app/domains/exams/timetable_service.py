@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import and_, select, text
@@ -42,6 +42,11 @@ ACTIVATION_IMPACT_TOLERANCE = timedelta(minutes=1)
 # this headroom, a suggestion calculated at 11:40:00 could become invalid at
 # 11:40:10 simply because the projected finish moved by ten seconds.
 ACTIVATION_RECOVERY_BUFFER = timedelta(minutes=5)
+
+# The current CBT deployment calendar is Nigerian school-local time (WAT,
+# UTC+01:00). Keep the business-date check independent of the host/container
+# timezone, because the packaged Docker runtime commonly runs in UTC.
+SCHOOL_CALENDAR_TIMEZONE = timezone(timedelta(hours=1), "WAT")
 
 
 @dataclass(frozen=True)
@@ -799,11 +804,18 @@ class ExamTimetableService:
         blockers: list[str] = []
         scheduled = exam.scheduled_start_at
         delay_seconds = 0
+        schedule_date_expired = False
         if scheduled is None:
             blockers.append("missing_schedule")
         else:
             scheduled = scheduled.astimezone(UTC)
-            if checked_at < scheduled:
+            scheduled_date = scheduled.astimezone(SCHOOL_CALENDAR_TIMEZONE).date()
+            checked_date = checked_at.astimezone(SCHOOL_CALENDAR_TIMEZONE).date()
+            if scheduled_date < checked_date:
+                schedule_date_expired = True
+                blockers.append("schedule_date_expired")
+                delay_seconds = int((checked_at - scheduled).total_seconds())
+            elif checked_at < scheduled:
                 blockers.append("too_early")
             else:
                 delay_seconds = int((checked_at - scheduled).total_seconds())
@@ -842,8 +854,12 @@ class ExamTimetableService:
         actual_projected_end: datetime | None = None
         impact_start = checked_at
         suggestion_valid_until_at: datetime | None = None
-        source_is_due = scheduled is not None and checked_at >= scheduled
-        if scheduled is not None:
+        source_is_due = (
+            scheduled is not None
+            and checked_at >= scheduled
+            and not schedule_date_expired
+        )
+        if scheduled is not None and not schedule_date_expired:
             actual_projected_end = cls.projected_end_for_actual_start(
                 exam,
                 actual_start_at=checked_at,
@@ -854,7 +870,7 @@ class ExamTimetableService:
             elif lateness > ACTIVATION_IMPACT_TOLERANCE and apply_recovery_buffer:
                 impact_start = checked_at + ACTIVATION_RECOVERY_BUFFER
                 suggestion_valid_until_at = impact_start
-        elif source_scope:
+        elif scheduled is None and source_scope:
             actual_projected_end = cls.projected_end_for_actual_start(
                 exam,
                 actual_start_at=checked_at,
@@ -1012,6 +1028,11 @@ class ExamTimetableService:
         )
         if "missing_schedule" in preflight.blockers:
             raise ExamStateError("Examination is missing a scheduled start time")
+        if "schedule_date_expired" in preflight.blockers:
+            raise ExamStateError(
+                "Examination scheduled date has passed; reschedule the examination "
+                "before activation"
+            )
         if "too_early" in preflight.blockers:
             raise ExamStateError(
                 "Examination cannot be activated before its scheduled start time"
