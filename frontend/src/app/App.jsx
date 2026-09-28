@@ -1,3 +1,4 @@
+import { StudentSuspensionNotice } from '../features/student/StudentSuspensionNotice'
 import { AdminWorkspace } from '../features/admin/AdminWorkspace'
 import { StaffLoginPage } from '../features/auth/StaffLoginPage'
 import { StudentLoginPage } from '../features/auth/StudentLoginPage'
@@ -14,7 +15,7 @@ import { weaveGateway } from './gateway'
 import { useAppController } from './useAppController'
 
 export default function App() {
-  const { state, dispatch, boot, pair, signInStaff, signInStudent, signOut } = useAppController({ gateway: weaveGateway })
+  const { state, studentSuspension, dismissStudentSuspension, handleStudentSuspension, dispatch, boot, pair, signInStaff, signInStudent, signOut } = useAppController({ gateway: weaveGateway })
   const branding = state.installation.configured ? state.branding : createDefaultBranding()
   const currentRole = state.session?.role || state.session?.type
 
@@ -34,9 +35,10 @@ export default function App() {
       {state.view === 'student-login' && <StudentLoginPage error={state.authError} loading={state.authLoading} branding={branding} onSubmit={signInStudent} onBack={() => dispatch({ type: 'view', view: 'landing' })} />}
       {state.view === 'sync-check' && <ProductLoadingScreen title="Checking server readiness" copy="Reading the local synchronization status." />}
       {state.view === 'initial-sync' && <InitialSyncPage error={state.syncError} status={state.syncStatus} branding={branding} dispatch={dispatch} />}
-      {state.view === 'student' && <StudentWorkspace exam={state.exam} resolution={state.studentResolution} gateway={weaveGateway} dispatch={dispatch} returnToSignIn={signOut} />}
+      {state.view === 'student' && <StudentWorkspace serverName={state.installation.status?.server_name} onExamSuspended={handleStudentSuspension} branding={branding} schoolName={state.installation.status?.tenant_name} exam={state.exam} resolution={state.studentResolution} gateway={weaveGateway} dispatch={dispatch} returnToSignIn={signOut} />}
       {state.view === 'staff' && currentRole === 'teacher' && <TeacherWorkspace state={state} dispatch={dispatch} signOut={signOut} gateway={weaveGateway} />}
       {state.view === 'staff' && currentRole === 'admin' && <AdminWorkspace state={state} dispatch={dispatch} signOut={signOut} gateway={weaveGateway} />}
+      <StudentSuspensionNotice notice={studentSuspension} onDismiss={dismissStudentSuspension} />
       <ToastHost />
     </div>
   )

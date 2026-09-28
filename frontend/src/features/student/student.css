@@ -22,7 +22,7 @@
   gap: 24px;
 }
 
-.premium-exam-header-left .weave-logo {
+.premium-exam-header-left .dashboard-school-identity {
   padding-right: 24px;
   border-right: 1px solid #E2E8F0;
 }
@@ -330,3 +330,51 @@
 }
 .premium-lobby-card h1 { font-size: 28px; color: #0F172A; margin: 16px 0; }
 .premium-lobby-card p { color: #64748B; font-size: 16px; margin-bottom: 32px; }
+
+.premium-nav-grid .nav-btn { position: relative; }
+.premium-nav-grid .nav-btn.flagged { border: 2px solid #b77915; }
+.premium-review-flag { position: absolute; top: -5px; right: -4px; padding: 2px; box-sizing: content-box; border-radius: 4px; background: #fff3cd; color: #8a5700; }
+.premium-exam-header-left { min-width: 0; }
+.premium-exam-header-left .dashboard-school-identity { min-width: 0; }
+@media (max-width: 760px) {
+  .premium-exam-header { flex-wrap: wrap; gap: 16px; }
+  .premium-exam-header-left { flex-wrap: wrap; gap: 12px; }
+}
+
+.premium-student-identity { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.premium-student-identity .student-avatar { width: 38px; height: 38px; flex: 0 0 38px; border: 1px solid rgb(var(--color-primary) / .2); background: rgb(var(--color-primary) / .1); color: rgb(var(--color-primary)); font-size: 15px; font-weight: 700; }
+.premium-student-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgb(var(--color-text)); font-size: 14px; font-weight: 650; line-height: 1.4; }
+@media (max-width: 480px) {
+  .premium-student-name { max-width: 160px; }
+}
+
+/* School identity and a readable examination title are separate header rows. */
+.premium-exam-shell .premium-exam-header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(140px, .8fr) auto; gap: 18px 24px; padding: 18px 28px 20px; }
+.premium-exam-header-left .dashboard-school-identity { padding-right: 0; border-right: 0; }
+.premium-exam-title { grid-column: 1 / -1; border-top: 1px solid rgb(var(--color-border)); padding-top: 16px; }
+.premium-exam-title h1 { margin: 0; color: rgb(var(--color-text)); font-size: clamp(20px, 2vw, 26px); line-height: 1.35; font-weight: 750; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.premium-exam-server { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.premium-exam-server > span { display: grid; place-items: center; flex: 0 0 34px; height: 34px; border-radius: 10px; background: rgb(var(--color-primary) / .1); color: rgb(var(--color-primary)); }
+.premium-exam-server > div { display: grid; gap: 3px; min-width: 0; }
+.premium-exam-server small { color: rgb(var(--color-text-muted)); font-size: 10px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+.premium-exam-server strong { color: rgb(var(--color-text)); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.premium-exam-header-right { justify-content: flex-end; }
+.premium-exam-header .premium-student-logout { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 0 13px; border: 1px solid rgb(var(--color-primary) / .25); border-radius: 10px; background: rgb(var(--color-primary) / .06); color: rgb(var(--color-primary)); font-weight: 650; transition: background 150ms ease, border-color 150ms ease; }
+.premium-exam-header .premium-student-logout:hover { background: rgb(var(--color-primary) / .12); border-color: rgb(var(--color-primary) / .55); }
+.premium-exam-header .premium-student-logout:focus-visible { outline: 2px solid rgb(var(--color-primary)); outline-offset: 3px; }
+.student-suspension-dialog { width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 28px; border: 1px solid rgb(var(--color-border)); border-radius: 20px; background: rgb(var(--color-surface)); color: rgb(var(--color-text)); box-shadow: 0 24px 80px rgb(15 23 42 / .25); }
+.student-suspension-dialog::backdrop { background: rgb(15 23 42 / .48); }
+.student-suspension-dialog__icon { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 20px; border-radius: 16px; background: rgb(var(--color-primary) / .1); color: rgb(var(--color-primary)); }
+.student-suspension-dialog h2 { margin: 0 0 12px; font-size: 22px; line-height: 1.3; }
+.student-suspension-dialog p { color: rgb(var(--color-text-muted)); font-size: 14px; line-height: 1.6; }
+.student-suspension-dialog button { width: 100%; margin-top: 10px; }
+@media (max-width: 900px) {
+  .premium-exam-shell .premium-exam-header { grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 16px 20px; }
+  .premium-exam-server { grid-row: 2; grid-column: 1 / -1; }
+  .premium-exam-header-right { grid-column: 2; grid-row: 1; }
+}
+@media (max-width: 560px) {
+  .premium-exam-shell .premium-exam-header { grid-template-columns: minmax(0, 1fr); }
+  .premium-exam-header-right { grid-column: 1; grid-row: auto; justify-content: space-between; }
+  .premium-exam-server { grid-row: auto; }
+}

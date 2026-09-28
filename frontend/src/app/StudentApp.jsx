@@ -1,3 +1,4 @@
+import { StudentSuspensionNotice } from '../features/student/StudentSuspensionNotice'
 import { ToastHost } from '../shared/ui/ToastHost'
 import { StudentLoginPage } from '../features/auth/StudentLoginPage'
 import { LandingPage } from '../features/landing/LandingPage'
@@ -8,7 +9,7 @@ import { buildBrandingThemeStyle, createDefaultBranding } from './theme/branding
 import { useAppController } from './useAppController'
 
 export default function StudentApp() {
-  const { state, dispatch, boot, signInStudent, signOut } = useAppController({
+  const { state, studentSuspension, dismissStudentSuspension, handleStudentSuspension, dispatch, boot, signInStudent, signOut } = useAppController({
     application: 'student',
     gateway: studentGateway,
   })
@@ -41,7 +42,9 @@ export default function StudentApp() {
         />
       )}
       {state.view === 'student' && (
-        <StudentWorkspace
+        <StudentWorkspace serverName={state.installation.status?.server_name} onExamSuspended={handleStudentSuspension}
+          branding={branding}
+          schoolName={state.installation.status?.tenant_name}
           exam={state.exam}
           resolution={state.studentResolution}
           gateway={studentGateway}
@@ -49,6 +52,7 @@ export default function StudentApp() {
           returnToSignIn={signOut}
         />
       )}
+      <StudentSuspensionNotice notice={studentSuspension} onDismiss={dismissStudentSuspension} />
       <ToastHost />
     </div>
   )

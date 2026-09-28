@@ -120,3 +120,15 @@
   border-color: rgb(var(--color-focus-ring));
   box-shadow: 0 0 0 3px rgb(var(--color-focus-ring) / .10);
 }
+
+/* The exam navigator provides the dominant school color; the paper stays quiet. */
+.weave-app .premium-exam-sidebar { background: rgb(var(--color-primary)); border-color: rgb(var(--color-primary)); color: rgb(var(--color-on-primary)); }
+.weave-app .premium-exam-sidebar .premium-timer-box { background: rgb(var(--color-on-primary) / .1); border-color: rgb(var(--color-on-primary) / .3); }
+.weave-app .premium-exam-sidebar .premium-timer-box span { color: rgb(var(--color-on-primary) / .85); }
+.weave-app .premium-exam-sidebar .premium-timer-box strong,
+.weave-app .premium-exam-sidebar .premium-question-nav h3 { color: rgb(var(--color-on-primary)); }
+.weave-app .premium-exam-sidebar .nav-btn { background: rgb(var(--color-primary)); color: rgb(var(--color-on-primary)); border-color: rgb(var(--color-on-primary) / .45); }
+.weave-app .premium-exam-sidebar .nav-btn:hover { background: rgb(var(--color-on-primary) / .16); }
+.weave-app .premium-exam-sidebar .nav-btn.answered { background: rgb(var(--color-on-primary) / .2); color: rgb(var(--color-on-primary)); border-color: rgb(var(--color-on-primary) / .65); }
+.weave-app .premium-exam-sidebar .nav-btn.current { background: rgb(var(--color-on-primary)); color: rgb(var(--color-primary)); border-color: rgb(var(--color-on-primary)); box-shadow: 0 3px 10px rgb(0 0 0 / .12); }
+.weave-app .premium-exam-sidebar .nav-btn.flagged { border-color: #f4c95d; }

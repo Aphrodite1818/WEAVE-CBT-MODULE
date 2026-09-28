@@ -7,6 +7,9 @@ import {
 } from '../api/studentAuth'
 import {
   getCurrentAttempt,
+  heartbeatCurrentAttempt,
+  getCurrentQuestionImage,
+  getCurrentOptionImage,
   saveCurrentAnswer,
   startCurrentAttempt,
   submitCurrentAttempt,
@@ -26,6 +29,9 @@ export const studentGateway = {
   },
   attempts: {
     getCurrentAttempt,
+    heartbeatCurrentAttempt,
+    getCurrentQuestionImage,
+    getCurrentOptionImage,
     saveCurrentAnswer,
     startCurrentAttempt,
     submitCurrentAttempt,

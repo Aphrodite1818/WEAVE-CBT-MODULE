@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { appReducer, createInitialState } from "./state/appState";
 
@@ -52,6 +52,7 @@ export function useAppController({ application = "combined", gateway } = {}) {
     undefined,
     createInitialState,
   );
+  const [studentSuspension, setStudentSuspension] = useState(null);
   const pairPending = useRef(false);
   const bootPending = useRef(true);
   const stateRef = useRef(state);
@@ -440,7 +441,16 @@ export function useAppController({ application = "combined", gateway } = {}) {
     navigate("/", { replace: true });
   }, [application, gateway, navigate, state.session]);
 
+  const handleStudentSuspension = useCallback(async (message) => {
+    setStudentSuspension({ message, signingOut: true });
+    await signOut();
+    setStudentSuspension({ message, signingOut: false });
+  }, [signOut]);
+
   return {
+    studentSuspension,
+    dismissStudentSuspension: () => setStudentSuspension(null),
+    handleStudentSuspension,
     state,
     dispatch: routeDispatch,
     boot,
