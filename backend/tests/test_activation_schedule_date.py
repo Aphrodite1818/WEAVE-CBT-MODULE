@@ -10,17 +10,17 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from fastapi import HTTPException
+from fastapi import HTTPException  # noqa: E402
 
-from app.domains.exams import router as exam_router
-from app.domains.exams import timetable_router
-from app.domains.exams.exceptions import ExamStateError
-from app.domains.exams.models import ExamStatus
-from app.domains.exams.operations_service import ExamOperationsService
-from app.domains.exams.repository import ExamRepository
-from app.domains.exams.service import ExamService
-from app.domains.exams.timetable_schemas import BatchExamStartRequest
-from app.domains.exams.timetable_service import (
+from app.domains.exams import router as exam_router  # noqa: E402
+from app.domains.exams import timetable_router  # noqa: E402
+from app.domains.exams.exceptions import ExamStateError  # noqa: E402
+from app.domains.exams.models import ExamStatus  # noqa: E402
+from app.domains.exams.operations_service import ExamOperationsService  # noqa: E402
+from app.domains.exams.repository import ExamRepository  # noqa: E402
+from app.domains.exams.service import ExamService  # noqa: E402
+from app.domains.exams.timetable_schemas import BatchExamStartRequest  # noqa: E402
+from app.domains.exams.timetable_service import (  # noqa: E402
     ActivationPreflight,
     ExamTimetableService,
 )
