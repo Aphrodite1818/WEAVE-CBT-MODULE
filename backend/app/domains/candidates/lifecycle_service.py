@@ -150,6 +150,7 @@ class CandidateService(_CandidateService):
         if exam is None:
             raise ExamNotFound("Examination does not exist")
 
+        await cls._require_current_roster_revision(db, exam)
         if exam.status != ExamStatus.SEALED:
             raise CandidateRosterError(
                 "Failed roster recovery is only available for a SEALED examination"
