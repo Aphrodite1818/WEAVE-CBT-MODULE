@@ -1,4 +1,5 @@
 import { StudentSuspensionNotice } from '../features/student/StudentSuspensionNotice'
+import { StudentCompletedExamPage } from '../features/student/StudentCompletedExamPage'
 import { ToastHost } from '../shared/ui/ToastHost'
 import { StudentLoginPage } from '../features/auth/StudentLoginPage'
 import { LandingPage } from '../features/landing/LandingPage'
@@ -41,7 +42,10 @@ export default function StudentApp() {
           onBack={() => dispatch({ type: 'view', view: 'landing' })}
         />
       )}
-      {state.view === 'student' && (
+      {state.view === 'student' && state.studentResolution?.state === 'completed' && (
+        <StudentCompletedExamPage gateway={studentGateway} returnToSignIn={signOut} />
+      )}
+      {state.view === 'student' && state.studentResolution?.state !== 'completed' && (
         <StudentWorkspace serverName={state.installation.status?.server_name} onExamSuspended={handleStudentSuspension}
           branding={branding}
           schoolName={state.installation.status?.tenant_name}
