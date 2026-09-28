@@ -20,6 +20,7 @@ from app.domains.exams.execution_models import (
     ExamExecutionControl,
     ExamResultDisposition,
 )
+from app.domains.exams.lineage import latest_exam_revision_clause
 from app.domains.exams.models import Exam, ExamRosterStatus, ExamStatus
 from app.domains.results.models import (
     RESULT_SYNC_ERROR_MAX_LENGTH,
@@ -118,11 +119,12 @@ async def _recover_stale_result_batches(*, now: datetime) -> set[UUID]:
 
 
 async def _list_roster_exam_ids_needing_recovery() -> tuple[list[UUID], list[UUID]]:
-    """Return durable preparation and reconciliation work for sealed rosters.
+    """Return durable preparation and reconciliation work for current rosters.
 
     PENDING means the initial materialization still needs to run. STALE means
     synchronized enrollment truth changed after a READY roster was prepared and
-    the existing candidate identities must be reconciled in place. FAILED is
+    the existing candidate identities must be reconciled in place. Superseded
+    revisions are historical evidence and are never reconstructed. FAILED is
     intentionally left for operator review instead of being retried forever.
     """
 
@@ -134,6 +136,7 @@ async def _list_roster_exam_ids_needing_recovery() -> tuple[list[UUID], list[UUI
                     .where(
                         Exam.status == ExamStatus.SEALED,
                         Exam.roster_status == ExamRosterStatus.PENDING,
+                        latest_exam_revision_clause(),
                     )
                     .order_by(Exam.updated_at.asc(), Exam.id.asc())
                     .limit(MAINTENANCE_SCAN_LIMIT)
@@ -149,6 +152,7 @@ async def _list_roster_exam_ids_needing_recovery() -> tuple[list[UUID], list[UUI
                     .where(
                         Exam.status == ExamStatus.SEALED,
                         Exam.roster_status == ExamRosterStatus.STALE,
+                        latest_exam_revision_clause(),
                     )
                     .order_by(Exam.updated_at.asc(), Exam.id.asc())
                     .limit(MAINTENANCE_SCAN_LIMIT)
