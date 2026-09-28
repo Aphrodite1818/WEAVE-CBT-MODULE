@@ -68,24 +68,36 @@ def _domain_http_error(exc: Exception) -> HTTPException:
 
 
 def _activation_preflight_http_error(preflight) -> HTTPException:
-    if "too_early" in preflight.blockers:
+    if "schedule_date_expired" in preflight.blockers:
+        code = "activation_schedule_date_expired"
+        message = (
+            "This examination was scheduled for a previous date. "
+            "Reschedule it before activation."
+        )
+    elif "too_early" in preflight.blockers:
         code = "activation_too_early"
-        message = "Examination cannot be activated before its scheduled start time"
+        message = (
+            "This examination is scheduled to start later. Wait until its "
+            "scheduled start time before activating it."
+        )
     elif "candidate_scope_conflict" in preflight.blockers:
         code = "candidate_scope_conflict"
         message = (
-            "One or more eligible candidates are already part of another "
-            "operational examination"
+            "Some candidates are already taking another examination. Resolve "
+            "that examination before activating this one."
         )
     elif preflight.affected_exams:
         code = "activation_schedule_impact"
         message = (
-            "Activation would disrupt downstream examinations; reschedule the "
-            "affected chain before activating"
+            "Starting this examination now would affect later examinations. "
+            "Reschedule the affected timetable before activating it."
         )
     else:
         code = "activation_preflight_failed"
-        message = "Examination is not ready for activation"
+        message = (
+            "This examination is not ready to be activated. Review the "
+            "activation requirements and try again."
+        )
 
     payload = ActivationPreflightResponse.model_validate(preflight).model_dump(
         mode="json"

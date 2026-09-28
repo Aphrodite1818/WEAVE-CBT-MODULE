@@ -156,17 +156,32 @@ async def start_exam_batch(
                 suggest_recovery_times=False,
             )
             if not preflight.can_activate:
-                if preflight.affected_exams:
+                if "schedule_date_expired" in preflight.blockers:
                     error = (
-                        "Activation requires downstream timetable rescheduling: "
+                        "This examination was scheduled for a previous date. "
+                        "Reschedule it before activation."
+                    )
+                elif preflight.affected_exams:
+                    error = (
+                        "Starting this examination now would affect later "
+                        "examinations. Reschedule the affected timetable first: "
                         + ", ".join(impact.title for impact in preflight.affected_exams)
                     )
                 elif "candidate_scope_conflict" in preflight.blockers:
-                    error = "Candidates overlap another operational examination"
+                    error = (
+                        "Some candidates are already taking another examination. "
+                        "Resolve that examination before activating this one."
+                    )
                 elif "too_early" in preflight.blockers:
-                    error = "Examination is not yet scheduled to start"
+                    error = (
+                        "This examination is scheduled to start later. Wait until "
+                        "its scheduled start time before activating it."
+                    )
                 else:
-                    error = "Examination failed activation preflight"
+                    error = (
+                        "This examination is not ready to be activated. Review the "
+                        "activation requirements and try again."
+                    )
                 results.append(
                     BatchExamStartItemResponse(
                         exam_id=exam_id,

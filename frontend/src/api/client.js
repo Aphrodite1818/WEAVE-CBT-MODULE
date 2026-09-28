@@ -8,7 +8,7 @@ const statusLabels = {
   401: 'Session problem',
   403: 'Permission problem',
   404: 'Resource missing',
-  409: 'Lifecycle conflict',
+  409: 'This action is not available right now',
   429: 'Rate limit',
 }
 
@@ -141,6 +141,11 @@ function extractDetail(payload) {
   if (!payload) return ''
   if (typeof payload.detail === 'string') return payload.detail
   if (Array.isArray(payload.detail)) return 'Some fields need attention.'
+  if (
+    payload.detail
+    && typeof payload.detail === 'object'
+    && typeof payload.detail.message === 'string'
+  ) return payload.detail.message
   return ''
 }
 

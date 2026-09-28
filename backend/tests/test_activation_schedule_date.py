@@ -26,6 +26,12 @@ from app.domains.exams.timetable_service import (
 )
 
 
+EXPIRED_SCHEDULE_MESSAGE = (
+    "This examination was scheduled for a previous date. "
+    "Reschedule it before activation."
+)
+
+
 class ActivationScheduleDateTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.level_id = uuid4()
@@ -95,7 +101,9 @@ class ActivationScheduleDateTests(unittest.IsolatedAsyncioTestCase):
         # exam belongs to September 27 while activation is attempted on
         # September 28. This protects the business-date rule from a naive UTC
         # date comparison.
-        source = self.exam(scheduled_start_at=datetime(2026, 9, 27, 22, 30, tzinfo=UTC))
+        source = self.exam(
+            scheduled_start_at=datetime(2026, 9, 27, 22, 30, tzinfo=UTC)
+        )
         checked_at = datetime(2026, 9, 27, 23, 30, tzinfo=UTC)
 
         preflight = await self.run_preflight(source=source, checked_at=checked_at)
@@ -111,7 +119,9 @@ class ActivationScheduleDateTests(unittest.IsolatedAsyncioTestCase):
         # The UTC date changes between these timestamps, but both are September
         # 28 in WAT. A same-day delayed sitting must therefore remain eligible
         # for the existing late-start/recovery workflow.
-        source = self.exam(scheduled_start_at=datetime(2026, 9, 27, 23, 30, tzinfo=UTC))
+        source = self.exam(
+            scheduled_start_at=datetime(2026, 9, 27, 23, 30, tzinfo=UTC)
+        )
         checked_at = datetime(2026, 9, 28, 0, 15, tzinfo=UTC)
 
         preflight = await self.run_preflight(source=source, checked_at=checked_at)
@@ -152,9 +162,7 @@ class ActivationScheduleDateTests(unittest.IsolatedAsyncioTestCase):
                 proposed_activation_at=checked_at,
             )
 
-    async def test_direct_activation_route_does_not_call_lifecycle_for_expired_date(
-        self,
-    ):
+    async def test_direct_activation_route_returns_specific_expired_date_error(self):
         exam_id = uuid4()
         checked_at = datetime(2026, 9, 28, 10, 0, tzinfo=UTC)
         blocked = ActivationPreflight(
@@ -181,18 +189,19 @@ class ActivationScheduleDateTests(unittest.IsolatedAsyncioTestCase):
                 ExamService,
                 "activate_exam",
                 new=AsyncMock(),
-            ) as activate,self.assertRaises(HTTPException) as captured
+            ) as activate,
+            self.assertRaises(HTTPException) as captured,
         ):
             await exam_router.activate_exam(exam_id, db, self.admin)
 
+        detail = captured.exception.detail
         self.assertEqual(captured.exception.status_code, 409)
-        self.assertIn(
-            "schedule_date_expired",
-            captured.exception.detail["preflight"]["blockers"],
-        )
+        self.assertEqual(detail["code"], "activation_schedule_date_expired")
+        self.assertEqual(detail["message"], EXPIRED_SCHEDULE_MESSAGE)
+        self.assertIn("schedule_date_expired", detail["preflight"]["blockers"])
         activate.assert_not_awaited()
 
-    async def test_batch_start_does_not_activate_expired_date(self):
+    async def test_batch_start_returns_specific_expired_date_message(self):
         exam_id = uuid4()
         checked_at = datetime(2026, 9, 28, 10, 0, tzinfo=UTC)
         blocked = ActivationPreflight(
@@ -233,7 +242,7 @@ class ActivationScheduleDateTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertFalse(response.results[0].started)
-        self.assertIsNotNone(response.results[0].error)
+        self.assertEqual(response.results[0].error, EXPIRED_SCHEDULE_MESSAGE)
         activate.assert_not_awaited()
 
 
