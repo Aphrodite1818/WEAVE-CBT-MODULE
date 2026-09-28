@@ -13,7 +13,8 @@ import { AdminOverview } from './pages/AdminOverview'
 import { AdminBankDetailPage, AdminQuestionBanksPage } from './pages/AdminQuestionBanks'
 import { AdminQuestionsPage } from './pages/AdminQuestionsPage'
 import { AdminResultDetailPage, AdminResultsPage } from './pages/AdminResultsPage'
-import { AdminRosterDetailPage, AdminRostersPage } from './pages/AdminRostersPage'
+import { AdminRosterDetailPage } from './pages/AdminRostersPage'
+import { AdminCurrentRostersPage, AdminRosterHistoryPage } from './pages/AdminRosterViews'
 import { useAdminData } from './useAdminData'
 import '../teacher/teacher-dashboard.css'
 import '../teacher/teacher-selects.css'
@@ -23,7 +24,7 @@ import './admin-sidebar.css'
 
 const bankViews = new Set(['question-banks', 'create-bank', 'bank-detail', 'questions', 'create-question', 'edit-question', 'preview-question'])
 const examViews = new Set(['exams', 'create-exam', 'exam-history'])
-const rosterViews = new Set(['roster', 'roster-detail'])
+const rosterViews = new Set(['roster', 'roster-history', 'roster-detail'])
 const operationViews = new Set(['operations', 'operation-detail'])
 const resultViews = new Set(['results', 'result-detail'])
 const placeholderViews = new Set(['invigilators', 'reports'])
@@ -241,7 +242,8 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
               <ExamAuthoringPage active={workspaceView === 'create-exam'} state={state} dispatch={workspaceDispatch} teacherData={examFormData} gateway={gateway} />
             </div>
           )}
-          {workspaceView === 'roster' && <AdminRostersPage adminData={adminData} onNavigate={navigate} />}
+          {workspaceView === 'roster' && <AdminCurrentRostersPage adminData={adminData} onNavigate={navigate} />}
+          {workspaceView === 'roster-history' && <AdminRosterHistoryPage adminData={adminData} onNavigate={navigate} />}
           {workspaceView === 'roster-detail' && <AdminRosterDetailPage state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
           {workspaceView === 'operations' && <ExamOperations adminData={adminData} gateway={gateway} onNavigate={navigate} />}
           {workspaceView === 'operation-detail' && <ExamOperationsDetail state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
