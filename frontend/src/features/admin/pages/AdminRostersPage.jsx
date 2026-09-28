@@ -4,52 +4,73 @@ import { buildAcademicLevels, listSubjectsForLevel } from '../../../shared/acade
 import { Icon } from '../../../shared/icons/Icon'
 import { Notice, SelectControl } from '../../../shared/ui'
 import { RosterCandidateActionButton, RosterRecoveryNotice } from '../components/RosterCandidateActions'
+import {
+  partitionRosterExams,
+  rosterHistoryDescription,
+  rosterHistoryKind,
+  rosterHistoryLabel,
+} from '../rosterLineage'
 import '../admin-rosters.css'
+import '../admin-roster-history.css'
 
 const OVERVIEW_PAGE_SIZE = 12
+const HISTORY_GROUP_PAGE_SIZE = 6
 const ROSTER_PAGE_SIZE = 50
 const TRANSITIONAL_ROSTER_STATES = new Set(['pending', 'building', 'stale'])
-const ROSTER_EXAM_STATES = new Set(['sealed', 'active', 'suspended', 'closing', 'cancelling', 'closed', 'cancelled'])
 
 export function AdminRostersPage({ adminData, onNavigate }) {
   const [query, setQuery] = useState('')
   const [levelId, setLevelId] = useState('all')
   const [subjectId, setSubjectId] = useState('all')
   const [requestedPage, setPage] = useState(1)
+  const [requestedHistoryPage, setHistoryPage] = useState(1)
 
   const levels = useMemo(() => buildAcademicLevels(adminData.subjects), [adminData.subjects])
   const levelSubjects = useMemo(
     () => levelId === 'all' ? [] : listSubjectsForLevel(adminData.subjects, levelId),
     [adminData.subjects, levelId],
   )
-
-  const rosterExams = useMemo(
-    () => adminData.exams.filter((exam) => ROSTER_EXAM_STATES.has(exam.status) && exam.rosterStatus !== 'not_prepared'),
+  const rosterPresentation = useMemo(
+    () => partitionRosterExams(adminData.exams),
     [adminData.exams],
   )
+  const currentRosters = rosterPresentation.current
+  const historyGroups = rosterPresentation.historyGroups
 
   const refreshExams = adminData.refreshExams
   useEffect(() => {
-    if (!rosterExams.some((exam) => TRANSITIONAL_ROSTER_STATES.has(exam.rosterStatus))) return undefined
+    if (!currentRosters.some((exam) => TRANSITIONAL_ROSTER_STATES.has(exam.rosterStatus))) return undefined
     const timer = window.setInterval(() => {
       void refreshExams({ silent: true })
     }, 4000)
     return () => window.clearInterval(timer)
-  }, [refreshExams, rosterExams])
+  }, [currentRosters, refreshExams])
 
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase()
-    return rosterExams.filter((exam) => {
-      if (levelId !== 'all' && exam.academicLevelId !== levelId) return false
-      if (subjectId !== 'all' && exam.curriculumSubjectId !== subjectId) return false
-      if (!needle) return true
-      return `${exam.title} ${exam.academicLevelName} ${exam.subjectName} ${exam.assessmentName}`.toLowerCase().includes(needle)
-    })
-  }, [levelId, query, rosterExams, subjectId])
+  const filteredCurrent = useMemo(
+    () => currentRosters.filter((exam) => rosterMatchesFilters(exam, { query, levelId, subjectId })),
+    [currentRosters, levelId, query, subjectId],
+  )
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / OVERVIEW_PAGE_SIZE))
+  const filteredHistoryGroups = useMemo(
+    () => historyGroups
+      .map((group) => ({
+        ...group,
+        entries: group.entries.filter((exam) => rosterMatchesFilters(exam, { query, levelId, subjectId })),
+      }))
+      .filter((group) => group.entries.length > 0),
+    [historyGroups, levelId, query, subjectId],
+  )
+
+  const pageCount = Math.max(1, Math.ceil(filteredCurrent.length / OVERVIEW_PAGE_SIZE))
   const page = Math.min(requestedPage, pageCount)
-  const visible = filtered.slice((page - 1) * OVERVIEW_PAGE_SIZE, page * OVERVIEW_PAGE_SIZE)
+  const visible = filteredCurrent.slice((page - 1) * OVERVIEW_PAGE_SIZE, page * OVERVIEW_PAGE_SIZE)
+
+  const historyPageCount = Math.max(1, Math.ceil(filteredHistoryGroups.length / HISTORY_GROUP_PAGE_SIZE))
+  const historyPage = Math.min(requestedHistoryPage, historyPageCount)
+  const visibleHistoryGroups = filteredHistoryGroups.slice(
+    (historyPage - 1) * HISTORY_GROUP_PAGE_SIZE,
+    historyPage * HISTORY_GROUP_PAGE_SIZE,
+  )
 
   const levelOptions = [
     { value: 'all', label: 'All levels' },
@@ -60,10 +81,15 @@ export function AdminRostersPage({ adminData, onNavigate }) {
     ...levelSubjects.map((subject) => ({ value: subject.id, label: subject.name, description: subject.code || undefined })),
   ]
 
+  const resetPages = () => {
+    setPage(1)
+    setHistoryPage(1)
+  }
+
   const changeLevel = (nextLevelId) => {
     setLevelId(nextLevelId)
     setSubjectId('all')
-    setPage(1)
+    resetPages()
   }
 
   return (
@@ -74,7 +100,7 @@ export function AdminRostersPage({ adminData, onNavigate }) {
             <span className="teacher-page-title-icon"><Icon name="roster" size={27} /></span>
             <h1>Roster</h1>
           </div>
-          <p>Review examination candidate rosters prepared from the latest synchronized enrollment data.</p>
+          <p>Review the roster that currently matters for each examination. Superseded, closed, and cancelled rosters remain available below as history.</p>
         </div>
       </div>
 
@@ -88,7 +114,7 @@ export function AdminRostersPage({ adminData, onNavigate }) {
             aria-label="Search rosters"
             type="search"
             value={query}
-            onChange={(event) => { setQuery(event.target.value); setPage(1) }}
+            onChange={(event) => { setQuery(event.target.value); resetPages() }}
             placeholder="Search by exam, level, subject, or assessment..."
           />
         </label>
@@ -97,35 +123,93 @@ export function AdminRostersPage({ adminData, onNavigate }) {
           label="Roster subject filter"
           value={subjectId}
           options={subjectOptions}
-          onChange={(value) => { setSubjectId(value); setPage(1) }}
+          onChange={(value) => { setSubjectId(value); resetPages() }}
           disabled={levelId === 'all'}
         />
       </div>
 
-      <section className="admin-roster-grid" aria-label="Examination rosters" aria-busy={adminData.loading}>
-        {visible.map((exam) => (
-          <RosterCard key={exam.id} exam={exam} onOpen={() => onNavigate('roster-detail', { selectedExamId: exam.id })} />
-        ))}
+      <section className="admin-roster-section" aria-labelledby="current-rosters-title">
+        <div className="admin-roster-section__heading">
+          <div>
+            <h2 id="current-rosters-title">Current rosters</h2>
+            <p>Latest revisions that are preparing for, running, or finalizing a sitting.</p>
+          </div>
+          <span>{filteredCurrent.length} {filteredCurrent.length === 1 ? 'roster' : 'rosters'}</span>
+        </div>
 
-        {!adminData.loading && visible.length === 0 && (
-          <div className="admin-roster-empty">
+        <div className="admin-roster-grid" aria-label="Current examination rosters" aria-busy={adminData.loading}>
+          {visible.map((exam) => (
+            <RosterCard
+              key={exam.id}
+              exam={exam}
+              historical={false}
+              allExams={adminData.exams}
+              onOpen={() => onNavigate('roster-detail', { selectedExamId: exam.id })}
+            />
+          ))}
+
+          {!adminData.loading && visible.length === 0 && (
+            <div className="admin-roster-empty">
+              <span><Icon name="roster" size={27} /></span>
+              <div>
+                <strong>{currentRosters.length ? 'No current rosters match these filters' : 'No current prepared rosters'}</strong>
+                <p>{currentRosters.length ? 'Adjust the level, subject, or search filters.' : 'A latest examination revision appears here after its roster is prepared.'}</p>
+              </div>
+            </div>
+          )}
+          {adminData.loading && <div className="admin-roster-empty"><div><strong>Loading examination rosters…</strong></div></div>}
+
+          <RosterPagination
+            page={page}
+            pageCount={pageCount}
+            total={filteredCurrent.length}
+            pageSize={OVERVIEW_PAGE_SIZE}
+            label="rosters"
+            onPrevious={() => setPage(page - 1)}
+            onNext={() => setPage(page + 1)}
+          />
+        </div>
+      </section>
+
+      <section className="admin-roster-history" aria-labelledby="roster-history-title">
+        <div className="admin-roster-section__heading admin-roster-history__heading">
+          <div>
+            <h2 id="roster-history-title">Roster history</h2>
+            <p>Previous revisions and completed or cancelled sittings. Candidate lists remain available for audit.</p>
+          </div>
+          <span>{filteredHistoryGroups.length} {filteredHistoryGroups.length === 1 ? 'exam group' : 'exam groups'}</span>
+        </div>
+
+        {!adminData.loading && visibleHistoryGroups.length === 0 && (
+          <div className="admin-roster-empty admin-roster-history__empty">
             <span><Icon name="roster" size={27} /></span>
             <div>
-              <strong>{rosterExams.length ? 'No rosters match these filters' : 'No prepared rosters yet'}</strong>
-              <p>{rosterExams.length ? 'Adjust the level, subject, or search filters.' : 'Rosters appear here automatically after an examination is sealed.'}</p>
+              <strong>{historyGroups.length ? 'No roster history matches these filters' : 'No roster history yet'}</strong>
+              <p>{historyGroups.length ? 'Adjust the level, subject, or search filters.' : 'Superseded revisions and terminal exam rosters will be retained here.'}</p>
             </div>
           </div>
         )}
-        {adminData.loading && <div className="admin-roster-empty"><div><strong>Loading examination rosters…</strong></div></div>}
 
-        <div className="admin-roster-pagination">
-          <span>{filtered.length === 0 ? '0 rosters' : `Showing ${(page - 1) * OVERVIEW_PAGE_SIZE + 1}–${Math.min(page * OVERVIEW_PAGE_SIZE, filtered.length)} of ${filtered.length} rosters`}</span>
-          <div>
-            <button type="button" aria-label="Previous roster page" disabled={page === 1} onClick={() => setPage(page - 1)}>‹</button>
-            <span>{page} / {pageCount}</span>
-            <button type="button" aria-label="Next roster page" disabled={page === pageCount} onClick={() => setPage(page + 1)}>›</button>
-          </div>
-        </div>
+        {visibleHistoryGroups.map((group) => (
+          <RosterHistoryGroup
+            key={group.id}
+            group={group}
+            allExams={adminData.exams}
+            onNavigate={onNavigate}
+          />
+        ))}
+
+        {filteredHistoryGroups.length > 0 && (
+          <RosterPagination
+            page={historyPage}
+            pageCount={historyPageCount}
+            total={filteredHistoryGroups.length}
+            pageSize={HISTORY_GROUP_PAGE_SIZE}
+            label="exam groups"
+            onPrevious={() => setHistoryPage(historyPage - 1)}
+            onNext={() => setHistoryPage(historyPage + 1)}
+          />
+        )}
       </section>
     </div>
   )
@@ -142,6 +226,8 @@ export function AdminRosterDetailPage({ state, adminData, gateway, onNavigate })
   const [error, setError] = useState('')
   const [refreshToken, setRefreshToken] = useState(0)
 
+  const historyKind = exam ? rosterHistoryKind(exam, adminData.exams) : null
+  const historical = Boolean(historyKind)
   const pageCount = Math.max(1, Math.ceil((payload?.total || 0) / ROSTER_PAGE_SIZE))
   const page = Math.min(requestedPage, pageCount)
 
@@ -176,13 +262,13 @@ export function AdminRosterDetailPage({ state, adminData, gateway, onNavigate })
 
   const refreshExams = adminData.refreshExams
   useEffect(() => {
-    if (!exam || !TRANSITIONAL_ROSTER_STATES.has(exam.rosterStatus)) return undefined
+    if (historical || !exam || !TRANSITIONAL_ROSTER_STATES.has(exam.rosterStatus)) return undefined
     const timer = window.setInterval(async () => {
       await refreshExams({ silent: true })
       setRefreshToken((value) => value + 1)
     }, 4000)
     return () => window.clearInterval(timer)
-  }, [exam?.id, exam?.rosterStatus, refreshExams])
+  }, [exam?.id, exam?.rosterStatus, historical, refreshExams])
 
   if (!exam) {
     return (
@@ -224,23 +310,30 @@ export function AdminRosterDetailPage({ state, adminData, gateway, onNavigate })
             <span className="teacher-page-title-icon"><Icon name="roster" size={27} /></span>
             <h1>{exam.title}</h1>
           </div>
-          <p>{[exam.academicLevelName, exam.subjectName, exam.assessmentName].filter(Boolean).join(' · ')}</p>
+          <p>{[exam.academicLevelName, exam.subjectName, exam.assessmentName, `Revision ${exam.revisionNumber || 1}`].filter(Boolean).join(' · ')}</p>
         </div>
-        <RosterState status={exam.rosterStatus} />
+        <RosterLifecycleState
+          status={historical ? historyKind : exam.status}
+          label={historical ? rosterHistoryLabel(historyKind) : exam.statusLabel}
+        />
       </div>
 
-      <RosterRecoveryNotice
-        exam={exam}
-        onRefresh={refreshRosterStatus}
-        onRetry={retryFailedRoster}
-        onOpenOperations={() => onNavigate('operation-detail', { selectedExamId: exam.id })}
-      />
+      {historical ? (
+        <Notice tone="warning">{rosterHistoryDescription(exam, adminData.exams)} Candidate records remain fully available below, but this roster is read-only.</Notice>
+      ) : (
+        <RosterRecoveryNotice
+          exam={exam}
+          onRefresh={refreshRosterStatus}
+          onRetry={retryFailedRoster}
+          onOpenOperations={() => onNavigate('operation-detail', { selectedExamId: exam.id })}
+        />
+      )}
       {error && <Notice tone="danger">{error}</Notice>}
 
       <div className="admin-roster-summary" aria-label="Roster summary">
-        <SummaryItem label="Current candidates" value={String(exam.rosterCandidateCount || 0)} hint="Academically eligible snapshot" />
-        <SummaryItem label="Roster version" value={`v${exam.rosterVersion || 0}`} hint={exam.rosterPreparedAt ? `Updated ${formatCompactDate(exam.rosterPreparedAt)}` : 'Not prepared yet'} />
-        <SummaryItem label="Exam state" value={exam.statusLabel} hint={exam.scheduledStartAt ? `Scheduled ${formatCompactDate(exam.scheduledStartAt)}` : 'No scheduled start'} />
+        <SummaryItem label={historical ? 'Candidates' : 'Current candidates'} value={String(exam.rosterCandidateCount || 0)} hint={historical ? 'Preserved roster snapshot' : 'Academically eligible snapshot'} />
+        <SummaryItem label="Exam revision" value={`Revision ${exam.revisionNumber || 1}`} hint={historical ? 'Historical exam revision' : 'Current exam revision'} />
+        <SummaryItem label="Roster version" value={`v${exam.rosterVersion || 0}`} hint={`${titleCase(exam.rosterStatus)}${exam.rosterPreparedAt ? ` · ${formatCompactDate(exam.rosterPreparedAt)}` : ''}`} />
       </div>
 
       <div className="admin-roster-detail__filters">
@@ -267,7 +360,7 @@ export function AdminRosterDetailPage({ state, adminData, gateway, onNavigate })
               <th>Class</th>
               <th>Eligibility</th>
               <th>Reason</th>
-              <th>Actions</th>
+              <th>{historical ? 'Access' : 'Actions'}</th>
             </tr>
           </thead>
           <tbody>
@@ -279,12 +372,16 @@ export function AdminRosterDetailPage({ state, adminData, gateway, onNavigate })
                 <td><CandidateState status={candidate.status} /></td>
                 <td className="admin-roster-reason">{candidate.status_reason || '—'}</td>
                 <td>
-                  <RosterCandidateActionButton
-                    candidate={candidate}
-                    exam={exam}
-                    gateway={gateway}
-                    onChanged={() => setRefreshToken((value) => value + 1)}
-                  />
+                  {historical ? (
+                    <span className="admin-roster-read-only">Read only</span>
+                  ) : (
+                    <RosterCandidateActionButton
+                      candidate={candidate}
+                      exam={exam}
+                      gateway={gateway}
+                      onChanged={() => setRefreshToken((value) => value + 1)}
+                    />
+                  )}
                 </td>
               </tr>
             ))}
@@ -308,35 +405,68 @@ export function AdminRosterDetailPage({ state, adminData, gateway, onNavigate })
   )
 }
 
-function RosterCard({ exam, onOpen }) {
-  const statusCopy = rosterStatusCopy(exam.rosterStatus)
+function RosterHistoryGroup({ group, allExams, onNavigate }) {
+  const scope = [group.academicLevelName, group.subjectName, group.assessmentName].filter(Boolean).join(' · ')
   return (
-    <article className="admin-roster-card">
-      <button className="admin-roster-card__open" type="button" onClick={onOpen} aria-label={`Open roster for ${exam.title}`}>
+    <article className="admin-roster-history-group">
+      <div className="admin-roster-history-group__heading">
+        <div>
+          <span>Exam lineage</span>
+          <h3>{group.title}</h3>
+          <p>{scope || 'Historical examination rosters'}</p>
+        </div>
+        <strong>{group.entries.length} historical {group.entries.length === 1 ? 'roster' : 'rosters'}</strong>
+      </div>
+      <div className="admin-roster-grid admin-roster-history-group__grid">
+        {group.entries.map((exam) => (
+          <RosterCard
+            key={exam.id}
+            exam={exam}
+            historical
+            allExams={allExams}
+            onOpen={() => onNavigate('roster-detail', { selectedExamId: exam.id })}
+          />
+        ))}
+      </div>
+    </article>
+  )
+}
+
+function RosterCard({ exam, historical, allExams, onOpen }) {
+  const historyKind = historical ? rosterHistoryKind(exam, allExams) : null
+  const statusCopy = historical
+    ? rosterHistoryDescription(exam, allExams)
+    : rosterStatusCopy(exam.rosterStatus)
+  const statusLabel = historical ? rosterHistoryLabel(historyKind) : exam.statusLabel
+  const statusValue = historical ? historyKind : exam.status
+
+  return (
+    <article className={`admin-roster-card${historical ? ' admin-roster-card--historical' : ''}`}>
+      <button className="admin-roster-card__open" type="button" onClick={onOpen} aria-label={`${historical ? 'Open historical roster' : 'Open roster'} for ${exam.title} revision ${exam.revisionNumber || 1}`}>
         <div className="admin-roster-card__top">
           <span className="admin-roster-ledger"><Icon name="roster" size={28} /></span>
-          <RosterState status={exam.rosterStatus} />
+          <RosterLifecycleState status={statusValue} label={statusLabel} />
         </div>
         <div className="admin-roster-card__scope">{[exam.academicLevelName, exam.subjectName].filter(Boolean).join(' · ') || 'Examination roster'}</div>
         <h2>{exam.title}</h2>
-        <p>{exam.assessmentName}{exam.revisionNumber > 1 ? ` · Revision ${exam.revisionNumber}` : ''}</p>
+        <p>{exam.assessmentName} · Revision {exam.revisionNumber || 1}</p>
         <div className="admin-roster-card__status-copy">{statusCopy}</div>
         <div className="admin-roster-card__meta">
-          <div><span>Current candidates</span><strong>{exam.rosterCandidateCount || 0}</strong></div>
+          <div><span>{historical ? 'Candidates' : 'Current candidates'}</span><strong>{exam.rosterCandidateCount || 0}</strong></div>
           <div><span>Roster version</span><strong>v{exam.rosterVersion || 0}</strong></div>
         </div>
         <div className="admin-roster-card__footer">
           <span>{exam.scheduledStartAt ? formatCompactDate(exam.scheduledStartAt) : 'Schedule not set'}</span>
-          <strong>View roster <RiArrowRightLine size={16} aria-hidden="true" /></strong>
+          <strong>{historical ? 'View historical roster' : 'View roster'} <RiArrowRightLine size={16} aria-hidden="true" /></strong>
         </div>
       </button>
     </article>
   )
 }
 
-function RosterState({ status }) {
-  const normalized = String(status || 'not_prepared').toLowerCase()
-  return <span className={`admin-roster-state admin-roster-state--${normalized}`}>{titleCase(normalized)}</span>
+function RosterLifecycleState({ status, label }) {
+  const normalized = String(status || 'historical').toLowerCase()
+  return <span className={`admin-roster-lifecycle-state admin-roster-lifecycle-state--${normalized}`}>{label || titleCase(normalized)}</span>
 }
 
 function CandidateState({ status }) {
@@ -346,6 +476,29 @@ function CandidateState({ status }) {
 
 function SummaryItem({ label, value, hint }) {
   return <div className="admin-roster-summary__item"><span>{label}</span><strong>{value}</strong><small>{hint}</small></div>
+}
+
+function RosterPagination({ page, pageCount, total, pageSize, label, onPrevious, onNext }) {
+  const start = total === 0 ? 0 : (page - 1) * pageSize + 1
+  const end = Math.min(page * pageSize, total)
+  return (
+    <div className="admin-roster-pagination">
+      <span>{total === 0 ? `0 ${label}` : `Showing ${start}–${end} of ${total} ${label}`}</span>
+      <div>
+        <button type="button" aria-label={`Previous ${label} page`} disabled={page === 1} onClick={onPrevious}>‹</button>
+        <span>{page} / {pageCount}</span>
+        <button type="button" aria-label={`Next ${label} page`} disabled={page === pageCount} onClick={onNext}>›</button>
+      </div>
+    </div>
+  )
+}
+
+function rosterMatchesFilters(exam, { query, levelId, subjectId }) {
+  if (levelId !== 'all' && exam.academicLevelId !== levelId) return false
+  if (subjectId !== 'all' && exam.curriculumSubjectId !== subjectId) return false
+  const needle = query.trim().toLowerCase()
+  if (!needle) return true
+  return `${exam.title} ${exam.academicLevelName} ${exam.subjectName} ${exam.assessmentName} revision ${exam.revisionNumber || 1}`.toLowerCase().includes(needle)
 }
 
 function rosterStatusCopy(status) {
