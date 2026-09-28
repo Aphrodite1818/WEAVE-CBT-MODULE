@@ -4,11 +4,14 @@ import { currentExamRevisions } from '../../../shared/exams/examLineage'
 import { Icon } from '../../../shared/icons/Icon'
 import { Notice, SelectControl } from '../../../shared/ui'
 import '../admin-timetable.css'
+import { AdminDatePicker } from '../AdminDatePicker'
 
 const dateFormat = new Intl.DateTimeFormat(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 const timeFormat = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
 
+const localDateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 export function AdminTimetablePage({ adminData, levelId = null, onSelectLevel }) {
+  const [selectedDay, setSelectedDay] = useState(() => localDateKey(new Date()))
   const [levelFilter, setLevelFilter] = useState('all')
   const [refreshing, setRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState('')
@@ -16,7 +19,8 @@ export function AdminTimetablePage({ adminData, levelId = null, onSelectLevel })
   const visibleLevels = levels.filter((level) => levelFilter === 'all' || level.id === levelFilter)
   const allScheduled = currentExamRevisions(adminData.exams)
     .filter((exam) => exam.scheduledStartAt && Number.isFinite(Date.parse(exam.scheduledStartAt))
-      && ['draft', 'submitted', 'sealed'].includes(exam.status))
+      && ['draft', 'submitted', 'sealed'].includes(exam.status)
+      && localDateKey(new Date(exam.scheduledStartAt)) === selectedDay)
     .sort((a, b) => Date.parse(a.scheduledStartAt) - Date.parse(b.scheduledStartAt) || a.title.localeCompare(b.title))
   const scheduled = allScheduled.filter((exam) => exam.academicLevelId === levelId)
   const days = new Map()
@@ -43,7 +47,7 @@ export function AdminTimetablePage({ adminData, levelId = null, onSelectLevel })
           <div className="teacher-page-title-line"><span className="teacher-page-title-icon"><Icon name="calendar" size={27} /></span><h1>Timetable</h1></div>
           <p>Scheduled examinations awaiting their start, organised by date and academic level.</p>
         </div>
-        <button type="button" className="teacher-secondary-action" disabled={adminData.loading || refreshing} onClick={refresh}><Icon name="sync" size={16} />{refreshing ? 'Refreshing...' : 'Refresh'}</button>
+        <div className="admin-timetable-actions"><AdminDatePicker label="Timetable date" value={selectedDay} onChange={setSelectedDay} /><button type="button" className="teacher-secondary-action" disabled={adminData.loading || refreshing} onClick={refresh}><Icon name="sync" size={16} />{refreshing ? 'Refreshing...' : 'Refresh'}</button></div>
       </header>
 
       {levelId ? <section className="admin-timetable-toolbar" aria-label="Selected schedule">
@@ -76,7 +80,7 @@ export function AdminTimetablePage({ adminData, levelId = null, onSelectLevel })
         {!adminData.loading && (issue || !levels.length) && <div className="admin-timetable-empty"><h3>{issue ? 'Timetable unavailable' : 'No academic levels available'}</h3><p>{issue ? 'Refresh to try loading the schedule again.' : 'Level schedules will appear once the school curriculum is available.'}</p></div>}
       </section>}
       {levelId && <section className="admin-timetable-schedule" aria-label="Scheduled examinations" aria-busy={adminData.loading || refreshing}>
-        <div className="admin-timetable-summary"><span role="status">{adminData.loading ? 'Loading timetable...' : `${scheduled.length} scheduled ${scheduled.length === 1 ? 'exam' : 'exams'} across ${days.size} ${days.size === 1 ? 'day' : 'days'}`}</span><span>Times shown in {Intl.DateTimeFormat().resolvedOptions().timeZone}</span></div>
+        <div className="admin-timetable-summary"><span role="status">{adminData.loading ? 'Loading timetable...' : `${scheduled.length} scheduled ${scheduled.length === 1 ? 'exam' : 'exams'} on ${dateFormat.format(new Date(`${selectedDay}T12:00:00`))}`}</span><span>Times shown in {Intl.DateTimeFormat().resolvedOptions().timeZone}</span></div>
         {!adminData.loading && [...days].map(([day, group]) => (
           <section className="admin-timetable-day" key={day} aria-label={dateFormat.format(group.date)}>
             <header className="admin-timetable-day-heading"><span className="admin-timetable-date-tile" aria-hidden="true"><small>{group.date.toLocaleDateString(undefined, { month: 'short' })}</small><strong>{group.date.getDate()}</strong></span><div><h3>{dateFormat.format(group.date)}</h3><p>{group.exams.length} {group.exams.length === 1 ? 'examination' : 'examinations'}</p></div></header>
@@ -93,7 +97,7 @@ export function AdminTimetablePage({ adminData, levelId = null, onSelectLevel })
             </ol>
           </section>
         ))}
-        {!adminData.loading && scheduled.length === 0 && <div className="admin-timetable-empty"><span><Icon name="calendar" size={32} /></span><h3>{issue ? 'Timetable unavailable' : 'No scheduled examinations'}</h3><p>{issue ? 'Refresh to try loading the schedule again.' : `There are no scheduled examinations for ${levelName}. Choose another level to view its timetable.`}</p></div>}
+        {!adminData.loading && scheduled.length === 0 && <div className="admin-timetable-empty"><span><Icon name="calendar" size={32} /></span><h3>{issue ? 'Timetable unavailable' : 'No scheduled examinations'}</h3><p>{issue ? 'Refresh to try loading the schedule again.' : `There are no scheduled examinations for ${levelName} on ${dateFormat.format(new Date(`${selectedDay}T12:00:00`))}. Choose another date or level to view its timetable.`}</p></div>}
       </section>}
     </div>
   )

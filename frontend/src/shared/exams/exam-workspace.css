@@ -410,3 +410,31 @@
   .exam-heading-actions { align-self: flex-start; max-width: 100%; }
   .exam-heading-actions .exam-lifecycle-filter { width: 150px; }
 }
+
+/* Give the administrator's exam collection room without changing its folder layout. */
+.admin-exams-page { gap: 28px; }
+.admin-exams-page .exam-filters { gap: 14px; }
+.admin-exams-page .exam-collection { gap: 24px; }
+.admin-exams-page .exam-collection--grid .exam-card { padding: 24px 20px 0 28px; }
+.admin-exams-page .exam-collection--grid .exam-card__menu { top: 18px; right: 16px; }
+.admin-exams-page .exam-collection--grid .exam-card__open h2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-height: 2.8em;
+  margin: 18px 0 8px;
+  line-height: 1.4;
+}
+.admin-exams-page .exam-collection--grid .exam-card__open p { margin-bottom: 12px; }
+.admin-exams-page .exam-collection--grid .exam-card__revision { margin-bottom: 12px; }
+.admin-exams-page .exam-collection--grid .exam-card__date { margin: 14px 0 16px; }
+.admin-exams-page .exam-collection--grid .exam-card__footer { min-height: 48px; }
+.admin-exams-page .exam-collection > .teacher-exam-pagination { padding-top: 8px; }
+
+@container teacher-exam-workspace (max-width: 620px) {
+  .admin-exams-page { gap: 22px; }
+  .admin-exams-page .exam-collection { gap: 18px; }
+  .admin-exams-page .exam-collection--grid .exam-card { padding: 20px 16px 0 26px; }
+}

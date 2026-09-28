@@ -44,9 +44,9 @@
 
 .admin-roster-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(290px, 320px));
-  align-items: start;
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
+  align-items: stretch;
+  gap: 24px;
   min-width: 0;
 }
 
@@ -101,6 +101,7 @@
   z-index: 1;
   width: 100%;
   min-height: 292px;
+  height: 100%;
   display: flex;
   flex-direction: column;
   border: 1px solid rgb(var(--color-border));
@@ -108,7 +109,7 @@
   background: #fffefb;
   box-shadow: 0 4px 13px rgb(15 23 42 / .055);
   color: rgb(var(--color-text));
-  padding: 18px 18px 0 29px;
+  padding: 24px 22px 0 32px;
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -145,7 +146,7 @@
 }
 
 .admin-roster-card__scope {
-  margin-top: 15px;
+  margin-top: 20px;
   color: rgb(var(--color-primary));
   font-size: 10.5px;
   font-weight: 780;
@@ -157,14 +158,19 @@
 }
 
 .admin-roster-card h2 {
-  margin: 6px 0 4px;
+  margin: 8px 0;
   color: rgb(var(--color-text));
   font-size: 17px;
   font-weight: 740;
-  line-height: 1.32;
+  line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  min-height: 2.8em;
+  overflow-wrap: anywhere;
 }
 
 .admin-roster-card p {
@@ -176,7 +182,7 @@
 
 .admin-roster-card__status-copy {
   min-height: 34px;
-  margin-top: 12px;
+  margin-top: 16px;
   color: rgb(var(--color-text-muted));
   font-size: 11.5px;
   line-height: 1.48;
@@ -185,8 +191,8 @@
 .admin-roster-card__meta {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-top: 12px;
+  gap: 12px;
+  margin: 16px 0 18px;
 }
 
 .admin-roster-card__meta > div {
@@ -196,7 +202,7 @@
   border: 1px solid rgb(var(--color-border));
   border-radius: 8px;
   background: #fafbfc;
-  padding: 9px 10px;
+  padding: 12px;
 }
 
 .admin-roster-card__meta span {
@@ -212,7 +218,7 @@
 }
 
 .admin-roster-card__footer {
-  min-height: 46px;
+  min-height: 52px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -636,4 +642,12 @@
     align-items: flex-start;
     flex-direction: column;
   }
+}
+
+.admin-rosters-page { gap: 28px; }
+.admin-roster-filters { gap: 14px; }
+@media (max-width: 760px) {
+  .admin-rosters-page { gap: 22px; }
+  .admin-roster-grid { gap: 20px; }
+  .admin-roster-card__open { padding: 20px 18px 0 30px; }
 }

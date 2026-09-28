@@ -374,6 +374,10 @@
   box-shadow: 0 10px 26px rgb(var(--color-primary) / .045);
 }
 
+.admin-overview-page .teacher-overview-stat {
+  border: 1px solid rgb(var(--color-text-muted) / .55);
+}
+
 button.teacher-overview-stat {
   width: 100%;
   color: inherit;

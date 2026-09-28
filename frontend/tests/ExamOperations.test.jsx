@@ -126,7 +126,7 @@ describe('Admin exam operations workspace', () => {
   it('uses the selected date for readiness and excludes stale rosters from the ready view', () => {
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
-    const tomorrowKey = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`
+
     const data = makeAdminData([
       makeExam(),
       makeExam({ id: 'tomorrow', title: 'Tomorrow sitting', scheduledStartAt: tomorrow.toISOString() }),
@@ -136,7 +136,11 @@ describe('Admin exam operations workspace', () => {
     render(<ExamOperations adminData={data} onNavigate={onNavigate} />)
     const readiness = screen.getByRole('region', { name: 'Ready sittings' })
     expect(within(readiness).queryByText('Tomorrow sitting')).not.toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Operations date'), { target: { value: tomorrowKey } })
+    HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
+    HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); this.dispatchEvent(new Event('close')) }
+    fireEvent.click(screen.getByRole('button', { name: /^Operations date:/ }))
+    if (tomorrow.getMonth() !== new Date().getMonth()) fireEvent.click(screen.getByRole('button', { name: 'Next month' }))
+    fireEvent.click(screen.getByRole('button', { name: tomorrow.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }) }))
     expect(within(readiness).getByText('Tomorrow sitting')).toBeInTheDocument()
     expect(within(readiness).queryByText('English CA 1')).not.toBeInTheDocument()
     fireEvent.click(within(readiness).getByRole('button', { name: /open controls/i }))
@@ -225,6 +229,54 @@ describe('Admin exam operations workspace', () => {
 it('opens the timetable from the operations shortcut', () => {
   const onNavigate = vi.fn()
   render(<ExamOperations adminData={makeAdminData([])} onNavigate={onNavigate} />)
-  fireEvent.click(screen.getByRole('button', { name: /Timetable.*View scheduled examinations by level/i }))
+  fireEvent.click(screen.getByRole('button', { name: 'Quick Actions' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: /Timetable.*View scheduled examinations by level/i }))
   expect(onNavigate).toHaveBeenCalledWith('timetable')
+})
+
+it('dismisses operations quick actions with Escape and outside clicks', () => {
+  render(<ExamOperations adminData={makeAdminData([])} onNavigate={vi.fn()} />)
+  const trigger = screen.getByRole('button', { name: 'Quick Actions' })
+  fireEvent.click(trigger)
+  expect(screen.getByRole('menu', { name: 'Operations quick actions' })).toBeInTheDocument()
+  fireEvent.keyDown(document, { key: 'Escape' })
+  expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  expect(trigger).toHaveFocus()
+  fireEvent.click(trigger)
+  fireEvent.pointerDown(document.body)
+  expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+})
+it('scopes every timeline tab, KPI, and live monitor to the selected date', () => {
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const data = makeAdminData([
+    makeExam({ title: 'Selected day paper' }),
+    makeExam({ id: 'past-live', title: 'Past live paper', status: 'active', scheduledStartAt: yesterday.toISOString() }),
+    makeExam({ id: 'past-closed', title: 'Past closed paper', status: 'closed', scheduledStartAt: yesterday.toISOString() }),
+    makeExam({ id: 'future', title: 'Future paper', scheduledStartAt: tomorrow.toISOString() }),
+  ])
+  render(<ExamOperations adminData={data} onNavigate={vi.fn()} />)
+  const tabs = within(screen.getByRole('navigation', { name: 'Operation views' }))
+  const timeline = within(screen.getByRole('region', { name: 'Operations timeline' }))
+  for (const tab of ['Today', 'Ready', 'Live', 'Upcoming', 'Completed', 'All']) {
+    fireEvent.click(tabs.getByRole('button', { name: new RegExp(`^${tab}`) }))
+    expect(timeline.queryByText('Past live paper')).not.toBeInTheDocument()
+    expect(timeline.queryByText('Past closed paper')).not.toBeInTheDocument()
+    expect(timeline.queryByText('Future paper')).not.toBeInTheDocument()
+  }
+  expect(timeline.getByText('Selected day paper')).toBeInTheDocument()
+  expect(screen.getByText('Live examinations').closest('article').querySelector('strong')).toHaveTextContent('0')
+  expect(screen.getByText('Scheduled today').closest('article').querySelector('strong')).toHaveTextContent('1')
+  expect(screen.queryByText('Past live paper')).not.toBeInTheDocument()
+  HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
+  HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); this.dispatchEvent(new Event('close')) }
+  fireEvent.click(screen.getByRole('button', { name: /^Operations date:/ }))
+  if (yesterday.getMonth() !== new Date().getMonth()) fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+  fireEvent.click(screen.getByRole('button', { name: yesterday.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }) }))
+  expect(timeline.getByText('Past live paper')).toBeInTheDocument()
+  expect(timeline.getByText('Past closed paper')).toBeInTheDocument()
+  expect(timeline.queryByText('Selected day paper')).not.toBeInTheDocument()
+  expect(screen.getByText('Live examinations').closest('article').querySelector('strong')).toHaveTextContent('1')
 })

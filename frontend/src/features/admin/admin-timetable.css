@@ -63,3 +63,5 @@
 @media (max-width: 600px) { .admin-timetable-collections { grid-template-columns: minmax(0, 1fr); } }
 
 .admin-timetable-level-filter { width: min(100%, 260px); }
+
+.admin-timetable-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }

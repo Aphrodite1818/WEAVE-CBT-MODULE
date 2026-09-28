@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   RiArrowLeftLine,
+  RiCalendarScheduleLine,
+  RiCheckboxCircleLine,
+  RiErrorWarningLine,
+  RiGroupLine,
+  RiFileCheckLine,
   RiCloseCircleLine,
   RiPauseCircleLine,
   RiPlayCircleLine,
@@ -13,6 +18,8 @@ import { Icon } from '../../../shared/icons/Icon'
 import { Notice, SelectControl } from '../../../shared/ui'
 import { useOperationsMonitor } from '../useOperationsMonitor'
 import '../admin-exam-operations.css'
+import { AdminDatePicker } from '../AdminDatePicker'
+import { OperationsQuickActions } from '../OperationsQuickActions'
 
 const OPERATIONAL_STATUSES = new Set(['sealed', 'active', 'suspended', 'closing', 'cancelling', 'closed', 'cancelled'])
 const LIVE_STATUSES = new Set(['active', 'suspended', 'closing', 'cancelling'])
@@ -34,7 +41,6 @@ export function ExamOperations({ adminData, gateway, onNavigate }) {
   const [subjectId, setSubjectId] = useState('all')
   const [day, setDay] = useState(() => localDay(new Date()))
   const [selectedLiveId, setSelectedLiveId] = useState('')
-  const [refreshing, setRefreshing] = useState(false)
   const refreshExams = adminData.refreshExams
   const operationalExams = adminData.exams.filter((exam) => OPERATIONAL_STATUSES.has(exam.status))
   const levels = buildAcademicLevels(adminData.subjects)
@@ -43,22 +49,22 @@ export function ExamOperations({ adminData, gateway, onNavigate }) {
   const isToday = day === localDay(new Date())
   const needle = query.trim().toLowerCase()
   const scoped = operationalExams.filter((exam) =>
-    (levelId === 'all' || exam.academicLevelId === levelId)
+    isScheduledToday(exam, date)
+    && (levelId === 'all' || exam.academicLevelId === levelId)
     && (subjectId === 'all' || exam.curriculumSubjectId === subjectId)
     && (!needle || `${exam.title} ${exam.academicLevelName} ${exam.subjectName} ${exam.assessmentName}`.toLowerCase().includes(needle)),
   )
-  const scheduled = scoped.filter((exam) => isScheduledToday(exam, date))
+  const scheduled = scoped
   const live = scoped.filter((exam) => LIVE_STATUSES.has(exam.status)).sort(compareOperationalExams)
-  const dayExams = scoped.filter((exam) => isScheduledToday(exam, date) || LIVE_STATUSES.has(exam.status))
   const ready = scheduled.filter((exam) => exam.status === 'sealed' && exam.rosterStatus === 'ready')
-  const attention = dayExams.filter(needsAttention)
+  const attention = scoped.filter(needsAttention)
   const selectedLive = live.find((exam) => exam.id === selectedLiveId) || live[0]
   const monitor = useOperationsMonitor(selectedLive?.id, gateway?.exams?.listExamAttempts)
   const connectionIssues = monitor.error ? [] : monitor.attempts.filter((attempt) => ['recently_disconnected', 'stale'].includes(attempt.connectivity))
-  const timeline = scoped.filter((exam) => matchesTab(exam, tab, date)).sort((a, b) =>
+  const timeline = scoped.filter((exam) => matchesTab(exam, tab)).sort((a, b) =>
     (Date.parse(a.scheduledStartAt) || Number.MAX_SAFE_INTEGER) - (Date.parse(b.scheduledStartAt) || Number.MAX_SAFE_INTEGER),
   )
-  const counts = Object.fromEntries(TABS.map(([key]) => [key, scoped.filter((exam) => matchesTab(exam, key, date)).length]))
+  const counts = Object.fromEntries(TABS.map(([key]) => [key, scoped.filter((exam) => matchesTab(exam, key)).length]))
   const events = scoped.flatMap((exam) => [
     ['activatedAt', 'Examination activated', 'bolt'],
     ['closedAt', 'Examination closed', 'check'],
@@ -84,10 +90,6 @@ export function ExamOperations({ adminData, gateway, onNavigate }) {
     return () => { stopped = true; window.clearTimeout(timer) }
   }, [refreshExams])
 
-  const refresh = async () => {
-    setRefreshing(true)
-    try { await refreshExams({ silent: true }) } finally { setRefreshing(false) }
-  }
   const metricValue = (value) => adminData.loading ? '?' : value
 
   return (
@@ -101,20 +103,20 @@ export function ExamOperations({ adminData, gateway, onNavigate }) {
           <p>Your exam-day overview. Monitor sittings, spot issues and keep candidates moving.</p>
         </div>
         <div className="admin-ops-toolbar">
-          <label className="admin-ops-date"><Icon name="calendar" size={19} /><span>Operations date<input aria-label="Operations date" type="date" value={day} onChange={(event) => { if (event.target.value) setDay(event.target.value) }} /></span></label>
-          <button type="button" className="admin-ops-button" disabled={refreshing || adminData.loading} onClick={refresh}><Icon name="sync" size={16} />{refreshing ? 'Refreshing...' : 'Refresh'}</button>
+          <AdminDatePicker value={day} onChange={setDay} />
+          <OperationsQuickActions onNavigate={onNavigate} />
         </div>
       </div>
       {adminData.error && <div role="alert" className="admin-ops-inline-warning">{adminData.error} Displayed data may be out of date.</div>}
       {adminData.warning && <Notice tone="warning">{adminData.warning}</Notice>}
 
       <section className="admin-ops-metrics" aria-label="Examination operations summary">
-        <OperationsMetric icon="calendar" label={isToday ? 'Scheduled today' : 'Scheduled sittings'} value={metricValue(scheduled.length)} helper="On the selected day's schedule" />
-        <OperationsMetric icon="check" label="Ready to start" value={metricValue(ready.length)} helper="Scheduled with a ready roster" tone="ready" />
-        <OperationsMetric icon="bolt" label="Live examinations" value={metricValue(live.filter((exam) => exam.status === 'active').length)} helper="Currently active across all dates" tone="live" />
-        <OperationsMetric icon="flag" label="Need attention" value={metricValue(attention.length)} helper="Suspended or roster issues" tone={attention.length ? 'attention' : ''} />
-        <OperationsMetric icon="users" label="Roster places" value={metricValue(scheduled.reduce((sum, exam) => sum + (exam.rosterCandidateCount || 0), 0))} helper="Candidate places across sittings" />
-        <OperationsMetric icon="submission" label="Closed sittings" value={metricValue(scheduled.filter((exam) => exam.status === 'closed').length)} helper="From the selected schedule" tone="ready" />
+        <OperationsMetric icon={RiCalendarScheduleLine} label={isToday ? 'Scheduled today' : 'Scheduled sittings'} value={metricValue(scheduled.length)} helper="On the selected day's schedule" />
+        <OperationsMetric icon={RiCheckboxCircleLine} label="Ready to start" value={metricValue(ready.length)} helper="Scheduled with a ready roster" tone="ready" />
+        <OperationsMetric icon={RiPlayCircleLine} label="Live examinations" value={metricValue(live.filter((exam) => exam.status === 'active').length)} helper="Active on the selected schedule" tone="live" />
+        <OperationsMetric icon={RiErrorWarningLine} label="Need attention" value={metricValue(attention.length)} helper="Suspended or roster issues" tone={attention.length ? 'attention' : ''} />
+        <OperationsMetric icon={RiGroupLine} label="Roster places" value={metricValue(scheduled.reduce((sum, exam) => sum + (exam.rosterCandidateCount || 0), 0))} helper="Candidate places across sittings" />
+        <OperationsMetric icon={RiFileCheckLine} label="Closed sittings" value={metricValue(scheduled.filter((exam) => exam.status === 'closed').length)} helper="From the selected schedule" tone="ready" />
       </section>
 
       <div className="admin-ops-filters">
@@ -132,7 +134,7 @@ export function ExamOperations({ adminData, gateway, onNavigate }) {
               {timeline.map((exam) => <OperationalExamRow key={exam.id} exam={exam} onOpen={() => openExam(exam)} />)}
               {!timeline.length && <PanelEmpty icon="calendar" title={adminData.loading ? 'Loading the schedule...' : 'No examinations in this view'} copy={adminData.loading ? 'Fetching examination state.' : 'Change the date or filters to find another sitting.'} />}
             </div>
-            <div className="admin-ops-panel-foot">Live and paused sittings stay visible across dates.</div>
+
           </section>
 
           <section className="admin-ops-panel admin-ops-ready" aria-label="Ready sittings">
@@ -165,15 +167,7 @@ export function ExamOperations({ adminData, gateway, onNavigate }) {
             <div className="admin-ops-panel-foot">Connection checks cover the selected live sitting.{monitor.error ? ' Candidate monitoring is unavailable.' : ''}</div>
           </section>
 
-          <section className="admin-ops-panel admin-ops-shortcuts" aria-label="Operations shortcuts">
-            <PanelHeading icon="bolt" title="Operations shortcuts" />
-            <div className="admin-ops-shortcut-list">
-              <Shortcut icon="roster" label="Candidate rosters" copy="Review eligibility and late entry" onClick={() => onNavigate('roster')} />
-              <Shortcut icon="results" label="Review results" copy="Inspect completed examination results" onClick={() => onNavigate('results')} />
-              <Shortcut icon="calendar" label="Timetable" copy="View scheduled examinations by level" onClick={() => onNavigate('timetable')} />
-            </div>
-            <div className="admin-ops-panel-foot"><Icon name="sync" size={14} /> Exam state refreshes every 10 seconds while this page is visible.</div>
-          </section>
+
         </div>
       </div>
     </div>
@@ -192,9 +186,6 @@ function QueueItem({ icon, title, copy, onClick }) {
   return <div className="admin-ops-queue-item"><span><Icon name={icon} size={20} /></span><div><strong>{title}</strong><small>{copy}</small></div><button type="button" className="admin-ops-button" onClick={onClick}>Review</button></div>
 }
 
-function Shortcut({ icon, label, copy, onClick }) {
-  return <button type="button" onClick={onClick}><span><Icon name={icon} size={19} /></span><div><strong>{label}</strong><small>{copy}</small></div><Icon name="chevronRight" size={16} /></button>
-}
 
 function attentionLabel(exam) {
   if (exam.rosterStatus === 'failed') return 'Roster preparation failed'
@@ -405,10 +396,10 @@ export function ExamOperationsDetail({ state, adminData, gateway, onNavigate }) 
   )
 }
 
-function OperationsMetric({ icon, label, value, helper, tone = '' }) {
+function OperationsMetric({ icon: MetricIcon, label, value, helper, tone = '' }) {
   return (
     <article className={`admin-ops-metric${tone ? ` admin-ops-metric--${tone}` : ''}`}>
-      <span className="admin-ops-metric__icon"><Icon name={icon} size={20} /></span>
+      <span className="admin-ops-metric__icon"><MetricIcon size={20} aria-hidden="true" /></span>
       <div><span>{label}</span><strong>{value}</strong><small>{helper}</small></div>
     </article>
   )
@@ -594,11 +585,11 @@ function terminalControlCopy(status) {
   return 'No operational actions are currently available.'
 }
 
-function matchesTab(exam, tab, now) {
-  if (tab === 'today') return isScheduledToday(exam, now) || LIVE_STATUSES.has(exam.status)
+function matchesTab(exam, tab) {
+  if (tab === 'today') return true
   if (tab === 'ready') return exam.status === 'sealed' && exam.rosterStatus === 'ready'
   if (tab === 'live') return LIVE_STATUSES.has(exam.status)
-  if (tab === 'upcoming') return exam.status === 'sealed' && isFutureDay(exam.scheduledStartAt, now)
+  if (tab === 'upcoming') return exam.status === 'sealed' && Date.parse(exam.scheduledStartAt) > Date.now()
   if (tab === 'completed') return TERMINAL_STATUSES.has(exam.status)
   return true
 }
@@ -622,12 +613,6 @@ function isScheduledToday(exam, now) {
   return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
 }
 
-function isFutureDay(value, now) {
-  if (!value) return false
-  const date = new Date(value)
-  const startOfTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
-  return date >= startOfTomorrow
-}
 
 function scheduleSentence(exam) {
   if (!exam.scheduledStartAt) return 'No scheduled start time is attached to this examination.'

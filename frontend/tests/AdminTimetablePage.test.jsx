@@ -1,8 +1,16 @@
 import { useState } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { AdminTimetablePage } from '../src/features/admin/pages/AdminTimetablePage'
 import { parseStaffPath, pathForStaffState, staffPatchFromRoute } from '../src/app/staffNavigation'
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-09-26T12:00:00'))
+  HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
+  HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); this.dispatchEvent(new Event('close')) }
+})
+afterEach(() => vi.useRealTimers())
 
 function exam(id, overrides = {}) {
   return { id, title: id, termId: 'term', curriculumSubjectId: id, assessmentComponentId: 'ca', academicLevelId: 'l1', academicLevelName: 'JSS1', subjectName: 'English', assessmentName: 'CA', status: 'sealed', statusLabel: 'Sealed', durationMinutes: 45, scheduledStartAt: '2026-09-26T09:00:00Z', ...overrides }
@@ -26,9 +34,9 @@ it('lists only scheduled current revisions awaiting their start in chronological
     exam('Scheduled draft', { status: 'draft', statusLabel: 'Draft' }),
     exam('Scheduled submitted', { status: 'submitted', statusLabel: 'Submitted' }),
   ])} />)
-  expect(screen.getAllByRole('heading', { level: 4 }).map((node) => node.textContent)).toEqual(['Current revision', 'Scheduled draft', 'Scheduled submitted', 'Later'])
+  expect(screen.getAllByRole('heading', { level: 4 }).map((node) => node.textContent)).toEqual(['Current revision', 'Scheduled draft', 'Scheduled submitted'])
   expect(screen.getByText('Draft')).toBeInTheDocument()
-  expect(screen.getByRole('status')).toHaveTextContent('4 scheduled exams across 2 days')
+  expect(screen.getByRole('status')).toHaveTextContent('3 scheduled exams on')
 })
 function TimetableHarness({ adminData }) {
   const [levelId, setLevelId] = useState(null)
@@ -75,4 +83,28 @@ it('restores a selected level from the timetable URL', () => {
   expect(staff.timetableLevelId).toBe('l1')
   expect(pathForStaffState({ session: { role: 'admin' }, staff })).toBe('/admin/timetable?level=l1')
   expect(staffPatchFromRoute(parseStaffPath('/admin/timetable')).timetableLevelId).toBeNull()
+})
+
+it('defaults to today and lets users select past dates and return to today', () => {
+  render(<TimetableHarness adminData={data([
+    exam('Today paper'),
+    exam('Past paper', { scheduledStartAt: '2026-09-24T09:00:00Z' }),
+    exam('Future paper', { scheduledStartAt: '2026-09-29T09:00:00Z' }),
+  ])} />)
+  expect(screen.getByRole('button', { name: 'Open JSS1 schedule' })).toHaveTextContent('1 scheduled exam')
+  fireEvent.click(screen.getByRole('button', { name: 'Open JSS1 schedule' }))
+  expect(screen.getByText('Today paper')).toBeInTheDocument()
+  expect(screen.queryByText('Past paper')).not.toBeInTheDocument()
+  expect(screen.queryByText('Future paper')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: /^Timetable date:/ }))
+  fireEvent.click(screen.getByRole('button', { name: new Date('2026-09-24T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }) }))
+  expect(screen.getByText('Past paper')).toBeInTheDocument()
+  expect(screen.queryByText('Today paper')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'All level schedules' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Open JSS1 schedule' }))
+  expect(screen.getByText('Past paper')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: /^Timetable date:/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Today' }))
+  expect(screen.getByText('Today paper')).toBeInTheDocument()
+  expect(screen.queryByText('Past paper')).not.toBeInTheDocument()
 })
