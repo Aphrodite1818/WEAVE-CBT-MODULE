@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { DashboardSchoolIdentity, Metric, Notice, StatusBadge } from '../../shared/ui'
+import { DashboardSchoolIdentity, Notice, StatusBadge } from '../../shared/ui'
 import { FormattedText } from '../../shared/ui/FormattedText'
 import './student.css'
 import { getLocalBrandLogoSrc } from '../../api/branding'
-import { RiFlagFill, RiLogoutBoxRLine, RiDatabase2Line } from '@remixicon/react'
+import { RiCheckboxCircleFill, RiFlagFill, RiLogoutBoxRLine, RiDatabase2Line } from '@remixicon/react'
 
 const HEARTBEAT_RETRY_MS = 10_000
 
@@ -116,14 +116,8 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
 
   if (exam.stage === 'submitted' || submitted) {
     return (
-      <main className="premium-exam-shell" style={{justifyContent: 'center', alignItems: 'center'}}>
-        <section className="premium-lobby-card">
-          <StatusBadge tone="success">Exam submitted.</StatusBadge>
-          <h1>Submission received</h1>
-          <p>Your answers have been received by the school server.<br/>You can no longer change your answers.</p>
-          {submitted && <Metric label="Score" value={`${submitted.raw_score} / ${submitted.raw_max_score}`} helper={`${submitted.percentage}%`} />}
-          <button className="premium-btn-primary" onClick={returnToSignIn} style={{width: '100%', marginTop: '16px'}}>Logout</button>
-        </section>
+      <main className="premium-exam-shell premium-exam-shell--submitted">
+        <StudentExamSubmittedCard result={submitted} onLogout={returnToSignIn} />
       </main>
     )
   }
@@ -142,14 +136,25 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
       )
     }
 
+    const answeredCount = questions.filter((question) => question.selected_option_ids.length > 0).length
+    const isSaving = Object.values(savingByQuestion).includes('Saving...')
+    const unansweredCount = questions.length - answeredCount
+
     return (
-      <main className="premium-exam-shell">
-        <StudentExamHeader title={attempt.exam_title} branding={branding} schoolName={schoolName} serverName={serverName} candidateName={candidateName} candidateInitial={candidateInitial} onLogout={returnToSignIn} />
-        <div className="premium-exam-layout">
-          <aside className="premium-exam-sidebar">
-            <div className="premium-timer-box"><span>Time remaining</span><strong>{formatRemaining(remaining)}</strong></div>
+      <main className="premium-exam-shell premium-exam-shell--session">
+        <div className="premium-exam-frame">
+          <aside className="premium-exam-rail premium-exam-sidebar" aria-label="Exam progress">
+            <div className="premium-exam-rail-brand">
+              <DashboardSchoolIdentity schoolName={branding?.school_name || schoolName || 'School'} logoSrc={getLocalBrandLogoSrc(branding)} />
+            </div>
+            <div className="premium-exam-rail-timer">
+              <ExamCountdownTimer remaining={remaining} totalSeconds={attempt.time_limit_seconds} />
+            </div>
             <div className="premium-question-nav">
-              <h3>Questions</h3>
+              <div className="premium-question-nav__head">
+                <h3>Questions</h3>
+                <span className="premium-question-nav__meta">{answeredCount} of {questions.length} answered</span>
+              </div>
               <div className="premium-nav-grid">
                 {questions.map((question, index) => (
                   <button
@@ -164,11 +169,48 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
                 ))}
               </div>
             </div>
+            <div className="premium-exam-rail-submit">
+              <button
+                type="button"
+                className="premium-exam-rail-submit-btn"
+                disabled={isSaving}
+                onClick={() => submitAttempt({ gateway, setSubmitted, dispatch, setAttemptError })}
+              >
+                Submit exam
+              </button>
+              {unansweredCount > 0 && (
+                <p className="premium-exam-rail-submit-note">{unansweredCount} question{unansweredCount === 1 ? '' : 's'} not answered</p>
+              )}
+            </div>
           </aside>
-          <div className="premium-exam-content">
+          <div className="premium-exam-stage">
+            <StudentExamHeader
+              title={attempt.exam_title}
+              branding={branding}
+              schoolName={schoolName}
+              serverName={serverName}
+              candidateName={candidateName}
+              candidateInitial={candidateInitial}
+              onLogout={returnToSignIn}
+              layout="session"
+            />
+            <div className="premium-exam-content">
+            <div className="premium-exam-content__scroll">
             <div className="premium-question-header">
               <h2>Question {exam.index + 1} of {questions.length}</h2>
-              <label className="premium-mark-review"><input type="checkbox" checked={Boolean(current.is_flagged)} disabled={savingByQuestion[current.id] === 'Saving...'} onChange={() => saveAnswer({ question: current, flagged: !current.is_flagged, gateway, setAttempt, setSavingByQuestion, setAttemptError, pendingSaves })} /> Mark for review</label>
+              <div className="premium-question-toolbar">
+                {current.selected_option_ids.length > 0 && (
+                  <button
+                    type="button"
+                    className="premium-clear-choice"
+                    disabled={savingByQuestion[current.id] === 'Saving...'}
+                    onClick={() => saveAnswer({ question: current, clearSelection: true, gateway, setAttempt, setSavingByQuestion, setAttemptError, pendingSaves })}
+                  >
+                    Clear choice
+                  </button>
+                )}
+                <label className="premium-mark-review"><input type="checkbox" checked={Boolean(current.is_flagged)} disabled={savingByQuestion[current.id] === 'Saving...'} onChange={() => saveAnswer({ question: current, flagged: !current.is_flagged, gateway, setAttempt, setSavingByQuestion, setAttemptError, pendingSaves })} /> Mark for review</label>
+              </div>
             </div>
             {current.instruction && <p className="premium-question-instruction"><FormattedText text={current.instruction} /></p>}
             <div className="premium-question-prompt"><FormattedText text={current.prompt} /></div>
@@ -202,15 +244,17 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
                 )
               })}
             </div>
-            {attemptError && <div style={{marginTop: '24px'}}><Notice tone="danger">{attemptError}</Notice></div>}
-            <div className="premium-exam-footer">
+            {attemptError && <div className="premium-exam-content__notice"><Notice tone="danger">{attemptError}</Notice></div>}
+            </div>
+            <div className="premium-exam-footer premium-exam-footer--dock">
               <button className="premium-btn-secondary" onClick={() => dispatch({ type: 'exam', patch: { index: Math.max(0, exam.index - 1) } })} disabled={exam.index === 0}>Previous</button>
               {exam.index < questions.length - 1 ? (
                 <button className="premium-btn-primary" onClick={() => dispatch({ type: 'exam', patch: { index: exam.index + 1 } })}>Save and next</button>
               ) : (
-                <button className="premium-btn-primary" disabled={Object.values(savingByQuestion).includes('Saving...')} onClick={() => submitAttempt({ gateway, setSubmitted, dispatch, setAttemptError })}>Submit exam</button>
+                <button className="premium-btn-primary" disabled={isSaving} onClick={() => submitAttempt({ gateway, setSubmitted, dispatch, setAttemptError })}>Submit exam</button>
               )}
             </div>
+          </div>
           </div>
         </div>
       </main>
@@ -236,7 +280,7 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
         {ready && <Notice>Your examination has been resolved from the local CBT server and is ready to open.</Notice>}
         {attemptError && <Notice tone="danger">{attemptError}</Notice>}
         <button className="premium-btn-primary" style={{width: '100%', marginTop: '24px'}} disabled={unavailable || starting} onClick={() => startAttempt({ gateway, setAttempt, dispatch, setAttemptError, setStarting, onExamSuspended, startPending, expectedExamId: resolution?.exam?.id })}>
-          {starting ? 'Checking exam status...' : noExam ? 'Waiting for an exam...' : waiting ? 'Waiting for activation...' : suspended ? 'Waiting for exam to resume...' : 'Start Exam ->'}
+          {starting ? 'Checking exam status...' : noExam ? 'Waiting for an exam...' : waiting ? 'Waiting for activation...' : suspended ? 'Waiting for exam to resume...' : 'Start Exam'}
         </button>
         <button className="premium-btn-secondary" type="button" onClick={returnToSignIn} style={{width: '100%', marginTop: '12px'}}>Logout</button>
       </section>
@@ -244,16 +288,124 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
   )
 }
 
-function StudentExamHeader({ title, branding, schoolName, serverName, candidateName, candidateInitial, onLogout }) {
-  return <header className="premium-exam-header">
-    <div className="premium-exam-header-left"><DashboardSchoolIdentity schoolName={branding?.school_name || schoolName || 'School'} logoSrc={getLocalBrandLogoSrc(branding)} /></div>
-    <div className="premium-exam-server" title={serverName}><span><RiDatabase2Line size={18} aria-hidden="true" /></span><div><small>CBT server</small><strong>{serverName}</strong></div></div>
-    <div className="premium-exam-header-right">
-      <div className="premium-student-identity"><span className="student-avatar" aria-hidden="true">{candidateInitial}</span><strong className="premium-student-name" title={candidateName}>{candidateName}</strong></div>
-      <button className="premium-student-logout" type="button" onClick={onLogout}><RiLogoutBoxRLine size={17} aria-hidden="true" /><span>Logout</span></button>
+const SUBMISSION_SCORE_RADIUS = 58
+const SUBMISSION_SCORE_CIRCUMFERENCE = 2 * Math.PI * SUBMISSION_SCORE_RADIUS
+
+function StudentExamSubmittedCard({ result, onLogout }) {
+  const scoreValue = result ? `${result.raw_score} / ${result.raw_max_score}` : null
+  const percentage = result ? Math.min(100, Math.max(0, Number.parseFloat(result.percentage) || 0)) : null
+  const progress = percentage === null ? 0 : percentage / 100
+  const offset = SUBMISSION_SCORE_CIRCUMFERENCE * (1 - progress)
+
+  return (
+    <section className="premium-submission-card" aria-labelledby="submission-title">
+      <div className="premium-submission-card__glow" aria-hidden="true" />
+      <div className="premium-submission-card__hero">
+        <span className="premium-submission-card__icon" aria-hidden="true">
+          <RiCheckboxCircleFill size={40} />
+        </span>
+        <h1 id="submission-title">Exam submitted</h1>
+        <p className="premium-submission-card__lead">Your answers are saved. You may sign out when ready.</p>
+      </div>
+      {result && (
+        <div className="premium-submission-score" aria-label={`Score ${scoreValue}, ${result.percentage} percent`}>
+          <div className="premium-submission-score__ring">
+            <svg viewBox="0 0 140 140" aria-hidden="true">
+              <circle className="premium-submission-score__track" cx="70" cy="70" r={SUBMISSION_SCORE_RADIUS} />
+              <circle
+                className="premium-submission-score__progress"
+                cx="70"
+                cy="70"
+                r={SUBMISSION_SCORE_RADIUS}
+                style={{ strokeDasharray: SUBMISSION_SCORE_CIRCUMFERENCE, strokeDashoffset: offset }}
+              />
+            </svg>
+            <div className="premium-submission-score__face">
+              <strong>{result.percentage}%</strong>
+              <span>{scoreValue}</span>
+            </div>
+          </div>
+        </div>
+      )}
+      <button className="premium-btn-primary premium-submission-card__logout" type="button" onClick={onLogout}>Logout</button>
+    </section>
+  )
+}
+
+function StudentExamHeader({ title, branding, schoolName, serverName, candidateName, candidateInitial, onLogout, layout = 'standalone' }) {
+  const session = layout === 'session'
+  return (
+    <header className={`premium-exam-header${session ? ' premium-exam-header--session' : ''}`}>
+      <div className="premium-exam-header__inner">
+        <div className="premium-exam-header-left">
+          {!session && <DashboardSchoolIdentity schoolName={branding?.school_name || schoolName || 'School'} logoSrc={getLocalBrandLogoSrc(branding)} />}
+          {session && (
+            <div className="premium-exam-session-title premium-exam-session-title--solo">
+              <p className="premium-exam-session-eyebrow">Examination</p>
+              <h1>{title}</h1>
+            </div>
+          )}
+        </div>
+        <div className="premium-exam-server" title={serverName}>
+          <span><RiDatabase2Line size={18} aria-hidden="true" /></span>
+          <div><small>CBT server</small><strong>{serverName}</strong></div>
+        </div>
+        <div className="premium-exam-header-right">
+          {session ? (
+            <div className="premium-exam-header-account">
+              <span className="student-avatar" aria-hidden="true">{candidateInitial}</span>
+              <strong className="premium-student-name" title={candidateName}>{candidateName}</strong>
+              <button className="premium-student-logout" type="button" onClick={onLogout} aria-label="Logout">
+                <RiLogoutBoxRLine size={18} aria-hidden="true" />
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="premium-student-identity"><span className="student-avatar" aria-hidden="true">{candidateInitial}</span><strong className="premium-student-name" title={candidateName}>{candidateName}</strong></div>
+              <button className="premium-student-logout" type="button" onClick={onLogout}><RiLogoutBoxRLine size={17} aria-hidden="true" /><span>Logout</span></button>
+            </>
+          )}
+        </div>
+        {!session && title && <div className="premium-exam-title"><h1>{title}</h1></div>}
+      </div>
+    </header>
+  )
+}
+
+function ExamCountdownTimer({ remaining, totalSeconds }) {
+  const radius = 50
+  const circumference = 2 * Math.PI * radius
+  const safeTotal = Math.max(Number(totalSeconds) || 0, Number(remaining) || 0, 1)
+  const progress = Math.min(1, Math.max(0, (Number(remaining) || 0) / safeTotal))
+  const offset = circumference * (1 - progress)
+  const urgent = remaining <= 300
+  const critical = remaining <= 120
+
+  return (
+    <div
+      className={`premium-exam-timer${urgent ? ' is-urgent' : ''}${critical ? ' is-critical' : ''}`}
+      role="timer"
+      aria-live="off"
+      aria-label={`Time remaining ${formatRemaining(remaining)}`}
+    >
+      <div className="premium-exam-timer__ring">
+        <svg viewBox="0 0 120 120" aria-hidden="true">
+          <circle className="premium-exam-timer__track" cx="60" cy="60" r={radius} />
+          <circle
+            className="premium-exam-timer__progress"
+            cx="60"
+            cy="60"
+            r={radius}
+            style={{ strokeDasharray: circumference, strokeDashoffset: offset }}
+          />
+        </svg>
+        <div className="premium-exam-timer__face">
+          <span className="premium-exam-timer__label">Time left</span>
+          <strong className="premium-exam-timer__value" key={Math.floor(remaining / 60)}>{formatRemaining(remaining)}</strong>
+        </div>
+      </div>
     </div>
-    <div className="premium-exam-title"><h1>{title}</h1></div>
-  </header>
+  )
 }
 
 function AttemptMedia({ gateway, questionId, optionId, alt }) {
@@ -306,10 +458,11 @@ async function startAttempt({ gateway, setAttempt, dispatch, setAttemptError, se
   }
 }
 
-async function saveAnswer({ question, optionId, flagged = question.is_flagged, gateway, setAttempt, setSavingByQuestion, setAttemptError, pendingSaves }) {
+async function saveAnswer({ question, optionId, clearSelection = false, flagged = question.is_flagged, gateway, setAttempt, setSavingByQuestion, setAttemptError, pendingSaves }) {
   if (pendingSaves.current.has(question.id)) return
   pendingSaves.current.add(question.id)
-  const selectedOptionIds = optionId === undefined ? question.selected_option_ids
+  const selectedOptionIds = clearSelection ? []
+    : optionId === undefined ? question.selected_option_ids
     : question.question_type === 'multiple_choice'
       ? question.selected_option_ids.includes(optionId)
         ? question.selected_option_ids.filter((id) => id !== optionId)

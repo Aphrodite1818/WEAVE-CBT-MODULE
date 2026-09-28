@@ -5,7 +5,7 @@ import { StudentWorkspace } from '../src/features/student/StudentWorkspace'
 
 function setup({ suspended = false, save, stage = 'active', availability = 'ready', onSuspended = vi.fn() } = {}) {
   const question = { id: 'q1', prompt: 'First question', question_type: 'single_choice', selected_option_ids: ['a'], is_flagged: false, mutation_sequence: 1, options: [{ id: 'a', text: 'First answer' }, { id: 'b', text: 'Second answer' }] }
-  const attempt = { id: 'attempt', exam_title: 'English exam', status: 'in_progress', remaining_seconds: 2700, exam_suspended: suspended, questions: [question, { ...question, id: 'q2', prompt: 'Second question', selected_option_ids: [] }] }
+  const attempt = { id: 'attempt', exam_title: 'English exam', status: 'in_progress', time_limit_seconds: 2700, remaining_seconds: 2700, exam_suspended: suspended, questions: [question, { ...question, id: 'q2', prompt: 'Second question', selected_option_ids: [] }] }
   const gateway = { auth: { getStudentStatus: vi.fn().mockResolvedValue({ availability, exam_id: 'exam', status_message: 'Please wait for your invigilator.' }) }, attempts: {
     getCurrentAttempt: vi.fn().mockResolvedValue(attempt),
     startCurrentAttempt: vi.fn().mockResolvedValue(attempt),

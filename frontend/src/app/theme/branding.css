@@ -123,10 +123,20 @@
 
 /* The exam navigator provides the dominant school color; the paper stays quiet. */
 .weave-app .premium-exam-sidebar { background: rgb(var(--color-primary)); border-color: rgb(var(--color-primary)); color: rgb(var(--color-on-primary)); }
-.weave-app .premium-exam-sidebar .premium-timer-box { background: rgb(var(--color-on-primary) / .1); border-color: rgb(var(--color-on-primary) / .3); }
-.weave-app .premium-exam-sidebar .premium-timer-box span { color: rgb(var(--color-on-primary) / .85); }
-.weave-app .premium-exam-sidebar .premium-timer-box strong,
-.weave-app .premium-exam-sidebar .premium-question-nav h3 { color: rgb(var(--color-on-primary)); }
+.weave-app .premium-exam-rail-brand .dashboard-school-identity strong { color: rgb(var(--color-on-primary)); }
+.weave-app .premium-exam-rail-brand .dashboard-school-identity__mark {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.weave-app .premium-exam-sidebar .premium-question-nav h3,
+.weave-app .premium-exam-sidebar .premium-question-nav__meta,
+.weave-app .premium-exam-sidebar .premium-exam-timer__label,
+.weave-app .premium-exam-sidebar .premium-exam-timer__value { color: rgb(var(--color-on-primary)); }
+.weave-app .premium-exam-shell--session { background: rgb(var(--color-background)); }
+.weave-app .premium-exam-header--session { background: rgb(var(--color-surface)); border-color: rgb(var(--color-border)); }
+.weave-app .premium-exam-rail-submit-btn { background: rgb(var(--color-on-primary)); color: rgb(var(--color-primary)); }
+.weave-app .premium-exam-rail-submit-note { color: rgb(var(--color-on-primary) / .82); }
 .weave-app .premium-exam-sidebar .nav-btn { background: rgb(var(--color-primary)); color: rgb(var(--color-on-primary)); border-color: rgb(var(--color-on-primary) / .45); }
 .weave-app .premium-exam-sidebar .nav-btn:hover { background: rgb(var(--color-on-primary) / .16); }
 .weave-app .premium-exam-sidebar .nav-btn.answered { background: rgb(var(--color-on-primary) / .2); color: rgb(var(--color-on-primary)); border-color: rgb(var(--color-on-primary) / .65); }
