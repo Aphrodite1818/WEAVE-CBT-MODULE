@@ -37,6 +37,19 @@ class CandidateService(_CandidateService):
                 "Closing, cancelling, closed, or cancelled examinations are read-only"
             )
 
+    @staticmethod
+    async def _require_current_roster_revision(
+        db: AsyncSession,
+        exam: Exam,
+    ) -> None:
+        """Reject recovery after an examination revision has been superseded."""
+
+        child_revision = await ExamRepository.get_latest_child_revision(db, exam.id)
+        if child_revision is not None:
+            raise CandidateRosterError(
+                "This roster belongs to a superseded examination revision and is read-only"
+            )
+
     @classmethod
     async def list_roster(
         cls,
