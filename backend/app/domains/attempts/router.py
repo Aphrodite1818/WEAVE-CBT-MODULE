@@ -97,6 +97,16 @@ async def get_current_attempt(
         raise _http_error(exc) from exc
 
 
+@student_router.get("/current/result", response_model=AttemptSubmissionResponse)
+async def get_current_attempt_result(
+    db: DbSession, context: CurrentStudentExamSession
+) -> AttemptSubmissionResponse:
+    try:
+        return await AttemptService.get_current_result(db, context=context)
+    except (AttemptStateError, ExamNotFound, ExamStateError, ValueError) as exc:
+        raise _http_error(exc) from exc
+
+
 @student_router.post("/current/heartbeat", response_model=AttemptHeartbeatResponse)
 async def heartbeat_current_attempt(
     db: DbSession,
