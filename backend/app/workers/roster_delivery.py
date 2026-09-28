@@ -14,6 +14,7 @@ import logging
 from sqlalchemy import select
 
 from app.core.database import async_session_factory
+from app.domains.exams.lineage import latest_exam_revision_clause
 from app.domains.exams.models import Exam, ExamRosterStatus, ExamStatus
 from app.domains.sync.schemas import SyncReconcileResponse
 from app.workers.producer import arq_producer, roster_reconcile_job_id
@@ -22,7 +23,10 @@ logger = logging.getLogger(__name__)
 
 
 async def enqueue_stale_roster_reconciliations() -> int:
-    """Immediately enqueue every durable SEALED + STALE roster.
+    """Immediately enqueue every durable current SEALED + STALE roster.
+
+    Superseded revisions are historical evidence and are deliberately excluded
+    even if an older deployment left one in STALE state.
 
     The query runs in a fresh session so this function can only observe roster
     invalidations that have already committed. Each automatic reconciliation is
@@ -44,6 +48,7 @@ async def enqueue_stale_roster_reconciliations() -> int:
                         .where(
                             Exam.status == ExamStatus.SEALED,
                             Exam.roster_status == ExamRosterStatus.STALE,
+                            latest_exam_revision_clause(),
                         )
                         .order_by(Exam.updated_at.asc(), Exam.id.asc())
                     )
