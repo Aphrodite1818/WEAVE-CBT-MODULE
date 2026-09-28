@@ -42,10 +42,76 @@
   font-weight: 700;
 }
 
+.admin-rosters-heading--with-action {
+  align-items: center;
+}
+
+.admin-roster-history-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-height: 42px;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 10px;
+  background: rgb(var(--color-surface));
+  color: rgb(var(--color-text));
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 720;
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease, color 140ms ease;
+}
+
+.admin-roster-history-link:hover {
+  border-color: rgb(var(--color-primary) / .38);
+  color: rgb(var(--color-primary));
+  box-shadow: 0 4px 12px rgb(15 23 42 / .06);
+}
+
+.admin-roster-history-link:focus-visible {
+  outline: 3px solid rgb(var(--color-primary) / .35);
+  outline-offset: 2px;
+}
+
+.admin-roster-history-link > span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgb(var(--color-primary-soft));
+  color: rgb(var(--color-primary));
+  padding: 0 6px;
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.admin-roster-history-filters {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.55fr) minmax(165px, .65fr) minmax(165px, .65fr) minmax(180px, .72fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.admin-roster-history-filters .teacher-search-control,
+.admin-roster-history-filters .weave-select__trigger {
+  min-height: 44px;
+  height: 44px;
+  font-size: 14px;
+}
+
 .admin-roster-history {
   margin-top: 8px;
   border-top: 1px solid rgb(var(--color-border));
   padding-top: 26px;
+}
+
+.admin-roster-history--standalone {
+  margin-top: 0;
+  border-top: 0;
+  padding-top: 0;
 }
 
 .admin-roster-history-group {
@@ -196,11 +262,35 @@
   min-height: 160px;
 }
 
+@media (max-width: 1100px) {
+  .admin-roster-history-filters {
+    grid-template-columns: minmax(260px, 1fr) minmax(160px, .6fr) minmax(160px, .6fr);
+  }
+
+  .admin-roster-history-filters > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (max-width: 760px) {
   .admin-roster-section__heading,
-  .admin-roster-history-group__heading {
+  .admin-roster-history-group__heading,
+  .admin-rosters-heading--with-action {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .admin-roster-history-link {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .admin-roster-history-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-roster-history-filters > :last-child {
+    grid-column: auto;
   }
 
   .admin-roster-history-group {
