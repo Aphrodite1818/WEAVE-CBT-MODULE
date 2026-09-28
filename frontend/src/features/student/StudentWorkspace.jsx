@@ -18,7 +18,7 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
   const startPending = useRef(false)
   const pendingSaves = useRef(new Set())
   const [clock, setClock] = useState(() => Date.now())
-  const isSuspended = Boolean(suspension || attempt?.exam_suspended || resolution?.state === 'suspended')
+  const isSuspended = exam.stage === 'active' && Boolean(suspension || attempt?.exam_suspended || resolution?.state === 'suspended')
   const remaining = Math.max(0, (attempt?.remaining_seconds || 0) - (attempt?.exam_suspended || attempt?.status !== 'in_progress' ? 0 : Math.floor(Math.max(0, clock - (attempt?.clock_received_at || clock)) / 1000)))
   useEffect(() => {
     if (exam.stage !== 'active' || !attempt?.id || submitted || isSuspended) return undefined
@@ -36,6 +36,13 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
     suspensionHandled.current = true
     onExamSuspended?.(suspension?.message || (resolution?.state === 'suspended' ? resolution.statusMessage : undefined))
   }, [isSuspended, onExamSuspended, resolution, suspension])
+
+  useEffect(() => {
+    if (exam.stage === 'active') return
+    suspensionHandled.current = false
+    setSuspension(null)
+    setAttempt(null)
+  }, [exam.stage])
 
   useEffect(() => {
     if (exam.stage !== 'active') return undefined
@@ -105,7 +112,7 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
     }
   }, [attempt?.id, exam.stage, gateway, submitted, isSuspended])
 
-  if (isSuspended) return <main className="premium-exam-shell"><section className="premium-lobby-card"><h1>Exam currently suspended</h1><p>Signing you out. Please wait for your invigilator before signing in again.</p></section></main>
+  if (isSuspended) return <main className="premium-exam-shell"><section className="premium-lobby-card"><h1>Exam currently suspended</h1><p>Returning you to the waiting room. Your session and saved answers are protected.</p></section></main>
 
   if (exam.stage === 'submitted' || submitted) {
     return (
@@ -213,10 +220,11 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
   const state = resolution?.state || 'no_exam'
   const noExam = state === 'no_exam'
   const waiting = state === 'waiting_for_activation'
-  const unavailable = noExam || waiting
+  const suspended = state === 'suspended'
+  const unavailable = noExam || waiting || suspended
   const ready = state === 'ready' || state === 'makeup'
   const title = noExam ? 'No exam available yet' : resolution?.exam?.title || 'Current examination'
-  const statusLabel = noExam ? 'Waiting room' : waiting ? 'Waiting for activation' : state === 'makeup' ? 'Makeup exam ready' : 'Exam ready'
+  const statusLabel = noExam ? 'Waiting room' : waiting ? 'Waiting for activation' : suspended ? 'Exam suspended' : state === 'makeup' ? 'Makeup exam ready' : 'Exam ready'
 
   return (
     <main className="premium-exam-shell" style={{justifyContent: 'center', alignItems: 'center'}}>
@@ -227,8 +235,8 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
         {unavailable && <Notice>Weave is checking the local CBT server automatically. You do not need to sign in again.</Notice>}
         {ready && <Notice>Your examination has been resolved from the local CBT server and is ready to open.</Notice>}
         {attemptError && <Notice tone="danger">{attemptError}</Notice>}
-        <button className="premium-btn-primary" style={{width: '100%', marginTop: '24px'}} disabled={unavailable || starting} onClick={() => startAttempt({ gateway, setAttempt, dispatch, setAttemptError, setStarting, setSuspension, startPending, expectedExamId: resolution?.exam?.id })}>
-          {starting ? 'Checking exam status...' : noExam ? 'Waiting for an exam...' : waiting ? 'Waiting for activation...' : 'Start Exam ->'}
+        <button className="premium-btn-primary" style={{width: '100%', marginTop: '24px'}} disabled={unavailable || starting} onClick={() => startAttempt({ gateway, setAttempt, dispatch, setAttemptError, setStarting, onExamSuspended, startPending, expectedExamId: resolution?.exam?.id })}>
+          {starting ? 'Checking exam status...' : noExam ? 'Waiting for an exam...' : waiting ? 'Waiting for activation...' : suspended ? 'Waiting for exam to resume...' : 'Start Exam ->'}
         </button>
         <button className="premium-btn-secondary" type="button" onClick={returnToSignIn} style={{width: '100%', marginTop: '12px'}}>Logout</button>
       </section>
@@ -269,27 +277,27 @@ function AttemptMedia({ gateway, questionId, optionId, alt }) {
   return url ? <img src={url} alt={alt} /> : <span className="premium-media-loading">Loading image…</span>
 }
 
-async function startAttempt({ gateway, setAttempt, dispatch, setAttemptError, setStarting, setSuspension, startPending, expectedExamId }) {
+async function startAttempt({ gateway, setAttempt, dispatch, setAttemptError, setStarting, onExamSuspended, startPending, expectedExamId }) {
   if (startPending.current) return
   startPending.current = true
   setStarting(true)
   setAttemptError('')
   try {
     const status = await gateway.auth.getStudentStatus()
-    if (status.availability === 'suspended') { setSuspension({ message: status.status_message }); return }
+    if (status.availability === 'suspended') { onExamSuspended?.(status.status_message); return }
     if (!['ready', 'makeup'].includes(status.availability) || status.exam_id !== expectedExamId) {
       setAttemptError(status.status_message || 'This examination is not currently available. Please wait for your invigilator.')
       return
     }
     // The start endpoint remains authoritative if the exam changes after this check.
     const attempt = await gateway.attempts.startCurrentAttempt()
-    if (attempt.exam_suspended) { setSuspension({}); return }
+    if (attempt.exam_suspended) { onExamSuspended?.(); return }
     setAttempt({ ...attempt, clock_received_at: Date.now() })
     dispatch({ type: 'exam', patch: { stage: 'active', index: 0 } })
   } catch (error) {
     try {
       const status = await gateway.auth.getStudentStatus()
-      if (status.availability === 'suspended') { setSuspension({ message: status.status_message }); return }
+      if (status.availability === 'suspended') { onExamSuspended?.(status.status_message); return }
     } catch { /* Preserve the start failure when status is unavailable. */ }
     setAttemptError(error.userMessage || 'Weave could not start this attempt. Please try again.')
   } finally {

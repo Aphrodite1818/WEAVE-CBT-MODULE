@@ -16,12 +16,14 @@ from app.domains.auth.student_service import (
     INVALID_STUDENT_LOGIN,
     NO_EXAM_MESSAGE,
     READY_MESSAGE,
+    SUSPENDED_MESSAGE,
     StudentAuthenticationError,
     StudentAuthService,
     StudentExamResolution,
     hash_student_session_token,
 )
 from app.domains.candidates.repository import CandidateRepository
+from app.domains.exams.models import ExamStatus
 
 
 class StudentAuthTests(unittest.IsolatedAsyncioTestCase):
@@ -187,6 +189,47 @@ class StudentAuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(captured["session"].candidate_id)
         self.assertIsNone(captured["session"].exam_id)
         db.commit.assert_awaited_once()
+
+    async def test_suspended_exam_resolves_to_suspended_waiting_room_state(self):
+        student_id = uuid4()
+        exam_id = uuid4()
+        enrollment = SimpleNamespace(student_id=student_id)
+        candidate = SimpleNamespace(
+            id=uuid4(),
+            student_id=student_id,
+            exam_id=exam_id,
+        )
+        exam = SimpleNamespace(
+            id=exam_id,
+            title="English",
+            scheduled_start_at=None,
+            activated_at=datetime.now(UTC),
+        )
+        rows = AsyncMock(side_effect=[[], [(candidate, exam)]])
+        db = AsyncMock()
+
+        with patch.object(StudentAuthService, "_normal_candidate_rows", rows):
+            resolution = await StudentAuthService._resolve_candidate(
+                db,
+                enrollment=enrollment,
+            )
+
+        self.assertEqual(
+            resolution.availability,
+            StudentExamAvailability.SUSPENDED,
+        )
+        self.assertEqual(resolution.status_message, SUSPENDED_MESSAGE)
+        self.assertIs(resolution.candidate, candidate)
+        self.assertIs(resolution.exam, exam)
+        self.assertEqual(rows.await_count, 2)
+        self.assertEqual(
+            rows.await_args_list[0].kwargs["statuses"],
+            (ExamStatus.ACTIVE,),
+        )
+        self.assertEqual(
+            rows.await_args_list[1].kwargs["statuses"],
+            (ExamStatus.SUSPENDED,),
+        )
 
     async def test_lowercase_admission_number_is_rejected_before_lookup(self):
         db = AsyncMock()

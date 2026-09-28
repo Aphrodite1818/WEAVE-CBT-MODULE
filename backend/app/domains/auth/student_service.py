@@ -32,6 +32,9 @@ INVALID_STUDENT_LOGIN = "Invalid admission number or password"
 NO_EXAM_MESSAGE = "No examination is currently available for you."
 WAITING_MESSAGE = "Your examination is scheduled and waiting for activation."
 READY_MESSAGE = "Your examination is ready to begin."
+SUSPENDED_MESSAGE = (
+    "Your examination has been suspended. Stay in the waiting room until it is resumed."
+)
 MAKEUP_MESSAGE = "Your approved makeup examination is ready to begin."
 
 
@@ -171,6 +174,25 @@ class StudentAuthService:
                 makeup_authorization_id=None,
                 availability=StudentExamAvailability.READY,
                 status_message=READY_MESSAGE,
+            )
+
+        suspended = await cls._normal_candidate_rows(
+            db,
+            student_id=enrollment.student_id,
+            statuses=(ExamStatus.SUSPENDED,),
+        )
+        if len(suspended) > 1:
+            raise StudentAuthenticationError(
+                "Multiple suspended examinations were found for this student"
+            )
+        if suspended:
+            candidate, exam = suspended[0]
+            return StudentExamResolution(
+                candidate=candidate,
+                exam=exam,
+                makeup_authorization_id=None,
+                availability=StudentExamAvailability.SUSPENDED,
+                status_message=SUSPENDED_MESSAGE,
             )
 
         waiting = await cls._normal_candidate_rows(

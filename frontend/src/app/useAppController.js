@@ -370,7 +370,9 @@ export function useAppController({ application = "combined", gateway } = {}) {
       state.session?.type === "student" &&
       state.view === "student" &&
       state.exam.stage === "lobby" &&
-      (waitingState === "no_exam" || waitingState === "waiting_for_activation");
+      (waitingState === "no_exam" ||
+        waitingState === "waiting_for_activation" ||
+        waitingState === "suspended");
     if (!shouldPoll) return undefined;
 
     let cancelled = false;
@@ -441,11 +443,26 @@ export function useAppController({ application = "combined", gateway } = {}) {
     navigate("/", { replace: true });
   }, [application, gateway, navigate, state.session]);
 
-  const handleStudentSuspension = useCallback(async (message) => {
-    setStudentSuspension({ message, signingOut: true });
-    await signOut();
-    setStudentSuspension({ message, signingOut: false });
-  }, [signOut]);
+  const handleStudentSuspension = useCallback((message) => {
+    const statusMessage =
+      message ||
+      "Your examination has been suspended. Stay in the waiting room until it is resumed.";
+    const currentResolution = stateRef.current.studentResolution;
+
+    setStudentSuspension({ message: statusMessage });
+    if (currentResolution) {
+      rawDispatch({
+        type: "studentResolution",
+        resolution: {
+          ...currentResolution,
+          state: "suspended",
+          statusMessage,
+        },
+      });
+    }
+    rawDispatch({ type: "exam", patch: { stage: "lobby", index: 0 } });
+    navigate("/student", { replace: true });
+  }, [navigate]);
 
   return {
     studentSuspension,
@@ -470,7 +487,9 @@ async function restoreStudentSession(
   try {
     const session = await gateway.auth.getStudentStatus();
     const examStage =
-      savedNavigation?.examStage === "active" ? "active" : "lobby";
+      savedNavigation?.examStage === "active" && session.availability !== "suspended"
+        ? "active"
+        : "lobby";
     dispatch({ type: "authSuccess", session, view: "student", examStage });
     dispatch({
       type: "studentResolution",
