@@ -2,7 +2,7 @@ import os
 import unittest
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 from uuid import uuid4
 
 os.environ.setdefault(
@@ -87,7 +87,7 @@ class StudentCompletedAttemptResolutionTests(unittest.IsolatedAsyncioTestCase):
                 ExamStatus.CANCELLING,
             ),
         )
-        get_attempt.assert_awaited_once_with(AsyncMock.ANY if False else unittest.mock.ANY, self.candidate_id)
+        get_attempt.assert_awaited_once_with(ANY, self.candidate_id)
 
     async def test_submitted_suspended_exam_hides_suspension_and_resolves_completed(
         self,
