@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domains.exams.lineage import latest_exam_revision_clause
 from app.domains.exams.models import Exam, ExamRosterStatus, ExamStatus
 
 
@@ -13,9 +14,10 @@ class SyncInvalidationRepository:
 
     Candidate rosters are derived from synchronized enrollment and elective
     selection truth. Once an exam is ACTIVE the roster is execution evidence and
-    must not be rewritten by later Cloud changes. SEALED + READY rosters,
-    however, are still pre-execution materializations and must be refreshed when
-    eligibility truth changes.
+    must not be rewritten by later Cloud changes. SEALED + READY rosters on the
+    latest revision, however, are still pre-execution materializations and must
+    be refreshed when eligibility truth changes. Superseded revisions are
+    historical evidence and are never invalidated by later academic sync.
 
     The sync transaction already owns the global sync advisory lock. Candidate
     roster builders historically lock the exam row before waiting for that sync
@@ -35,6 +37,7 @@ class SyncInvalidationRepository:
                     .where(
                         Exam.status == ExamStatus.SEALED,
                         Exam.roster_status == ExamRosterStatus.READY,
+                        latest_exam_revision_clause(),
                     )
                     .with_for_update(of=Exam, skip_locked=True)
                 )
