@@ -32,6 +32,10 @@ class ManualRosterRetryServiceTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=exam),
             ) as get_exam,
             patch(
+                "app.domains.candidates.lifecycle_service.ExamRepository.get_latest_child_revision",
+                AsyncMock(return_value=None),
+            ),
+            patch(
                 "app.domains.candidates.lifecycle_service.ExamRepository.save_exam",
                 AsyncMock(),
             ) as save_exam,
@@ -69,6 +73,10 @@ class ManualRosterRetryServiceTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=exam),
             ),
             patch(
+                "app.domains.candidates.lifecycle_service.ExamRepository.get_latest_child_revision",
+                AsyncMock(return_value=None),
+            ),
+            patch(
                 "app.domains.candidates.lifecycle_service.ExamRepository.save_exam",
                 AsyncMock(),
             ),
@@ -99,6 +107,10 @@ class ManualRosterRetryServiceTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=exam),
             ),
             patch(
+                "app.domains.candidates.lifecycle_service.ExamRepository.get_latest_child_revision",
+                AsyncMock(return_value=None),
+            ),
+            patch(
                 "app.domains.candidates.lifecycle_service.ExamRepository.save_exam",
                 AsyncMock(),
             ) as save_exam,
@@ -115,6 +127,43 @@ class ManualRosterRetryServiceTests(unittest.IsolatedAsyncioTestCase):
 
         save_exam.assert_not_awaited()
         self.db.commit.assert_not_awaited()
+
+    async def test_retry_rejects_superseded_failed_roster(self) -> None:
+        exam = SimpleNamespace(
+            id=self.exam_id,
+            status=ExamStatus.SEALED,
+            roster_status=ExamRosterStatus.FAILED,
+            roster_version=3,
+            roster_error="Old failure",
+        )
+        child = SimpleNamespace(id=uuid4())
+
+        with (
+            patch(
+                "app.domains.candidates.lifecycle_service.ExamRepository.get_exam_by_id",
+                AsyncMock(return_value=exam),
+            ),
+            patch(
+                "app.domains.candidates.lifecycle_service.ExamRepository.get_latest_child_revision",
+                AsyncMock(return_value=child),
+            ) as get_child,
+            patch(
+                "app.domains.candidates.lifecycle_service.ExamRepository.save_exam",
+                AsyncMock(),
+            ) as save_exam,
+        ):
+            with self.assertRaisesRegex(CandidateRosterError, "superseded"):
+                await CandidateService.retry_failed_roster(
+                    self.db,
+                    actor=self.actor,
+                    exam_id=self.exam_id,
+                )
+
+        get_child.assert_awaited_once_with(self.db, self.exam_id)
+        save_exam.assert_not_awaited()
+        self.db.commit.assert_not_awaited()
+        self.assertEqual(exam.roster_status, ExamRosterStatus.FAILED)
+        self.assertEqual(exam.roster_error, "Old failure")
 
 
 class ManualRosterRetryEndpointTests(unittest.IsolatedAsyncioTestCase):
