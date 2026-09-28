@@ -117,7 +117,7 @@ it('groups previous revisions together on the dedicated history page', () => {
   )
 
   expect(screen.getByRole('heading', { name: /^roster history$/i })).toBeInTheDocument()
-  const history = screen.getByRole('region', { name: /roster history/i })
+  const history = screen.getByRole('region', { name: /historical rosters/i })
   expect(within(history).getByText('2 historical rosters')).toBeInTheDocument()
   expect(within(history).getByRole('button', { name: /open historical roster for jss1 english exam revision 2/i })).toBeInTheDocument()
   expect(within(history).getByRole('button', { name: /open historical roster for jss1 english exam revision 1/i })).toBeInTheDocument()
