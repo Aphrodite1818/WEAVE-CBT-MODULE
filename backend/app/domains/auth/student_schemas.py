@@ -14,6 +14,7 @@ class StudentExamAvailability(str, PyEnum):
     WAITING_FOR_ACTIVATION = "waiting_for_activation"
     READY = "ready"
     SUSPENDED = "suspended"
+    COMPLETED = "completed"
     MAKEUP = "makeup"
 
 
