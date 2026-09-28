@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { AdminRosterDetailPage, AdminRostersPage } from '../src/features/admin/pages/AdminRostersPage'
+import { AdminRosterDetailPage } from '../src/features/admin/pages/AdminRostersPage'
+import { AdminCurrentRostersPage } from '../src/features/admin/pages/AdminRosterViews'
 
 function makeSubject(overrides = {}) {
   return {
@@ -19,11 +20,14 @@ function makeExam(overrides = {}) {
   return {
     id: 'exam-1',
     title: 'Mathematics CA 1',
+    sessionId: 'session-1',
+    termId: 'term-1',
     academicLevelId: 'jss1',
     academicLevelName: 'JSS1',
     subjectName: 'Mathematics',
     subjectCode: 'MTH',
     curriculumSubjectId: 'jss1-math',
+    assessmentComponentId: 'ca1-component',
     assessmentName: 'CA 1',
     status: 'sealed',
     statusLabel: 'Sealed',
@@ -33,7 +37,10 @@ function makeExam(overrides = {}) {
     rosterPreparedAt: '2026-09-18T08:00:00Z',
     rosterError: '',
     revisionNumber: 1,
+    revisionOfExamId: null,
     scheduledStartAt: '2026-09-19T09:00:00Z',
+    createdAt: '2026-09-18T08:00:00Z',
+    updatedAt: '2026-09-18T08:00:00Z',
     ...overrides,
   }
 }
@@ -66,7 +73,7 @@ function makeAdminData(exams) {
 }
 
 describe('Admin roster workspace', () => {
-  it('shows only prepared exam rosters and scopes subjects through academic level first', () => {
+  it('shows only prepared current exam rosters and scopes subjects through academic level first', () => {
     const data = makeAdminData([
       makeExam({ id: 'exam-jss1', title: 'JSS1 Mathematics CA 1' }),
       makeExam({
@@ -82,6 +89,7 @@ describe('Admin roster workspace', () => {
         academicLevelId: 'jss2',
         academicLevelName: 'JSS2',
         curriculumSubjectId: 'jss2-science',
+        assessmentComponentId: 'science-ca1',
         subjectName: 'Basic Science',
         subjectCode: 'BSC',
       }),
@@ -94,7 +102,7 @@ describe('Admin roster workspace', () => {
       }),
     ])
 
-    render(<AdminRostersPage adminData={data} onNavigate={vi.fn()} />)
+    render(<AdminCurrentRostersPage adminData={data} onNavigate={vi.fn()} />)
 
     expect(screen.getByText('JSS1 Mathematics CA 1')).toBeInTheDocument()
     expect(screen.getByText('JSS2 Mathematics CA 1')).toBeInTheDocument()
@@ -119,9 +127,9 @@ describe('Admin roster workspace', () => {
 
   it('opens the exact examination roster from its ledger card', () => {
     const onNavigate = vi.fn()
-    render(<AdminRostersPage adminData={makeAdminData([makeExam()])} onNavigate={onNavigate} />)
+    render(<AdminCurrentRostersPage adminData={makeAdminData([makeExam()])} onNavigate={onNavigate} />)
 
-    fireEvent.click(screen.getByRole('button', { name: /open roster for mathematics ca 1/i }))
+    fireEvent.click(screen.getByRole('button', { name: /open roster for mathematics ca 1 revision 1/i }))
 
     expect(onNavigate).toHaveBeenCalledWith('roster-detail', { selectedExamId: 'exam-1' })
   })
