@@ -17,12 +17,14 @@ function makeSubject() {
 function makeExam(overrides = {}) {
   return {
     id: 'exam-r1',
+    termId: 'term-1',
     title: 'JSS1 ENGLISH EXAM',
     academicLevelId: 'jss1',
     academicLevelName: 'JSS1',
     subjectName: 'English',
     subjectCode: 'ENG',
     curriculumSubjectId: 'jss1-english',
+    assessmentComponentId: 'component-exam',
     assessmentName: 'Exam',
     status: 'sealed',
     statusLabel: 'Sealed',
@@ -103,12 +105,16 @@ it('moves closed and cancelled latest rosters to history instead of the current 
   const closed = makeExam({
     id: 'closed-exam',
     title: 'JSS1 ENGLISH TEST',
+    assessmentComponentId: 'component-test',
+    assessmentName: 'Test',
     status: 'closed',
     statusLabel: 'Closed',
   })
   const cancelled = makeExam({
     id: 'cancelled-exam',
     title: 'JSS1 ENGLISH PRACTICE',
+    assessmentComponentId: 'component-practice',
+    assessmentName: 'Practice',
     status: 'cancelled',
     statusLabel: 'Cancelled',
   })
