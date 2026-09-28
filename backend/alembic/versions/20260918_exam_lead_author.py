@@ -10,8 +10,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 
+from alembic import op
 
 revision: str = "20260918_exam_lead_author"
 down_revision: str | Sequence[str] | None = "20260917_exam_execution"

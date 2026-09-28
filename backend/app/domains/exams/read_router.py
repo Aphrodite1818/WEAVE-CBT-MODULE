@@ -14,7 +14,6 @@ from app.domains.exams.query_service import ExamQueryService
 from app.domains.exams.schemas import ExamResponse
 from app.domains.exams.service import ExamService
 
-
 router = APIRouter(
     prefix="/exams",
     tags=["Exams"],

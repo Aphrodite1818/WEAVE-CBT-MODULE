@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import UTC, datetime
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -16,14 +16,12 @@ from app.domains.attempts.models import AttemptStatus, ExamAttempt
 from app.domains.attempts.repository import AttemptRepository
 from app.domains.auth.models import LocalActor
 from app.domains.candidates.models import ExamCandidate
-from app.domains.candidates.repository import CandidateRepository
 from app.domains.exams.exceptions import ExamNotFound
 from app.domains.exams.models import Exam
 from app.domains.exams.repository import ExamRepository
 from app.domains.results.models import ExamResult, ResultSyncStatus
 from app.domains.results.query_repository import ResultQueryRepository
 from app.domains.results.repository import ResultRepository
-
 
 _TWO_DP = Decimal("0.01")
 

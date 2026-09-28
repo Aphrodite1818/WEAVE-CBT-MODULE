@@ -8,7 +8,7 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from app.domains.auth.student_repository import StudentAuthRepository  # noqa: E402
+from app.domains.auth.student_repository import StudentAuthRepository
 
 
 class StudentSessionConcurrencyTests(unittest.IsolatedAsyncioTestCase):

@@ -16,26 +16,27 @@ os.environ.setdefault(
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ["DEBUG"] = "false"
 
-from app.domains.academics.authorization import AcademicAuthorizationService  # noqa: E402
-from app.domains.exams.exceptions import ExamStateError  # noqa: E402
-from app.domains.exams.execution_service import ExamExecutionService  # noqa: E402
-from app.domains.exams.execution_models import ExamResultDisposition  # noqa: E402
-from app.domains.exams.execution_repository import ExamExecutionRepository  # noqa: E402
-from app.domains.exams.models import (  # noqa: E402
+from app.domains.academics.authorization import (
+    AcademicAuthorizationService,
+)
+from app.domains.exams.exceptions import ExamStateError
+from app.domains.exams.execution_models import ExamResultDisposition
+from app.domains.exams.execution_repository import ExamExecutionRepository
+from app.domains.exams.execution_service import ExamExecutionService
+from app.domains.exams.models import (
     ExamQuestionSelectionMode,
     ExamRosterStatus,
     ExamStatus,
 )
-from app.domains.exams.repository import ExamRepository  # noqa: E402
-from app.domains.exams.schemas import (  # noqa: E402
+from app.domains.exams.repository import ExamRepository
+from app.domains.exams.schemas import (
     ExamQuestionConfiguration,
     ManualQuestionAdd,
 )
-from app.domains.exams.service import ExamService  # noqa: E402
-from app.domains.exams.timetable_service import ExamTimetableService  # noqa: E402
-from app.domains.questions.repository import QuestionRepository  # noqa: E402
-from app.domains.runtime.repository import RuntimeRepository  # noqa: E402
-
+from app.domains.exams.service import ExamService
+from app.domains.exams.timetable_service import ExamTimetableService
+from app.domains.questions.repository import QuestionRepository
+from app.domains.runtime.repository import RuntimeRepository
 
 LEAD_ID = uuid4()
 
@@ -208,15 +209,14 @@ class ExamRegressionCoverageTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch.object(
                 ExamRepository, "add_question_selections", new=AsyncMock()
-            ) as add,
+            ) as add,self.assertRaisesRegex(ValueError, "examination question bank")
         ):
-            with self.assertRaisesRegex(ValueError, "examination question bank"):
-                await ExamService.add_manual_questions(
-                    db,
-                    actor=contributor,  # type: ignore[arg-type]
-                    exam_id=current_exam.id,
-                    payload=ManualQuestionAdd(question_ids=[question_id]),
-                )
+            await ExamService.add_manual_questions(
+                db,
+                actor=contributor,  # type: ignore[arg-type]
+                exam_id=current_exam.id,
+                payload=ManualQuestionAdd(question_ids=[question_id]),
+            )
 
         add.assert_not_awaited()
         db.commit.assert_not_awaited()
@@ -284,16 +284,15 @@ class ExamRegressionCoverageTests(unittest.IsolatedAsyncioTestCase):
                         ExamRepository,
                         "get_latest_child_revision",
                         new=AsyncMock(return_value=None),
-                    ),
+                    ),self.assertRaisesRegex(
+                    ExamStateError, "latest SEALED or CANCELLED"
+                )
                 ):
-                    with self.assertRaisesRegex(
-                        ExamStateError, "latest SEALED or CANCELLED"
-                    ):
-                        await ExamService.create_revision(
-                            db,
-                            actor=admin,  # type: ignore[arg-type]
-                            exam_id=current_exam.id,
-                        )
+                    await ExamService.create_revision(
+                        db,
+                        actor=admin,  # type: ignore[arg-type]
+                        exam_id=current_exam.id,
+                    )
                 db.commit.assert_not_awaited()
 
     async def test_closed_revision_requires_voided_results(self) -> None:
@@ -316,44 +315,86 @@ class ExamRegressionCoverageTests(unittest.IsolatedAsyncioTestCase):
                 ExamExecutionService,
                 "results_are_voided",
                 new=AsyncMock(return_value=False),
-            ),
+            ),self.assertRaisesRegex(ExamStateError, "results are voided")
         ):
-            with self.assertRaisesRegex(ExamStateError, "results are voided"):
-                await ExamService.create_revision(
-                    db,
-                    actor=admin,  # type: ignore[arg-type]
-                    exam_id=current_exam.id,
-                )
+            await ExamService.create_revision(
+                db,
+                actor=admin,  # type: ignore[arg-type]
+                exam_id=current_exam.id,
+            )
 
         db.commit.assert_not_awaited()
 
     async def test_closed_revision_denies_unaccepted_or_unknown_decisions(self) -> None:
-        for disposition in (None, ExamResultDisposition.PENDING_REVIEW, ExamResultDisposition.APPROVED):
+        for disposition in (
+            None,
+            ExamResultDisposition.PENDING_REVIEW,
+            ExamResultDisposition.APPROVED,
+        ):
             with self.subTest(disposition=disposition):
                 db = AsyncMock()
                 original = exam(status=ExamStatus.CLOSED)
-                control = SimpleNamespace(result_disposition=disposition) if disposition else None
+                control = (
+                    SimpleNamespace(result_disposition=disposition)
+                    if disposition
+                    else None
+                )
                 with (
-                    patch.object(ExamRepository, "get_exam_by_id", new=AsyncMock(return_value=original)),
-                    patch.object(ExamRepository, "get_latest_child_revision", new=AsyncMock(return_value=None)),
-                    patch.object(ExamExecutionRepository, "get_control", new=AsyncMock(return_value=control)),
+                    patch.object(
+                        ExamRepository,
+                        "get_exam_by_id",
+                        new=AsyncMock(return_value=original),
+                    ),
+                    patch.object(
+                        ExamRepository,
+                        "get_latest_child_revision",
+                        new=AsyncMock(return_value=None),
+                    ),
+                    patch.object(
+                        ExamExecutionRepository,
+                        "get_control",
+                        new=AsyncMock(return_value=control),
+                    ),self.assertRaisesRegex(ExamStateError, "results are voided")
                 ):
-                    with self.assertRaisesRegex(ExamStateError, "results are voided"):
-                        await ExamService.create_revision(db, actor=actor(role="admin"), exam_id=original.id)
+                    await ExamService.create_revision(
+                        db, actor=actor(role="admin"), exam_id=original.id
+                    )
                 db.commit.assert_not_awaited()
                 self.assertEqual(original.status, ExamStatus.CLOSED)
 
-    async def test_closed_voided_revision_creates_draft_without_reopening_history(self) -> None:
+    async def test_closed_voided_revision_creates_draft_without_reopening_history(
+        self,
+    ) -> None:
         db = AsyncMock()
         original = exam(status=ExamStatus.CLOSED)
         with (
-            patch.object(ExamRepository, "get_exam_by_id", new=AsyncMock(return_value=original)),
-            patch.object(ExamRepository, "get_latest_child_revision", new=AsyncMock(return_value=None)),
-            patch.object(ExamExecutionService, "results_are_voided", new=AsyncMock(return_value=True)) as voided,
-            patch.object(AcademicAuthorizationService, "require_can_author_curriculum_subject", new=AsyncMock()),
-            patch.object(ExamRepository, "add_exam", new=AsyncMock(side_effect=lambda _db, row: row)),
+            patch.object(
+                ExamRepository, "get_exam_by_id", new=AsyncMock(return_value=original)
+            ),
+            patch.object(
+                ExamRepository,
+                "get_latest_child_revision",
+                new=AsyncMock(return_value=None),
+            ),
+            patch.object(
+                ExamExecutionService,
+                "results_are_voided",
+                new=AsyncMock(return_value=True),
+            ) as voided,
+            patch.object(
+                AcademicAuthorizationService,
+                "require_can_author_curriculum_subject",
+                new=AsyncMock(),
+            ),
+            patch.object(
+                ExamRepository,
+                "add_exam",
+                new=AsyncMock(side_effect=lambda _db, row: row),
+            ),
         ):
-            revision = await ExamService.create_revision(db, actor=actor(role="admin"), exam_id=original.id)
+            revision = await ExamService.create_revision(
+                db, actor=actor(role="admin"), exam_id=original.id
+            )
         voided.assert_awaited_once_with(db, exam_id=original.id)
         self.assertEqual(original.status, ExamStatus.CLOSED)
         self.assertEqual(original.revision_number, 1)
@@ -362,7 +403,9 @@ class ExamRegressionCoverageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(revision.revision_of_exam_id, original.id)
         self.assertEqual(revision.term_id, original.term_id)
         self.assertEqual(revision.curriculum_subject_id, original.curriculum_subject_id)
-        self.assertEqual(revision.assessment_component_id, original.assessment_component_id)
+        self.assertEqual(
+            revision.assessment_component_id, original.assessment_component_id
+        )
 
     async def test_cancelled_leaf_can_create_next_shared_revision(self) -> None:
         db = AsyncMock()
@@ -458,22 +501,21 @@ class ExamRegressionCoverageTests(unittest.IsolatedAsyncioTestCase):
                     ExamRepository,
                     "get_open_suspension_for_exam",
                     new=AsyncMock(return_value=None),
-                ),
+                ),self.assertRaisesRegex(ExamStateError, "no open suspension")
             ):
-                with self.assertRaisesRegex(ExamStateError, "no open suspension"):
-                    if operation == "close":
-                        await ExamService.close_exam(
-                            db,
-                            actor=admin,  # type: ignore[arg-type]
-                            exam_id=current_exam.id,
-                        )
-                    else:
-                        await ExamService.cancel_exam(
-                            db,
-                            actor=admin,  # type: ignore[arg-type]
-                            exam_id=current_exam.id,
-                            reason="Invalid sitting",
-                        )
+                if operation == "close":
+                    await ExamService.close_exam(
+                        db,
+                        actor=admin,  # type: ignore[arg-type]
+                        exam_id=current_exam.id,
+                    )
+                else:
+                    await ExamService.cancel_exam(
+                        db,
+                        actor=admin,  # type: ignore[arg-type]
+                        exam_id=current_exam.id,
+                        reason="Invalid sitting",
+                    )
             db.commit.assert_not_awaited()
 
     async def test_close_rolls_back_if_suspension_save_fails(self) -> None:

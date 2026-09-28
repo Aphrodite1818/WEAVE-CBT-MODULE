@@ -214,8 +214,7 @@ class ExamService(
 
         if status == ExamStatus.DRAFT:
             return (
-                prefix
-                + "It is still a draft. Open and continue editing the existing "
+                prefix + "It is still a draft. Open and continue editing the existing "
                 "draft instead of creating another examination."
             )
         if status == ExamStatus.SUBMITTED:
@@ -227,15 +226,13 @@ class ExamService(
             )
         if status == ExamStatus.SEALED:
             return (
-                prefix
-                + "It has already been sealed as the official paper. Use the "
+                prefix + "It has already been sealed as the official paper. Use the "
                 "existing examination, or use the revision/replacement workflow "
                 "if the paper must be replaced before the sitting."
             )
         if status == ExamStatus.ACTIVE:
             return (
-                prefix
-                + "That examination is currently active. Another examination "
+                prefix + "That examination is currently active. Another examination "
                 "cannot be created for the same assessment component while the "
                 "official sitting is in progress."
             )
@@ -248,8 +245,7 @@ class ExamService(
             )
         if status == ExamStatus.CLOSED:
             return (
-                prefix
-                + "It has already been conducted and closed. Use the existing "
+                prefix + "It has already been conducted and closed. Use the existing "
                 "makeup/late-start workflow for eligible missed candidates. If the "
                 "completed exam must be replaced, its results must first be voided "
                 "and the formal revision/replacement workflow used."
@@ -299,9 +295,7 @@ class ExamService(
                     "Latest normal start cannot exist without a scheduled start"
                 )
             if require_scheduled:
-                raise ExamStateError(
-                    f"Schedule the examination before {action}."
-                )
+                raise ExamStateError(f"Schedule the examination before {action}.")
             return
 
         if scheduled <= datetime.now(UTC):
@@ -569,7 +563,9 @@ class ExamService(
                 revision_number=1,
             )
             if existing_exam is not None:
-                raise ValueError(cls._exam_creation_conflict_message(existing_exam)) from exc
+                raise ValueError(
+                    cls._exam_creation_conflict_message(existing_exam)
+                ) from exc
             raise ValueError(
                 "The examination could not be created because another examination "
                 "now owns this term, curriculum subject and assessment component. "
@@ -665,11 +661,13 @@ class ExamService(
             raise ExamStateError("Only examinations in DRAFT state can be submitted")
         cls._require_expected_authoring_version(exam, expected_authoring_version)
         cls._require_lead_or_admin(actor, exam)
-        await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
-            db,
-            actor=actor,
-            curriculum_subject_id=exam.curriculum_subject_id,
-            academic_term_id=exam.term_id,
+        await (
+            AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+                db,
+                actor=actor,
+                curriculum_subject_id=exam.curriculum_subject_id,
+                academic_term_id=exam.term_id,
+            )
         )
         cls._require_authoring_schedule(
             scheduled_start_at=exam.scheduled_start_at,

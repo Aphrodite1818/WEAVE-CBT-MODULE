@@ -16,13 +16,19 @@ os.environ.setdefault(
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ["DEBUG"] = "false"
 
-from app.domains.exams.exceptions import ExamAuthorizationError, ExamStateError  # noqa: E402
-from app.domains.exams.models import Exam, ExamStatus  # noqa: E402
-from app.domains.exams.repository import ExamRepository  # noqa: E402
-from app.domains.exams.router import router  # noqa: E402
-from app.domains.exams.schemas import ExamCreate, ExamLeadAssignment, ExamResponse  # noqa: E402
-from app.domains.exams.service import ExamService  # noqa: E402
-
+from app.domains.exams.exceptions import (
+    ExamAuthorizationError,
+    ExamStateError,
+)
+from app.domains.exams.models import Exam, ExamStatus
+from app.domains.exams.repository import ExamRepository
+from app.domains.exams.router import router
+from app.domains.exams.schemas import (
+    ExamCreate,
+    ExamLeadAssignment,
+    ExamResponse,
+)
+from app.domains.exams.service import ExamService
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = BACKEND_ROOT / "alembic" / "versions" / "20260918_exam_lead_author.py"
@@ -295,15 +301,14 @@ class ExamLeadPolicyTests(unittest.IsolatedAsyncioTestCase):
             ExamRepository,
             "get_exam_by_id",
             new=AsyncMock(return_value=exam),
-        ):
-            with self.assertRaisesRegex(ExamStateError, "DRAFT"):
-                await ExamService.assign_lead_teacher(
-                    db,
-                    actor=admin,  # type: ignore[arg-type]
-                    exam_id=exam.id,
-                    lead_teacher_id=uuid4(),
-                    expected_authoring_version=exam.authoring_version,
-                )
+        ), self.assertRaisesRegex(ExamStateError, "DRAFT"):
+            await ExamService.assign_lead_teacher(
+                db,
+                actor=admin,  # type: ignore[arg-type]
+                exam_id=exam.id,
+                lead_teacher_id=uuid4(),
+                expected_authoring_version=exam.authoring_version,
+            )
 
 
 if __name__ == "__main__":

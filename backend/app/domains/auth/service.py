@@ -29,7 +29,6 @@ from app.integrations.weave.auth import weave_auth_gateway
 from app.integrations.weave.exceptions import WeaveContractError
 from app.integrations.weave.schemas import WeaveStaffLoginRequest
 
-
 INVALID_LOCAL_STAFF_SESSION = "Local staff session is invalid or expired."
 SYNC_TRUST_REVOKED_REASON = "Weave staff authorization is no longer active."
 REFRESH_REUSE_REASON = "Refresh token reuse detected."

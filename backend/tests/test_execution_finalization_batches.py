@@ -14,22 +14,22 @@ os.environ.setdefault(
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 os.environ["DEBUG"] = "false"
 
-from app.domains.attempts.models import AttemptEndReason, AttemptStatus  # noqa: E402
-from app.domains.attempts.repository import AttemptRepository  # noqa: E402
-from app.domains.attempts.service import AttemptService  # noqa: E402
-from app.domains.candidates.repository import CandidateRepository  # noqa: E402
-from app.domains.exams.execution_models import (  # noqa: E402
+from app.domains.attempts.models import AttemptEndReason, AttemptStatus
+from app.domains.attempts.repository import AttemptRepository
+from app.domains.attempts.service import AttemptService
+from app.domains.candidates.repository import CandidateRepository
+from app.domains.exams.execution_models import (
     ExamExecutionOperation,
     ExamResultDisposition,
 )
-from app.domains.exams.execution_repository import ExamExecutionRepository  # noqa: E402
-from app.domains.exams.execution_service import (  # noqa: E402
+from app.domains.exams.execution_repository import ExamExecutionRepository
+from app.domains.exams.execution_service import (
     FINALIZATION_BATCH_SIZE,
     ExamExecutionService,
 )
-from app.domains.exams.models import ExamStatus  # noqa: E402
-from app.domains.exams.repository import ExamRepository  # noqa: E402
-from app.domains.results.service import ResultService  # noqa: E402
+from app.domains.exams.models import ExamStatus
+from app.domains.exams.repository import ExamRepository
+from app.domains.results.service import ResultService
 
 
 def _attempts(count: int):

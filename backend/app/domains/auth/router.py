@@ -13,7 +13,6 @@ from app.domains.auth.service import (
     LocalSessionAuthenticationError,
 )
 
-
 router = APIRouter(
     prefix="/auth",
     tags=["Authentication"],

@@ -10,8 +10,8 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from app.core.database import Base  # noqa: E402
-from app.domains.academics.models import (  # noqa: E402
+from app.core.database import Base
+from app.domains.academics.models import (
     AcademicClass,
     AcademicLevel,
     ArmLabel,
@@ -22,11 +22,11 @@ from app.domains.academics.models import (  # noqa: E402
     StudentEnrollment,
     TeacherAssignment,
 )
-from app.domains.academics.repository import AcademicRepository  # noqa: E402
-from app.domains.exams.models import Exam, ExamTargetClass  # noqa: E402
-from app.domains.exams.repository import ExamRepository  # noqa: E402
-from app.domains.questions.models import QuestionBank  # noqa: E402
-from app.domains.questions.repository import QuestionRepository  # noqa: E402
+from app.domains.academics.repository import AcademicRepository
+from app.domains.exams.models import Exam, ExamTargetClass
+from app.domains.exams.repository import ExamRepository
+from app.domains.questions.models import QuestionBank
+from app.domains.questions.repository import QuestionRepository
 
 
 class AcademicProjectionContractTests(unittest.TestCase):

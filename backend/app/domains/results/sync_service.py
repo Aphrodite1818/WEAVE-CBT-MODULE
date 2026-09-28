@@ -35,7 +35,6 @@ from app.integrations.weave.schemas import (
     WeaveResultScore,
 )
 
-
 MAX_RESULT_SYNC_BATCH_SIZE = 1000
 _UNCERTAIN_OR_RETRYABLE_HTTP_STATUSES = {408, 409, 425, 429}
 

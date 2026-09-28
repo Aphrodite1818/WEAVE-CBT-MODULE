@@ -10,16 +10,16 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from fastapi import HTTPException  # noqa: E402
+from fastapi import HTTPException
 
-from app.domains.exams import router as exam_router  # noqa: E402
-from app.domains.exams import timetable_router  # noqa: E402
-from app.domains.exams.models import ExamStatus  # noqa: E402
-from app.domains.exams.operations_service import ExamOperationsService  # noqa: E402
-from app.domains.exams.repository import ExamRepository  # noqa: E402
-from app.domains.exams.service import ExamService  # noqa: E402
-from app.domains.exams.timetable_schemas import BatchExamStartRequest  # noqa: E402
-from app.domains.exams.timetable_service import (  # noqa: E402
+from app.domains.exams import router as exam_router
+from app.domains.exams import timetable_router
+from app.domains.exams.models import ExamStatus
+from app.domains.exams.operations_service import ExamOperationsService
+from app.domains.exams.repository import ExamRepository
+from app.domains.exams.service import ExamService
+from app.domains.exams.timetable_schemas import BatchExamStartRequest
+from app.domains.exams.timetable_service import (
     ActivationPreflight,
     ActivationScheduleImpact,
 )
@@ -99,10 +99,9 @@ class ActivationRouteContractTests(unittest.IsolatedAsyncioTestCase):
                 ExamService,
                 "activate_exam",
                 new=AsyncMock(),
-            ) as activate,
+            ) as activate,self.assertRaises(HTTPException) as captured
         ):
-            with self.assertRaises(HTTPException) as captured:
-                await exam_router.activate_exam(exam_id, db, self.admin)
+            await exam_router.activate_exam(exam_id, db, self.admin)
 
         self.assertEqual(captured.exception.status_code, 409)
         self.assertEqual(
@@ -118,10 +117,7 @@ class ActivationRouteContractTests(unittest.IsolatedAsyncioTestCase):
     async def test_batch_start_no_longer_rejects_two_same_level_disjoint_exams(self):
         exam_ids = [uuid4(), uuid4()]
         db = AsyncMock()
-        existing = {
-            exam_id: SimpleNamespace(id=exam_id)
-            for exam_id in exam_ids
-        }
+        existing = {exam_id: SimpleNamespace(id=exam_id) for exam_id in exam_ids}
 
         async def get_exam(_db, *, exam_id, **_kwargs):
             return existing.get(exam_id)
@@ -158,7 +154,9 @@ class ActivationRouteContractTests(unittest.IsolatedAsyncioTestCase):
         for call in preflight_call.await_args_list:
             self.assertFalse(call.kwargs["suggest_recovery_times"])
 
-    async def test_batch_start_returns_conflict_per_exam_without_aborting_other_items(self):
+    async def test_batch_start_returns_conflict_per_exam_without_aborting_other_items(
+        self,
+    ):
         first, second = uuid4(), uuid4()
         db = AsyncMock()
 

@@ -10,8 +10,9 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from app.domains.auth.student_schemas import StudentExamAvailability  # noqa: E402
-from app.domains.auth.student_service import (  # noqa: E402
+from app.domains.auth.student_repository import StudentAuthRepository
+from app.domains.auth.student_schemas import StudentExamAvailability
+from app.domains.auth.student_service import (
     INVALID_STUDENT_LOGIN,
     NO_EXAM_MESSAGE,
     READY_MESSAGE,
@@ -20,8 +21,7 @@ from app.domains.auth.student_service import (  # noqa: E402
     StudentExamResolution,
     hash_student_session_token,
 )
-from app.domains.auth.student_repository import StudentAuthRepository  # noqa: E402
-from app.domains.candidates.repository import CandidateRepository  # noqa: E402
+from app.domains.candidates.repository import CandidateRepository
 
 
 class StudentAuthTests(unittest.IsolatedAsyncioTestCase):

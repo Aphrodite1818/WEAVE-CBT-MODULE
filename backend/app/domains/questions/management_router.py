@@ -11,7 +11,6 @@ from app.domains.questions.response_builder import build_question_responses
 from app.domains.questions.schemas import QuestionResponse
 from app.domains.questions.service import QuestionService
 
-
 router = APIRouter(prefix="/questions", tags=["Questions"])
 
 

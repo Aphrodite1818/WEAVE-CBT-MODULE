@@ -10,9 +10,12 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from app.domains.branding.service import BrandingService, LogoCacheSnapshot  # noqa: E402
-from app.domains.branding.storage import BrandingLogoStorageError  # noqa: E402
-from app.integrations.weave.branding import WeaveBrandingProjection  # noqa: E402
+from app.domains.branding.service import (
+    BrandingService,
+    LogoCacheSnapshot,
+)
+from app.domains.branding.storage import BrandingLogoStorageError
+from app.integrations.weave.branding import WeaveBrandingProjection
 
 
 class _FakeLogoStorage:
@@ -67,7 +70,7 @@ class BrandingLogoServiceTests(unittest.IsolatedAsyncioTestCase):
         storage = _FakeLogoStorage(exists=True)
         service = BrandingService(logo_storage=storage)  # type: ignore[arg-type]
 
-        values = await service._resolve_logo_values(  # noqa: SLF001
+        values = await service._resolve_logo_values(
             projection=projection(logo_revision=revision),
             existing=cached_snapshot(revision),
         )
@@ -81,7 +84,7 @@ class BrandingLogoServiceTests(unittest.IsolatedAsyncioTestCase):
         storage = _FakeLogoStorage(exists=True, fail_download=True)
         service = BrandingService(logo_storage=storage)  # type: ignore[arg-type]
 
-        values = await service._resolve_logo_values(  # noqa: SLF001
+        values = await service._resolve_logo_values(
             projection=projection(logo_revision=new_revision),
             existing=cached_snapshot(old_revision),
         )

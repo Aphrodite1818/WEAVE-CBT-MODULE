@@ -39,7 +39,9 @@ class QuestionRouteIntegrationTests(unittest.TestCase):
             (ExamRepository, "list_referenced_bank_ids"),
             (QuestionRepository, "list_nonempty_bank_ids"),
         ]:
-            patcher = patch.object(repository, method, new=AsyncMock(return_value=set()))
+            patcher = patch.object(
+                repository, method, new=AsyncMock(return_value=set())
+            )
             patcher.start()
             self.addCleanup(patcher.stop)
         self.db = object()

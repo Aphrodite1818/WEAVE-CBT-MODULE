@@ -6,12 +6,12 @@ from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
     Integer,
-    JSON,
     String,
     Text,
     text,

@@ -12,12 +12,16 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from app.domains.academics.authorization import AcademicAuthorizationService  # noqa: E402
-from app.domains.exams.models import ExamQuestionSelectionMode, ExamStatus  # noqa: E402
-from app.domains.exams.question_authoring_schema import ExamQuestionAuthoringSave  # noqa: E402
-from app.domains.exams.repository import ExamRepository  # noqa: E402
-from app.domains.exams.service import ExamService  # noqa: E402
-from app.domains.questions.repository import QuestionRepository  # noqa: E402
+from app.domains.academics.authorization import (
+    AcademicAuthorizationService,
+)
+from app.domains.exams.models import ExamQuestionSelectionMode, ExamStatus
+from app.domains.exams.question_authoring_schema import (
+    ExamQuestionAuthoringSave,
+)
+from app.domains.exams.repository import ExamRepository
+from app.domains.exams.service import ExamService
+from app.domains.questions.repository import QuestionRepository
 
 
 def make_exam(*, bank_id, count=3, version=7):
@@ -47,13 +51,29 @@ async def save_with_mocks(*, exam, payload, existing, questions, bank):
     db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
 
     with (
-        patch.object(ExamRepository, "get_exam_by_id", new=AsyncMock(return_value=exam)),
-        patch.object(ExamRepository, "list_question_selections", new=AsyncMock(return_value=existing)),
-        patch.object(ExamRepository, "clear_question_selections", new=AsyncMock()) as clear,
+        patch.object(
+            ExamRepository, "get_exam_by_id", new=AsyncMock(return_value=exam)
+        ),
+        patch.object(
+            ExamRepository,
+            "list_question_selections",
+            new=AsyncMock(return_value=existing),
+        ),
+        patch.object(
+            ExamRepository, "clear_question_selections", new=AsyncMock()
+        ) as clear,
         patch.object(ExamRepository, "add_question_selections", new=AsyncMock()) as add,
-        patch.object(ExamRepository, "save_exam", new=AsyncMock(side_effect=lambda _db, row: row)),
-        patch.object(QuestionRepository, "get_bank_by_id", new=AsyncMock(return_value=bank)),
-        patch.object(QuestionRepository, "list_questions_by_ids", new=AsyncMock(return_value=questions)),
+        patch.object(
+            ExamRepository, "save_exam", new=AsyncMock(side_effect=lambda _db, row: row)
+        ),
+        patch.object(
+            QuestionRepository, "get_bank_by_id", new=AsyncMock(return_value=bank)
+        ),
+        patch.object(
+            QuestionRepository,
+            "list_questions_by_ids",
+            new=AsyncMock(return_value=questions),
+        ),
         patch.object(
             AcademicAuthorizationService,
             "require_can_author_curriculum_subject_for_term",
@@ -71,7 +91,9 @@ async def save_with_mocks(*, exam, payload, existing, questions, bank):
 
 
 @pytest.mark.asyncio
-async def test_increasing_count_and_adding_questions_commit_as_one_authoring_save() -> None:
+async def test_increasing_count_and_adding_questions_commit_as_one_authoring_save() -> (
+    None
+):
     bank_id = uuid4()
     exam = make_exam(bank_id=bank_id)
     original_author = uuid4()
@@ -161,7 +183,9 @@ async def test_decreasing_count_can_remove_questions_in_the_same_save() -> None:
 
 
 @pytest.mark.asyncio
-async def test_switching_manual_bank_replaces_old_selection_with_new_bank_questions() -> None:
+async def test_switching_manual_bank_replaces_old_selection_with_new_bank_questions() -> (
+    None
+):
     old_bank_id = uuid4()
     new_bank_id = uuid4()
     exam = make_exam(bank_id=old_bank_id)
@@ -204,7 +228,9 @@ async def test_switching_manual_bank_replaces_old_selection_with_new_bank_questi
 
 
 @pytest.mark.asyncio
-async def test_archived_existing_question_may_remain_but_archived_question_cannot_be_newly_added() -> None:
+async def test_archived_existing_question_may_remain_but_archived_question_cannot_be_newly_added() -> (
+    None
+):
     bank_id = uuid4()
     exam = make_exam(bank_id=bank_id, count=2)
     existing_id = uuid4()

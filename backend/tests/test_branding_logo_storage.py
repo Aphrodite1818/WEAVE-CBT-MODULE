@@ -16,8 +16,8 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from app.core.settings import Settings  # noqa: E402
-from app.domains.branding.storage import (  # noqa: E402
+from app.core.settings import Settings
+from app.domains.branding.storage import (
     BrandingLogoStorage,
     BrandingLogoStorageError,
 )

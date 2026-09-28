@@ -33,7 +33,7 @@ class ExamQuestionAuthoringSave(InputBase):
         return value
 
     @model_validator(mode="after")
-    def validate_effective_question_setup(self) -> "ExamQuestionAuthoringSave":
+    def validate_effective_question_setup(self) -> ExamQuestionAuthoringSave:
         mode = ExamQuestionSelectionMode(self.question_selection_mode)
         if mode == ExamQuestionSelectionMode.RANDOM and self.manual_question_ids:
             raise ValueError(

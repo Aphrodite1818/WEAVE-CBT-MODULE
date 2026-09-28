@@ -10,17 +10,17 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from fastapi import HTTPException  # noqa: E402
+from fastapi import HTTPException
 
-from app.domains.exams import router as exam_router  # noqa: E402
-from app.domains.exams import timetable_router  # noqa: E402
-from app.domains.exams.exceptions import ExamStateError  # noqa: E402
-from app.domains.exams.models import ExamStatus  # noqa: E402
-from app.domains.exams.operations_service import ExamOperationsService  # noqa: E402
-from app.domains.exams.repository import ExamRepository  # noqa: E402
-from app.domains.exams.service import ExamService  # noqa: E402
-from app.domains.exams.timetable_schemas import BatchExamStartRequest  # noqa: E402
-from app.domains.exams.timetable_service import (  # noqa: E402
+from app.domains.exams import router as exam_router
+from app.domains.exams import timetable_router
+from app.domains.exams.exceptions import ExamStateError
+from app.domains.exams.models import ExamStatus
+from app.domains.exams.operations_service import ExamOperationsService
+from app.domains.exams.repository import ExamRepository
+from app.domains.exams.service import ExamService
+from app.domains.exams.timetable_schemas import BatchExamStartRequest
+from app.domains.exams.timetable_service import (
     ActivationPreflight,
     ExamTimetableService,
 )
@@ -79,9 +79,7 @@ class ActivationScheduleDateTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 ExamTimetableService,
                 "_scope_map_for_exams",
-                new=AsyncMock(
-                    return_value={source.id: frozenset({self.student_id})}
-                ),
+                new=AsyncMock(return_value={source.id: frozenset({self.student_id})}),
             ),
         ):
             return await ExamTimetableService.activation_preflight(
@@ -97,9 +95,7 @@ class ActivationScheduleDateTests(unittest.IsolatedAsyncioTestCase):
         # exam belongs to September 27 while activation is attempted on
         # September 28. This protects the business-date rule from a naive UTC
         # date comparison.
-        source = self.exam(
-            scheduled_start_at=datetime(2026, 9, 27, 22, 30, tzinfo=UTC)
-        )
+        source = self.exam(scheduled_start_at=datetime(2026, 9, 27, 22, 30, tzinfo=UTC))
         checked_at = datetime(2026, 9, 27, 23, 30, tzinfo=UTC)
 
         preflight = await self.run_preflight(source=source, checked_at=checked_at)
@@ -115,9 +111,7 @@ class ActivationScheduleDateTests(unittest.IsolatedAsyncioTestCase):
         # The UTC date changes between these timestamps, but both are September
         # 28 in WAT. A same-day delayed sitting must therefore remain eligible
         # for the existing late-start/recovery workflow.
-        source = self.exam(
-            scheduled_start_at=datetime(2026, 9, 27, 23, 30, tzinfo=UTC)
-        )
+        source = self.exam(scheduled_start_at=datetime(2026, 9, 27, 23, 30, tzinfo=UTC))
         checked_at = datetime(2026, 9, 28, 0, 15, tzinfo=UTC)
 
         preflight = await self.run_preflight(source=source, checked_at=checked_at)
@@ -148,18 +142,19 @@ class ActivationScheduleDateTests(unittest.IsolatedAsyncioTestCase):
             ExamTimetableService,
             "activation_preflight",
             new=AsyncMock(return_value=blocked),
+        ), self.assertRaisesRegex(
+            ExamStateError,
+            "scheduled date has passed",
         ):
-            with self.assertRaisesRegex(
-                ExamStateError,
-                "scheduled date has passed",
-            ):
-                await ExamTimetableService.require_activation_clear(
-                    db,
-                    exam_id=exam_id,
-                    proposed_activation_at=checked_at,
-                )
+            await ExamTimetableService.require_activation_clear(
+                db,
+                exam_id=exam_id,
+                proposed_activation_at=checked_at,
+            )
 
-    async def test_direct_activation_route_does_not_call_lifecycle_for_expired_date(self):
+    async def test_direct_activation_route_does_not_call_lifecycle_for_expired_date(
+        self,
+    ):
         exam_id = uuid4()
         checked_at = datetime(2026, 9, 28, 10, 0, tzinfo=UTC)
         blocked = ActivationPreflight(
@@ -186,10 +181,9 @@ class ActivationScheduleDateTests(unittest.IsolatedAsyncioTestCase):
                 ExamService,
                 "activate_exam",
                 new=AsyncMock(),
-            ) as activate,
+            ) as activate,self.assertRaises(HTTPException) as captured
         ):
-            with self.assertRaises(HTTPException) as captured:
-                await exam_router.activate_exam(exam_id, db, self.admin)
+            await exam_router.activate_exam(exam_id, db, self.admin)
 
         self.assertEqual(captured.exception.status_code, 409)
         self.assertIn(

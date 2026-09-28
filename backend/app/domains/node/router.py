@@ -22,7 +22,6 @@ from app.integrations.weave.exceptions import (
     WeaveUnavailableError,
 )
 
-
 router = APIRouter(
     prefix="/installation",
     tags=["Installation"],

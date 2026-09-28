@@ -13,13 +13,15 @@ os.environ.setdefault(
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ["DEBUG"] = "false"
 
-from app.domains.academics.authorization import AcademicAuthorizationService  # noqa: E402
-from app.domains.academics.repository import AcademicRepository  # noqa: E402
-from app.domains.exams.models import ExamQuestionSelectionMode  # noqa: E402
-from app.domains.exams.repository import ExamRepository  # noqa: E402
-from app.domains.exams.schemas import ExamCreate  # noqa: E402
-from app.domains.exams.service import ExamService  # noqa: E402
-from app.domains.questions.repository import QuestionRepository  # noqa: E402
+from app.domains.academics.authorization import (
+    AcademicAuthorizationService,
+)
+from app.domains.academics.repository import AcademicRepository
+from app.domains.exams.models import ExamQuestionSelectionMode
+from app.domains.exams.repository import ExamRepository
+from app.domains.exams.schemas import ExamCreate
+from app.domains.exams.service import ExamService
+from app.domains.questions.repository import QuestionRepository
 
 
 def actor(*, role: str, teacher_id: UUID | None = None) -> SimpleNamespace:

@@ -17,7 +17,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 
-
 MEDIA_STORAGE_KEY_MAX_LENGTH = 512
 MEDIA_FILENAME_MAX_LENGTH = 255
 MEDIA_MIME_TYPE_MAX_LENGTH = 100

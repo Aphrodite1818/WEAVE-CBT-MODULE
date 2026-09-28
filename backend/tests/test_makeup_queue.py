@@ -9,8 +9,8 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from app.domains.attempts.models import AttemptStatus  # noqa: E402
-from app.domains.candidates.makeup_service import CandidateMakeupService  # noqa: E402
+from app.domains.attempts.models import AttemptStatus
+from app.domains.candidates.makeup_service import CandidateMakeupService
 
 
 class MakeupQueueTests(unittest.IsolatedAsyncioTestCase):

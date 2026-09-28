@@ -6,7 +6,7 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from app.domains.exams.models import Exam  # noqa: E402
+from app.domains.exams.models import Exam
 
 
 class TimestampResponseContractTests(unittest.TestCase):

@@ -17,7 +17,6 @@ from app.integrations.weave.schemas import (
     WeavePairingResult,
 )
 
-
 PAIRING_VERIFY_PATH = "/api/v1/cbt/pairing/verify"
 
 

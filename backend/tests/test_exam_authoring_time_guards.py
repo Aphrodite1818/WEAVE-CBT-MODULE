@@ -10,8 +10,8 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from app.domains.exams.exceptions import ExamStateError  # noqa: E402
-from app.domains.exams.service import ExamService  # noqa: E402
+from app.domains.exams.exceptions import ExamStateError
+from app.domains.exams.service import ExamService
 
 
 def require_schedule(
@@ -34,7 +34,9 @@ def test_unscheduled_draft_remains_valid_while_authoring() -> None:
 
 
 def test_submission_requires_a_schedule() -> None:
-    with pytest.raises(ExamStateError, match="Schedule the examination before submitting"):
+    with pytest.raises(
+        ExamStateError, match="Schedule the examination before submitting"
+    ):
         require_schedule(
             None,
             require_scheduled=True,
@@ -48,7 +50,9 @@ def test_elapsed_draft_schedule_blocks_save() -> None:
 
 
 def test_elapsed_submitted_schedule_blocks_seal() -> None:
-    with pytest.raises(ExamStateError, match="Reschedule the examination before sealing"):
+    with pytest.raises(
+        ExamStateError, match="Reschedule the examination before sealing"
+    ):
         require_schedule(
             datetime.now(UTC) - timedelta(minutes=1),
             require_scheduled=True,

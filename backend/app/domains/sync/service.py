@@ -254,10 +254,7 @@ class SyncService:
                 )
                 state.last_attempted_at = applied_at
 
-                if state.cursor > payload.metadata.cursor:
-                    state.last_error = None
-                    await SyncRepository.save_state(db, state)
-                elif (
+                if state.cursor > payload.metadata.cursor or (
                     not force
                     and state.schema_version == SYNC_SCHEMA_VERSION
                     and state.bootstrap_completed_at is not None

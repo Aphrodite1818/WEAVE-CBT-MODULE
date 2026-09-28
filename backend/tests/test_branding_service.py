@@ -9,10 +9,10 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from app.domains.branding.service import (  # noqa: E402
+from app.domains.branding.service import (
+    DEFAULT_LIGHT_TOKENS,
     BrandingContractError,
     BrandingService,
-    DEFAULT_LIGHT_TOKENS,
 )
 
 

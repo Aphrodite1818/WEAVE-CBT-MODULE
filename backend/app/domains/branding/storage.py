@@ -108,27 +108,26 @@ class BrandingLogoStorage:
                 timeout=timeout,
                 follow_redirects=True,
                 headers=headers,
-            ) as client:
-                async with client.stream("GET", url) as response:
-                    if not response.is_success:
+            ) as client, client.stream("GET", url) as response:
+                if not response.is_success:
+                    raise BrandingLogoStorageError(
+                        f"School logo download failed with HTTP {response.status_code}."
+                    )
+
+                content_length = response.headers.get("Content-Length")
+                if content_length and content_length.isdigit():
+                    if int(content_length) > settings.BRANDING_LOGO_MAX_SIZE_BYTES:
                         raise BrandingLogoStorageError(
-                            f"School logo download failed with HTTP {response.status_code}."
+                            "School logo exceeds the configured maximum size."
                         )
 
-                    content_length = response.headers.get("Content-Length")
-                    if content_length and content_length.isdigit():
-                        if int(content_length) > settings.BRANDING_LOGO_MAX_SIZE_BYTES:
-                            raise BrandingLogoStorageError(
-                                "School logo exceeds the configured maximum size."
-                            )
-
-                    buffer = bytearray()
-                    async for chunk in response.aiter_bytes():
-                        buffer.extend(chunk)
-                        if len(buffer) > settings.BRANDING_LOGO_MAX_SIZE_BYTES:
-                            raise BrandingLogoStorageError(
-                                "School logo exceeds the configured maximum size."
-                            )
+                buffer = bytearray()
+                async for chunk in response.aiter_bytes():
+                    buffer.extend(chunk)
+                    if len(buffer) > settings.BRANDING_LOGO_MAX_SIZE_BYTES:
+                        raise BrandingLogoStorageError(
+                            "School logo exceeds the configured maximum size."
+                        )
         except BrandingLogoStorageError:
             raise
         except httpx.TimeoutException as exc:

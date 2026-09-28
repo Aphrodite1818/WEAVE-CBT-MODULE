@@ -13,9 +13,9 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from PIL import Image, ImageChops  # noqa: E402
+from PIL import Image, ImageChops
 
-from app.domains.media.storage import (  # noqa: E402
+from app.domains.media.storage import (
     CANVAS_HEIGHT,
     CANVAS_WIDTH,
     LocalMediaStorage,

@@ -10,22 +10,21 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from app.domains.auth.models import LocalActor  # noqa: E402
-from app.domains.exams.exceptions import (  # noqa: E402
+from app.domains.exams.exceptions import (
     ExamScheduleImpactError,
     ExamStateError,
 )
-from app.domains.exams.models import ExamRosterStatus, ExamStatus  # noqa: E402
-from app.domains.exams.operations_service import ExamOperationsService  # noqa: E402
-from app.domains.exams.repository import ExamRepository  # noqa: E402
-from app.domains.exams.timetable_service import (  # noqa: E402
+from app.domains.exams.models import ExamRosterStatus, ExamStatus
+from app.domains.exams.operations_service import ExamOperationsService
+from app.domains.exams.repository import ExamRepository
+from app.domains.exams.timetable_service import (
     ActivationPreflight,
     ActivationScheduleImpact,
     ExamTimetableService,
     _PlannedNode,
     _ScopeWindow,
 )
-from app.domains.runtime.repository import RuntimeRepository  # noqa: E402
+from app.domains.runtime.repository import RuntimeRepository
 
 
 class ActivationCascadeTests(unittest.TestCase):
@@ -345,19 +344,18 @@ class ActivationOperationsTests(unittest.IsolatedAsyncioTestCase):
                 ExamTimetableService,
                 "activation_preflight",
                 new=AsyncMock(return_value=current),
-            ),
+            ),self.assertRaisesRegex(
+            ExamStateError,
+            "current activation impact chain",
+        )
         ):
-            with self.assertRaisesRegex(
-                ExamStateError,
-                "current activation impact chain",
-            ):
-                await ExamOperationsService.reschedule_activation_impact(
-                    db,
-                    actor=self.admin,
-                    source_exam_id=self.source_id,
-                    changes={unrelated: self.now + timedelta(hours=2)},
-                    reason="Recover timetable",
-                )
+            await ExamOperationsService.reschedule_activation_impact(
+                db,
+                actor=self.admin,
+                source_exam_id=self.source_id,
+                changes={unrelated: self.now + timedelta(hours=2)},
+                reason="Recover timetable",
+            )
 
     async def test_custom_schedule_is_rejected_if_simulation_still_conflicts(self):
         db = AsyncMock()
@@ -373,9 +371,7 @@ class ActivationOperationsTests(unittest.IsolatedAsyncioTestCase):
             blockers=("schedule_reschedule_required",),
         )
         still_bad = self.preflight(
-            impacts=(
-                self.impact(suggested_start=self.now + timedelta(hours=2)),
-            ),
+            impacts=(self.impact(suggested_start=self.now + timedelta(hours=2)),),
             blockers=("schedule_reschedule_required",),
         )
         result = MagicMock()
@@ -402,16 +398,15 @@ class ActivationOperationsTests(unittest.IsolatedAsyncioTestCase):
                 ExamTimetableService,
                 "activation_preflight",
                 new=AsyncMock(side_effect=[current, still_bad]),
-            ),
+            ),self.assertRaises(ExamScheduleImpactError)
         ):
-            with self.assertRaises(ExamScheduleImpactError):
-                await ExamOperationsService.reschedule_activation_impact(
-                    db,
-                    actor=self.admin,
-                    source_exam_id=self.source_id,
-                    changes={self.affected_id: self.now + timedelta(hours=1)},
-                    reason="Recover timetable",
-                )
+            await ExamOperationsService.reschedule_activation_impact(
+                db,
+                actor=self.admin,
+                source_exam_id=self.source_id,
+                changes={self.affected_id: self.now + timedelta(hours=1)},
+                reason="Recover timetable",
+            )
 
         db.commit.assert_not_awaited()
 
@@ -509,16 +504,15 @@ class ActivationOperationsTests(unittest.IsolatedAsyncioTestCase):
                 ExamTimetableService,
                 "activation_preflight",
                 new=AsyncMock(return_value=current),
-            ),
+            ),self.assertRaisesRegex(ExamStateError, "cannot resolve candidates")
         ):
-            with self.assertRaisesRegex(ExamStateError, "cannot resolve candidates"):
-                await ExamOperationsService.reschedule_activation_impact(
-                    db,
-                    actor=self.admin,
-                    source_exam_id=self.source_id,
-                    changes={self.affected_id: self.now + timedelta(hours=2)},
-                    reason="Recover timetable",
-                )
+            await ExamOperationsService.reschedule_activation_impact(
+                db,
+                actor=self.admin,
+                source_exam_id=self.source_id,
+                changes={self.affected_id: self.now + timedelta(hours=2)},
+                reason="Recover timetable",
+            )
 
     async def test_non_sealed_downstream_exam_cannot_use_operational_reschedule(self):
         db = AsyncMock()
@@ -552,16 +546,15 @@ class ActivationOperationsTests(unittest.IsolatedAsyncioTestCase):
                 ExamTimetableService,
                 "activation_preflight",
                 new=AsyncMock(return_value=current),
-            ),
+            ),self.assertRaisesRegex(ExamStateError, "Only SEALED")
         ):
-            with self.assertRaisesRegex(ExamStateError, "Only SEALED"):
-                await ExamOperationsService.reschedule_activation_impact(
-                    db,
-                    actor=self.admin,
-                    source_exam_id=self.source_id,
-                    changes={self.affected_id: self.now + timedelta(hours=2)},
-                    reason="Recover timetable",
-                )
+            await ExamOperationsService.reschedule_activation_impact(
+                db,
+                actor=self.admin,
+                source_exam_id=self.source_id,
+                changes={self.affected_id: self.now + timedelta(hours=2)},
+                reason="Recover timetable",
+            )
 
 
 class ActivationStaticReadinessTests(unittest.IsolatedAsyncioTestCase):
@@ -577,9 +570,10 @@ class ActivationStaticReadinessTests(unittest.IsolatedAsyncioTestCase):
             ExamOperationsService,
             "_require_latest_revision",
             new=AsyncMock(),
-        ):
-            with self.assertRaisesRegex(ExamStateError, "roster must be READY"):
-                await ExamOperationsService._require_activation_static_readiness(db, exam)
+        ), self.assertRaisesRegex(ExamStateError, "roster must be READY"):
+            await ExamOperationsService._require_activation_static_readiness(
+                db, exam
+            )
 
     async def test_frozen_question_mismatch_blocks_preflight(self):
         exam = SimpleNamespace(
@@ -603,10 +597,11 @@ class ActivationStaticReadinessTests(unittest.IsolatedAsyncioTestCase):
                 ExamRepository,
                 "count_exam_questions",
                 new=AsyncMock(return_value=49),
-            ),
+            ),self.assertRaisesRegex(ExamStateError, "Frozen question count")
         ):
-            with self.assertRaisesRegex(ExamStateError, "Frozen question count"):
-                await ExamOperationsService._require_activation_static_readiness(db, exam)
+            await ExamOperationsService._require_activation_static_readiness(
+                db, exam
+            )
 
 
 def self_or_now():

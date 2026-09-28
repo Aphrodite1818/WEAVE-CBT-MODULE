@@ -18,7 +18,6 @@ from app.workers.exams import (
 from app.workers.maintenance import recover_background_work
 from app.workers.results import sync_exam_results
 
-
 logger = logging.getLogger(__name__)
 
 

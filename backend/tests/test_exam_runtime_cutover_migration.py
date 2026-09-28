@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = BACKEND_ROOT / "alembic" / "versions" / "7dfe6fd9894b_.py"
 MODEL_REGISTRY = BACKEND_ROOT / "app" / "model_registry.py"

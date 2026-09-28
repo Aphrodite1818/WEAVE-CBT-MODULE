@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.auth.student_models import StudentExamSession
 
-
 _ADVISORY_LOCK_MASK = (1 << 64) - 1
 _ADVISORY_LOCK_SIGN_BIT = 1 << 63
 _ADVISORY_LOCK_MODULUS = 1 << 64

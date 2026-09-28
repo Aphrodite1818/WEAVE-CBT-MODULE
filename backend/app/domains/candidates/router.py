@@ -22,7 +22,6 @@ from app.domains.candidates.schemas import (
 from app.domains.exams.exceptions import ExamNotFound
 from app.workers.producer import arq_producer
 
-
 router = APIRouter(tags=["Candidates"])
 
 
@@ -130,9 +129,7 @@ async def retry_failed_roster(
         raise _domain_http_error(exc) from exc
 
     job_name = (
-        "prepare_exam_roster"
-        if recovery_mode == "prepare"
-        else "reconcile_exam_roster"
+        "prepare_exam_roster" if recovery_mode == "prepare" else "reconcile_exam_roster"
     )
     queued = await arq_producer.enqueue(job_name, str(exam.id))
 

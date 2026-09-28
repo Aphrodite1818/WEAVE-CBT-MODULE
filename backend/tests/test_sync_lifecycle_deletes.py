@@ -12,10 +12,13 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from app.domains.academics.repository import AcademicRepository  # noqa: E402
-from app.domains.sync.invalidation import SyncInvalidationRepository  # noqa: E402
-from app.domains.sync.service import ENTITY_MODELS, SyncService  # noqa: E402
-from app.integrations.weave.schemas import SYNC_SCHEMA_VERSION, WeaveSyncChange  # noqa: E402
+from app.domains.academics.repository import AcademicRepository
+from app.domains.sync.invalidation import SyncInvalidationRepository
+from app.domains.sync.service import ENTITY_MODELS, SyncService
+from app.integrations.weave.schemas import (
+    SYNC_SCHEMA_VERSION,
+    WeaveSyncChange,
+)
 
 
 class SyncLifecycleDeleteTests(unittest.IsolatedAsyncioTestCase):

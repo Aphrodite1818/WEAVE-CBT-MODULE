@@ -10,7 +10,6 @@ from app.domains.auth.dependencies import CurrentLocalActor
 from app.domains.media.schemas import MediaAssetResponse
 from app.domains.media.service import MediaService
 
-
 router = APIRouter(
     prefix="/media",
     tags=["Media"],

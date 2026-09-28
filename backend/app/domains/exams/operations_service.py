@@ -18,7 +18,10 @@ from app.domains.exams.exceptions import (
 )
 from app.domains.exams.models import Exam, ExamRosterStatus, ExamStatus
 from app.domains.exams.repository import ExamRepository
-from app.domains.exams.timetable_service import ActivationPreflight, ExamTimetableService
+from app.domains.exams.timetable_service import (
+    ActivationPreflight,
+    ExamTimetableService,
+)
 from app.domains.runtime.models import RealtimeOutboxEvent
 from app.domains.runtime.repository import RuntimeRepository
 
@@ -246,7 +249,9 @@ class ExamOperationsService:
                             ),
                             "new_scheduled_start_at": new_start.isoformat(),
                             "old_latest_normal_start_at": (
-                                old_latest.isoformat() if old_latest is not None else None
+                                old_latest.isoformat()
+                                if old_latest is not None
+                                else None
                             ),
                             "new_latest_normal_start_at": (
                                 exam.latest_normal_start_at.isoformat()

@@ -28,7 +28,6 @@ from app.domains.auth.student_dependencies import CurrentStudentExamSession
 from app.domains.exams.exceptions import ExamNotFound, ExamStateError
 from app.domains.media.service import MediaService
 
-
 student_router = APIRouter(prefix="/student/attempts", tags=["Student Attempts"])
 operator_router = APIRouter(prefix="/attempts", tags=["Attempts"])
 exam_router = APIRouter(prefix="/exams", tags=["Attempts"])

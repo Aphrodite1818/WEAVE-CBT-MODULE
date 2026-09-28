@@ -26,19 +26,22 @@ from uuid import UUID, uuid4
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
-    Enum as SQLEnum,
     Index,
     Integer,
     String,
     Text,
     func,
+)
+from sqlalchemy import (
+    Enum as SQLEnum,
+)
+from sqlalchemy import (
     text as sql_text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
-
 
 OUTBOX_EVENT_TYPE_MAX_LENGTH = 128
 OUTBOX_AGGREGATE_TYPE_MAX_LENGTH = 64

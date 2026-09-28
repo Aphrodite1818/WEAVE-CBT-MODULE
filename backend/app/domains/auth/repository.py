@@ -10,13 +10,14 @@ from __future__ import annotations
 from collections.abc import Sequence
 from uuid import UUID
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.domains.auth.models import (
     LocalActor,
     LocalActorSession,
     LocalRefreshToken,
 )
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class AuthRepository:

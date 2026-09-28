@@ -12,11 +12,11 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from app.domains.academics.repository import AcademicRepository  # noqa: E402
-from app.domains.auth.service import LocalAuthService  # noqa: E402
-from app.domains.sync.invalidation import SyncInvalidationRepository  # noqa: E402
-from app.domains.sync.service import SyncService  # noqa: E402
-from app.integrations.weave.schemas import (  # noqa: E402
+from app.domains.academics.repository import AcademicRepository
+from app.domains.auth.service import LocalAuthService
+from app.domains.sync.invalidation import SyncInvalidationRepository
+from app.domains.sync.service import SyncService
+from app.integrations.weave.schemas import (
     WeaveAcademicBootstrap,
     WeaveSyncChange,
 )

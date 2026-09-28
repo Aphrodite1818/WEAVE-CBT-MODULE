@@ -11,10 +11,10 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from app import model_registry  # noqa: E402,F401
-from app.core.database import Base  # noqa: E402
-from app.domains.auth.student_models import StudentExamSession  # noqa: E402
-from app.domains.auth.student_schemas import (  # noqa: E402
+from app import model_registry  # noqa: F401
+from app.core.database import Base
+from app.domains.auth.student_models import StudentExamSession
+from app.domains.auth.student_schemas import (
     StudentExamAvailability,
     StudentLoginRequest,
     StudentLoginResponse,

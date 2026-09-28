@@ -103,11 +103,14 @@ class QuestionRepository:
 
     @staticmethod
     async def list_nonempty_bank_ids(
-        db: AsyncSession, bank_ids: Sequence[UUID],
+        db: AsyncSession,
+        bank_ids: Sequence[UUID],
     ) -> set[UUID]:
         if not bank_ids:
             return set()
-        query = select(Question.bank_id).where(Question.bank_id.in_(bank_ids)).distinct()
+        query = (
+            select(Question.bank_id).where(Question.bank_id.in_(bank_ids)).distinct()
+        )
         return set((await db.execute(query)).scalars().all())
 
     @staticmethod

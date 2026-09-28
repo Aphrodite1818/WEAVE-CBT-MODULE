@@ -22,7 +22,6 @@ from app.domains.exams.execution_service import ExamExecutionService
 from app.domains.exams.service import ExamService
 from app.workers.producer import arq_producer
 
-
 router = APIRouter(prefix="/exams", tags=["Exam Results Review"])
 
 

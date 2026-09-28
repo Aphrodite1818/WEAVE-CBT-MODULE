@@ -19,7 +19,6 @@ from app.domains.auth.student_schemas import (
     StudentSessionResponse,
 )
 
-
 router = APIRouter(prefix="/student/auth", tags=["Student Authentication"])
 
 

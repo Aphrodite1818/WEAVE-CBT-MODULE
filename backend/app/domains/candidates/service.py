@@ -13,6 +13,7 @@ from app.core.exceptions import AcademicAuthorizationError
 from app.domains.academics.electives import ElectiveEligibilityService
 from app.domains.academics.models import StudentEnrollment
 from app.domains.academics.repository import AcademicRepository
+from app.domains.attempts.repository import AttemptRepository
 from app.domains.auth.models import LocalActor
 from app.domains.candidates.exceptions import CandidateRosterError
 from app.domains.candidates.models import (
@@ -38,7 +39,6 @@ from app.domains.exams.timetable_service import (
     ExamTimetableService,
 )
 from app.domains.sync.repository import SyncRepository
-from app.domains.attempts.repository import AttemptRepository
 
 
 class CandidateService:

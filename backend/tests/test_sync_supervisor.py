@@ -10,7 +10,7 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from app.domains.sync.supervisor import (  # noqa: E402
+from app.domains.sync.supervisor import (
     RECONCILE_FALLBACK_SECONDS,
     SYNC_LEADER_LOCK_KEY,
     SyncSupervisor,

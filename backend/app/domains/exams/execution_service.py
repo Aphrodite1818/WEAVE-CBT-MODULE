@@ -41,7 +41,6 @@ from app.domains.results.service import ResultService
 from app.domains.runtime.models import RealtimeOutboxEvent
 from app.domains.runtime.repository import RuntimeRepository
 
-
 FINALIZATION_BATCH_SIZE = 200
 
 
@@ -757,8 +756,7 @@ class ExamExecutionService:
             cutoff = outage_started_at
             if exam.activated_at is not None and cutoff < exam.activated_at:
                 cutoff = exam.activated_at
-            if cutoff > now:
-                cutoff = now
+            cutoff = min(cutoff, now)
 
             open_suspension = await ExamRepository.get_open_suspension_for_exam(
                 db, exam.id, lock=True

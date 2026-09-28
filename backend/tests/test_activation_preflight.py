@@ -10,9 +10,9 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from app.domains.exams.models import ExamStatus  # noqa: E402
-from app.domains.exams.repository import ExamRepository  # noqa: E402
-from app.domains.exams.timetable_service import (  # noqa: E402
+from app.domains.exams.models import ExamStatus
+from app.domains.exams.repository import ExamRepository
+from app.domains.exams.timetable_service import (
     ACTIVATION_RECOVERY_BUFFER,
     ActivationPreflight,
     ExamTimetableService,
@@ -136,7 +136,9 @@ class ActivationPreflightTimingTests(unittest.IsolatedAsyncioTestCase):
             self.checked_at + ACTIVATION_RECOVERY_BUFFER + timedelta(hours=1),
         )
 
-    async def test_enforcement_mode_uses_real_activation_time_without_rolling_buffer(self):
+    async def test_enforcement_mode_uses_real_activation_time_without_rolling_buffer(
+        self,
+    ):
         source = self.exam(
             title="Chemistry",
             status=ExamStatus.SEALED,
@@ -165,7 +167,9 @@ class ActivationPreflightTimingTests(unittest.IsolatedAsyncioTestCase):
             self.checked_at + timedelta(hours=1),
         )
 
-    async def test_buffered_suggestion_remains_valid_if_admin_activates_within_window(self):
+    async def test_buffered_suggestion_remains_valid_if_admin_activates_within_window(
+        self,
+    ):
         source = self.exam(
             title="Chemistry",
             status=ExamStatus.SEALED,
@@ -379,7 +383,9 @@ class ActivationPreflightTimingTests(unittest.IsolatedAsyncioTestCase):
                 buffered=False,
             )
 
-        impact = next(row for row in preflight.affected_exams if row.exam_id == physics.id)
+        impact = next(
+            row for row in preflight.affected_exams if row.exam_id == physics.id
+        )
         self.assertIsNone(impact.suggested_start_at)
         self.assertIsNone(impact.suggested_end_at)
         self.assertIn("no reliable finish time", impact.reason)

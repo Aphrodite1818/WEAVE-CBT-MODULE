@@ -10,7 +10,6 @@ from redis.exceptions import RedisError
 
 from app.workers.broker import create_arq_pool
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -69,10 +68,7 @@ def roster_reconcile_job_id(
     if roster_version < 0:
         raise ValueError("roster version cannot be negative")
 
-    return (
-        "weave-cbt:reconcile_exam_roster:"
-        f"{exam_identity}:v{roster_version}"
-    )
+    return f"weave-cbt:reconcile_exam_roster:{exam_identity}:v{roster_version}"
 
 
 class ArqProducer:

@@ -5,6 +5,7 @@ Revises: 0001_initial_schema
 """
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0002_sync_v3_cutover"

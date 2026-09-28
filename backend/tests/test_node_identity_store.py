@@ -18,18 +18,18 @@ os.environ.setdefault(
     "redis://localhost:6379/0",
 )
 
-from pydantic import SecretStr  # noqa: E402
+from pydantic import SecretStr
 
-from app.domains.node.exceptions import (  # noqa: E402
+from app.domains.node.exceptions import (
     InstallationAlreadyPairedError,
 )
-from app.domains.node.identity_store import (  # noqa: E402
+from app.domains.node.identity_store import (
     IDENTITY_DIRECTORY_MODE,
     IDENTITY_FILE_MODE,
     WINDOWS_LOCK_BYTES,
     NodeIdentityStore,
 )
-from app.domains.node.schemas import StoredNodeIdentity  # noqa: E402
+from app.domains.node.schemas import StoredNodeIdentity
 
 
 class NodeIdentityStoreSettingsTests(unittest.TestCase):
@@ -318,10 +318,9 @@ class NodeIdentityStoreAsyncLockTests(unittest.IsolatedAsyncioTestCase):
         with patch(
             "app.domains.node.identity_store.asyncio.to_thread",
             new=AsyncMock(side_effect=[73, None]),
-        ) as to_thread_mock:
-            with self.assertRaisesRegex(RuntimeError, "boom"):
-                async with store.pairing_lock():
-                    raise RuntimeError("boom")
+        ) as to_thread_mock, self.assertRaisesRegex(RuntimeError, "boom"):
+            async with store.pairing_lock():
+                raise RuntimeError("boom")
 
         self.assertEqual(
             to_thread_mock.await_args_list[1].args,

@@ -14,7 +14,6 @@ from uuid import UUID
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
-    Enum as SQLEnum,
     ForeignKey,
     Index,
     Integer,
@@ -22,12 +21,16 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+)
+from sqlalchemy import (
+    Enum as SQLEnum,
+)
+from sqlalchemy import (
     text as sql_text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
-
 
 RESULT_SYNC_ERROR_MAX_LENGTH = 1024
 

@@ -11,9 +11,10 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from app.domains.audit.models import AuditActorType, AuditEvent, AuditOutcome
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.domains.audit.models import AuditActorType, AuditEvent, AuditOutcome
 
 
 class AuditRepository:

@@ -13,13 +13,13 @@ os.environ.setdefault(
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 os.environ["DEBUG"] = "false"
 
-from app.domains.exams.execution_models import ExamResultDisposition  # noqa: E402
-from app.domains.exams.execution_repository import ExamExecutionRepository  # noqa: E402
-from app.domains.exams.models import ExamStatus  # noqa: E402
-from app.domains.exams.repository import ExamRepository  # noqa: E402
-from app.domains.results.models import ResultSyncStatus  # noqa: E402
-from app.domains.results.repository import ResultRepository  # noqa: E402
-from app.domains.results.retry_service import ResultRetryService  # noqa: E402
+from app.domains.exams.execution_models import ExamResultDisposition
+from app.domains.exams.execution_repository import ExamExecutionRepository
+from app.domains.exams.models import ExamStatus
+from app.domains.exams.repository import ExamRepository
+from app.domains.results.models import ResultSyncStatus
+from app.domains.results.repository import ResultRepository
+from app.domains.results.retry_service import ResultRetryService
 
 
 class ResultRetryServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -88,14 +88,13 @@ class ResultRetryServiceTests(unittest.IsolatedAsyncioTestCase):
                         result_disposition=ExamResultDisposition.VOIDED
                     )
                 ),
-            ),
+            ),self.assertRaisesRegex(Exception, "APPROVED")
         ):
-            with self.assertRaisesRegex(Exception, "APPROVED"):
-                await ResultRetryService.retry_detached_failures(
-                    db,
-                    actor=SimpleNamespace(id=uuid4(), role="admin", is_active=True),
-                    exam_id=exam_id,
-                )
+            await ResultRetryService.retry_detached_failures(
+                db,
+                actor=SimpleNamespace(id=uuid4(), role="admin", is_active=True),
+                exam_id=exam_id,
+            )
         db.commit.assert_not_awaited()
 
 

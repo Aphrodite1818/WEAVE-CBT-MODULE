@@ -10,13 +10,13 @@ os.environ.setdefault(
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ["DEBUG"] = "false"
 
-from app.domains.exams.models import (  # noqa: E402
+from app.domains.exams.models import (
     Exam,
     ExamQuestion,
     ExamQuestionSelection,
 )
-from app.domains.exams.router import router  # noqa: E402
-from app.domains.exams.schemas import (  # noqa: E402
+from app.domains.exams.router import router
+from app.domains.exams.schemas import (
     ExamAuthoringAction,
     ExamQuestionSelectionResponse,
     ExamResponse,

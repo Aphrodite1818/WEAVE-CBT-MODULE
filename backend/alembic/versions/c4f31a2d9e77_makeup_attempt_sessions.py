@@ -10,16 +10,16 @@ because the previous shape could only reference the sealed main paper and could
 not safely freeze fresh makeup questions.
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision: str = "c4f31a2d9e77"
-down_revision: Union[str, Sequence[str], None] = "b91d2c4e7a10"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "b91d2c4e7a10"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def _timestamps() -> list[sa.Column]:

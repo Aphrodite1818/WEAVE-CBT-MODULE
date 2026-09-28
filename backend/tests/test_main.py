@@ -10,7 +10,7 @@ os.environ.setdefault(
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ["DEBUG"] = "false"
 
-from app.main import app  # noqa: E402
+from app.main import app
 
 
 class MainTests(unittest.TestCase):

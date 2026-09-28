@@ -17,9 +17,7 @@ from app.domains.node.exceptions import (
     NodeIdentityNotFoundError,
     NodeIdentityStorageError,
 )
-
 from app.domains.node.schemas import StoredNodeIdentity
-
 
 IDENTITY_FILENAME = "installation.json"
 PAIRING_LOCK_FILENAME = ".pairing.lock"
@@ -496,7 +494,7 @@ class NodeIdentityStore:
         try:
             directory_descriptor = os.open(
                 self.storage_path,
-                os.O_RDONLY | getattr(os, "O_DIRECTORY"),
+                os.O_RDONLY | os.O_DIRECTORY,
             )
 
             os.fsync(directory_descriptor)

@@ -13,14 +13,14 @@ os.environ.setdefault(
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 os.environ["DEBUG"] = "false"
 
-from app.domains.exams.execution_models import ExamResultDisposition  # noqa: E402
-from app.domains.exams.execution_repository import ExamExecutionRepository  # noqa: E402
-from app.domains.exams.models import ExamStatus  # noqa: E402
-from app.domains.exams.repository import ExamRepository  # noqa: E402
-from app.domains.results.models import ResultSyncStatus  # noqa: E402
-from app.domains.results.repository import ResultRepository  # noqa: E402
-from app.domains.results.sync_service import ResultSyncService  # noqa: E402
-from app.integrations.weave.exceptions import WeaveRequestRejectedError  # noqa: E402
+from app.domains.exams.execution_models import ExamResultDisposition
+from app.domains.exams.execution_repository import ExamExecutionRepository
+from app.domains.exams.models import ExamStatus
+from app.domains.exams.repository import ExamRepository
+from app.domains.results.models import ResultSyncStatus
+from app.domains.results.repository import ResultRepository
+from app.domains.results.sync_service import ResultSyncService
+from app.integrations.weave.exceptions import WeaveRequestRejectedError
 
 
 class ResultSyncApprovalTests(unittest.IsolatedAsyncioTestCase):
@@ -175,10 +175,9 @@ class ResultSyncFailureClassificationTests(unittest.IsolatedAsyncioTestCase):
                 service,
                 "_mark_batch_failed",
                 new=AsyncMock(),
-            ) as mark_failed,
+            ) as mark_failed,self.assertRaises(WeaveRequestRejectedError)
         ):
-            with self.assertRaises(WeaveRequestRejectedError):
-                await service.sync_next_batch(db, exam_id=uuid4())
+            await service.sync_next_batch(db, exam_id=uuid4())
 
         self.assertFalse(mark_failed.await_args.kwargs["preserve_batch"])
 
@@ -214,10 +213,9 @@ class ResultSyncFailureClassificationTests(unittest.IsolatedAsyncioTestCase):
                 service,
                 "_mark_batch_failed",
                 new=AsyncMock(),
-            ) as mark_failed,
+            ) as mark_failed,self.assertRaises(WeaveRequestRejectedError)
         ):
-            with self.assertRaises(WeaveRequestRejectedError):
-                await service.sync_next_batch(db, exam_id=uuid4())
+            await service.sync_next_batch(db, exam_id=uuid4())
 
         self.assertTrue(mark_failed.await_args.kwargs["preserve_batch"])
 

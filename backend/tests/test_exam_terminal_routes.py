@@ -14,10 +14,10 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 os.environ.setdefault("WEAVE_API_BASE_URL", "https://weave.invalid")
 os.environ["DEBUG"] = "false"
 
-from app.domains.exams.execution_service import ExamExecutionService  # noqa: E402
-from app.domains.exams.router import cancel_exam, close_exam  # noqa: E402
-from app.domains.exams.schemas import ExamReasonPayload, ExamResponse  # noqa: E402
-from app.workers.producer import arq_producer  # noqa: E402
+from app.domains.exams.execution_service import ExamExecutionService
+from app.domains.exams.router import cancel_exam, close_exam
+from app.domains.exams.schemas import ExamReasonPayload, ExamResponse
+from app.workers.producer import arq_producer
 
 
 class ExamTerminalRouteTests(unittest.IsolatedAsyncioTestCase):
@@ -50,7 +50,9 @@ class ExamTerminalRouteTests(unittest.IsolatedAsyncioTestCase):
         )
         enqueue.assert_awaited_once_with("finalize_exam_close", str(exam_id))
 
-    async def test_cancel_route_stages_durable_cancel_and_queues_finalizer(self) -> None:
+    async def test_cancel_route_stages_durable_cancel_and_queues_finalizer(
+        self,
+    ) -> None:
         exam_id = uuid4()
         current_exam = SimpleNamespace(id=exam_id)
         actor = SimpleNamespace(id=uuid4(), role="admin", is_active=True)

@@ -8,13 +8,17 @@ from uuid import UUID
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
-    Enum as SQLEnum,
     ForeignKey,
     Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+)
+from sqlalchemy import (
+    Enum as SQLEnum,
+)
+from sqlalchemy import (
     text as sql_text,
 )
 from sqlalchemy.orm import Mapped, mapped_column

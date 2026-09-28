@@ -13,7 +13,6 @@ from app.domains.exams.router import DOMAIN_ERRORS, _domain_http_error
 from app.domains.exams.schemas import ExamResponse
 from app.domains.exams.service import ExamService
 
-
 router = APIRouter(prefix="/exams", tags=["Exams"])
 
 

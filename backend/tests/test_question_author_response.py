@@ -61,7 +61,9 @@ class QuestionAuthorResponseTests(unittest.IsolatedAsyncioTestCase):
             (ExamRepository, "list_referenced_bank_ids"),
             (QuestionRepository, "list_nonempty_bank_ids"),
         ]:
-            patcher = patch.object(repository, method, new=AsyncMock(return_value=set()))
+            patcher = patch.object(
+                repository, method, new=AsyncMock(return_value=set())
+            )
             patcher.start()
             self.addCleanup(patcher.stop)
 
@@ -71,12 +73,20 @@ class QuestionAuthorResponseTests(unittest.IsolatedAsyncioTestCase):
         db = SimpleNamespace(commit=AsyncMock())
         ExamRepository.list_referenced_bank_ids.return_value = {bank.id}
         with (
-            patch.object(QuestionRepository, "get_bank_by_id", new=AsyncMock(return_value=bank)),
-            patch.object(QuestionRepository, "count_questions_for_bank", new=AsyncMock(return_value=0)),
+            patch.object(
+                QuestionRepository, "get_bank_by_id", new=AsyncMock(return_value=bank)
+            ),
+            patch.object(
+                QuestionRepository,
+                "count_questions_for_bank",
+                new=AsyncMock(return_value=0),
+            ),
             patch.object(QuestionRepository, "delete_bank", new=AsyncMock()) as delete,
             self.assertRaisesRegex(ValueError, "used by an exam"),
         ):
-            await QuestionService.delete_empty_question_bank(db, actor=actor, bank_id=bank.id)
+            await QuestionService.delete_empty_question_bank(
+                db, actor=actor, bank_id=bank.id
+            )
         delete.assert_not_awaited()
         db.commit.assert_not_awaited()
 
@@ -88,25 +98,51 @@ class QuestionAuthorResponseTests(unittest.IsolatedAsyncioTestCase):
         questions = [own, used, other]
         ExamRepository.list_referenced_question_ids.return_value = {used.id}
         with (
-            patch.object(QuestionRepository, "list_options_for_questions", new=AsyncMock(return_value=[])),
-            patch("app.domains.questions.response_builder._load_author_names", new=AsyncMock(return_value={})),
+            patch.object(
+                QuestionRepository,
+                "list_options_for_questions",
+                new=AsyncMock(return_value=[]),
+            ),
+            patch(
+                "app.domains.questions.response_builder._load_author_names",
+                new=AsyncMock(return_value={}),
+            ),
         ):
-            responses = await build_question_responses(object(), questions, request_actor=teacher)
-            self.assertEqual([row.can_delete for row in responses], [True, False, False])
+            responses = await build_question_responses(
+                object(), questions, request_actor=teacher
+            )
+            self.assertEqual(
+                [row.can_delete for row in responses], [True, False, False]
+            )
             admin = SimpleNamespace(id=uuid4(), role="admin")
-            responses = await build_question_responses(object(), questions, request_actor=admin)
+            responses = await build_question_responses(
+                object(), questions, request_actor=admin
+            )
             self.assertEqual([row.can_delete for row in responses], [True, False, True])
 
     async def test_only_empty_unreferenced_banks_are_deletable_by_admin(self):
         actor = SimpleNamespace(id=uuid4(), role="admin")
-        banks = [QuestionBank(id=uuid4(), curriculum_subject_id=uuid4(), name="Bank", description=None,
-                              created_by_actor_id=actor.id, is_active=True) for _ in range(3)]
+        banks = [
+            QuestionBank(
+                id=uuid4(),
+                curriculum_subject_id=uuid4(),
+                name="Bank",
+                description=None,
+                created_by_actor_id=actor.id,
+                is_active=True,
+            )
+            for _ in range(3)
+        ]
         QuestionRepository.list_nonempty_bank_ids.return_value = {banks[1].id}
         ExamRepository.list_referenced_bank_ids.return_value = {banks[2].id}
-        responses = await build_question_bank_responses(object(), banks, request_actor=actor)
+        responses = await build_question_bank_responses(
+            object(), banks, request_actor=actor
+        )
         self.assertEqual([row.can_delete for row in responses], [True, False, False])
         actor.role = "teacher"
-        responses = await build_question_bank_responses(object(), banks, request_actor=actor)
+        responses = await build_question_bank_responses(
+            object(), banks, request_actor=actor
+        )
         self.assertEqual([row.can_delete for row in responses], [False, False, False])
 
     async def test_teacher_question_prefers_current_academic_name(self) -> None:

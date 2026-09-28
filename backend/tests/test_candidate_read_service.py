@@ -14,11 +14,11 @@ os.environ.setdefault(
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ["DEBUG"] = "false"
 
-from app.core.exceptions import AcademicAuthorizationError  # noqa: E402
-from app.domains.candidates.models import CandidateStatus  # noqa: E402
-from app.domains.candidates.repository import CandidateRepository  # noqa: E402
-from app.domains.candidates.service import CandidateService  # noqa: E402
-from app.domains.exams.repository import ExamRepository  # noqa: E402
+from app.core.exceptions import AcademicAuthorizationError
+from app.domains.candidates.models import CandidateStatus
+from app.domains.candidates.repository import CandidateRepository
+from app.domains.candidates.service import CandidateService
+from app.domains.exams.repository import ExamRepository
 
 
 def actor(*, role: str = "admin", membership_id: UUID | None = None):

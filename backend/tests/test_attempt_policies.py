@@ -1,6 +1,6 @@
 import os
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 os.environ.setdefault(
     "DATABASE_URL",
@@ -16,23 +16,23 @@ os.environ.setdefault(
 # contracts solely to satisfy collection during the question/media phase.
 raise unittest.SkipTest("Deferred until the exam-attempt service phase is implemented.")
 
-from app.domains.attempts.exceptions import (  # noqa: E402
+from app.domains.attempts.exceptions import (
     AttemptTimeExhausted,
     ExamNotYetOpen,
     ExamStartWindowClosed,
 )
-from app.domains.attempts.models import AttemptStatus, ExamAttempt  # noqa: E402
-from app.domains.attempts.service import (  # noqa: E402
+from app.domains.attempts.models import AttemptStatus, ExamAttempt
+from app.domains.attempts.service import (
     ensure_exam_accepts_new_attempt,
     ensure_interrupted_attempt_can_resume,
 )
-from app.domains.exams.models import Exam, ExamStatus  # noqa: E402
+from app.domains.exams.models import Exam, ExamStatus
 
 
 class AttemptWindowPolicyTests(unittest.TestCase):
     def setUp(self):
-        self.opens_at = datetime(2026, 8, 11, 10, 0, tzinfo=timezone.utc)
-        self.closes_at = datetime(2026, 8, 11, 11, 0, tzinfo=timezone.utc)
+        self.opens_at = datetime(2026, 8, 11, 10, 0, tzinfo=UTC)
+        self.closes_at = datetime(2026, 8, 11, 11, 0, tzinfo=UTC)
         self.exam = Exam(
             status=ExamStatus.ACTIVE,
             opens_at=self.opens_at,
@@ -40,7 +40,7 @@ class AttemptWindowPolicyTests(unittest.TestCase):
         )
 
     def test_new_attempt_is_allowed_inside_exam_window(self):
-        now = datetime(2026, 8, 11, 10, 59, tzinfo=timezone.utc)
+        now = datetime(2026, 8, 11, 10, 59, tzinfo=UTC)
 
         ensure_exam_accepts_new_attempt(self.exam, now=now)
 
@@ -49,13 +49,13 @@ class AttemptWindowPolicyTests(unittest.TestCase):
             ensure_exam_accepts_new_attempt(self.exam, now=self.closes_at)
 
     def test_new_attempt_is_blocked_after_close_time(self):
-        now = datetime(2026, 8, 11, 11, 1, tzinfo=timezone.utc)
+        now = datetime(2026, 8, 11, 11, 1, tzinfo=UTC)
 
         with self.assertRaises(ExamStartWindowClosed):
             ensure_exam_accepts_new_attempt(self.exam, now=now)
 
     def test_new_attempt_is_blocked_before_open_time(self):
-        now = datetime(2026, 8, 11, 9, 59, tzinfo=timezone.utc)
+        now = datetime(2026, 8, 11, 9, 59, tzinfo=UTC)
 
         with self.assertRaises(ExamNotYetOpen):
             ensure_exam_accepts_new_attempt(self.exam, now=now)

@@ -7,8 +7,8 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.core.frontend import register_frontend_routes
 from app.core.database import check_database_connection, dispose_database_engine
+from app.core.frontend import register_frontend_routes
 from app.core.integration_errors import register_weave_integration_error_handlers
 from app.core.redis import close_redis_client
 from app.core.settings import settings
@@ -22,7 +22,9 @@ from app.domains.branding.router import router as branding_router
 from app.domains.candidates.makeup_router import router as makeup_router
 from app.domains.candidates.router import router as candidates_router
 from app.domains.exams.execution_router import router as exam_execution_router
-from app.domains.exams.question_authoring_router import router as exam_question_authoring_router
+from app.domains.exams.question_authoring_router import (
+    router as exam_question_authoring_router,
+)
 from app.domains.exams.read_router import router as exam_read_router
 from app.domains.exams.router import router as exams_router
 from app.domains.exams.timetable_router import router as timetable_router

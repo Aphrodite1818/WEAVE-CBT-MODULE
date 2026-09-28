@@ -20,7 +20,6 @@ from app.domains.candidates.repository import CandidateRepository
 from app.domains.exams.exceptions import ExamNotFound
 from app.domains.exams.repository import ExamRepository
 
-
 ATTEMPT_HEARTBEAT_ONLINE_WITHIN = timedelta(seconds=45)
 ATTEMPT_HEARTBEAT_STALE_AFTER = timedelta(seconds=120)
 

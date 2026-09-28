@@ -17,7 +17,6 @@ from collections.abc import Sequence
 
 from alembic import op
 
-
 revision: str = "20260915_attempt_terminal"
 down_revision: str | Sequence[str] | None = "20260915_branding_logo_cache"
 branch_labels: str | Sequence[str] | None = None

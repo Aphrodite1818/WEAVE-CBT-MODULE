@@ -13,7 +13,7 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from app.domains.sync import router as sync_router  # noqa: E402
+from app.domains.sync import router as sync_router
 
 
 class SyncRouterTests(unittest.IsolatedAsyncioTestCase):

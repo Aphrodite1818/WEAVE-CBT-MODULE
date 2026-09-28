@@ -12,13 +12,15 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from app.core.exceptions import (  # noqa: E402
+from app.core.exceptions import (
     AcademicAuthorizationError,
     AcademicScopeError,
 )
-from app.domains.academics.authorization import AcademicAuthorizationService  # noqa: E402
-from app.domains.academics.eligibility import AcademicEligibilityService  # noqa: E402
-from app.domains.academics.repository import AcademicRepository  # noqa: E402
+from app.domains.academics.authorization import (
+    AcademicAuthorizationService,
+)
+from app.domains.academics.eligibility import AcademicEligibilityService
+from app.domains.academics.repository import AcademicRepository
 
 
 class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
@@ -116,19 +118,18 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                 AcademicRepository,
                 "list_teacher_classes_for_curriculum_subject",
                 new=AsyncMock(return_value=[]),
-            ),
+            ),self.assertRaisesRegex(
+            AcademicAuthorizationError,
+            "does not have an active assignment",
+        )
         ):
-            with self.assertRaisesRegex(
-                AcademicAuthorizationError,
-                "does not have an active assignment",
-            ):
-                await (
-                    AcademicAuthorizationService.require_can_author_curriculum_subject(
-                        object(),  # type: ignore[arg-type]
-                        actor=actor,  # type: ignore[arg-type]
-                        curriculum_subject_id=subject_id,
-                    )
+            await (
+                AcademicAuthorizationService.require_can_author_curriculum_subject(
+                    object(),  # type: ignore[arg-type]
+                    actor=actor,  # type: ignore[arg-type]
+                    curriculum_subject_id=subject_id,
                 )
+            )
 
     async def test_exact_class_scope_requires_exact_teacher_assignment(self) -> None:
         membership_id = uuid4()
@@ -167,18 +168,17 @@ class AcademicAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                 AcademicRepository,
                 "get_active_assignment_for_scope",
                 new=AsyncMock(return_value=None),
-            ),
+            ),self.assertRaisesRegex(
+            AcademicAuthorizationError,
+            "for this class and curriculum subject",
+        )
         ):
-            with self.assertRaisesRegex(
-                AcademicAuthorizationError,
-                "for this class and curriculum subject",
-            ):
-                await AcademicAuthorizationService.require_teacher_assignment_for_class(
-                    object(),  # type: ignore[arg-type]
-                    actor=actor,  # type: ignore[arg-type]
-                    class_id=class_id,
-                    curriculum_subject_id=subject_id,
-                )
+            await AcademicAuthorizationService.require_teacher_assignment_for_class(
+                object(),  # type: ignore[arg-type]
+                actor=actor,  # type: ignore[arg-type]
+                class_id=class_id,
+                curriculum_subject_id=subject_id,
+            )
 
     async def test_admin_term_authoring_requires_at_least_one_eligible_class(
         self,

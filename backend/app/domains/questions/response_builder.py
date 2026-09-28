@@ -41,10 +41,15 @@ async def build_question_bank_responses(
     ]
 
 
-def _can_delete_question(question: Question, actor: LocalActor | None, referenced_ids: set[UUID]) -> bool:
+def _can_delete_question(
+    question: Question, actor: LocalActor | None, referenced_ids: set[UUID]
+) -> bool:
     return bool(
         actor
-        and (actor.role == "admin" or (actor.role == "teacher" and actor.id == question.created_by_actor_id))
+        and (
+            actor.role == "admin"
+            or (actor.role == "teacher" and actor.id == question.created_by_actor_id)
+        )
         and question.id not in referenced_ids
     )
 
@@ -142,7 +147,9 @@ async def build_question_response(
         [question.created_by_actor_id],
         request_actor=request_actor,
     )
-    referenced_ids = await ExamRepository.list_referenced_question_ids(db, [question.id])
+    referenced_ids = await ExamRepository.list_referenced_question_ids(
+        db, [question.id]
+    )
     return QuestionResponse(
         id=question.id,
         bank_id=question.bank_id,
@@ -179,7 +186,9 @@ async def build_question_responses(
         request_actor=request_actor,
     )
 
-    referenced_ids = await ExamRepository.list_referenced_question_ids(db, [question.id for question in questions])
+    referenced_ids = await ExamRepository.list_referenced_question_ids(
+        db, [question.id for question in questions]
+    )
 
     grouped: dict[UUID, list[QuestionOptionResponse]] = defaultdict(list)
     for option in options:

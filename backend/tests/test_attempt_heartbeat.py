@@ -14,13 +14,13 @@ os.environ.setdefault(
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 os.environ["DEBUG"] = "false"
 
-from app.domains.attempts.guarded_service import AttemptService  # noqa: E402
-from app.domains.attempts.models import AttemptStatus  # noqa: E402
-from app.domains.attempts.query_schemas import AttemptConnectivityStatus  # noqa: E402
-from app.domains.attempts.query_service import AttemptQueryService  # noqa: E402
-from app.domains.attempts.repository import AttemptRepository  # noqa: E402
-from app.domains.attempts.service import AttemptStateError  # noqa: E402
-from app.domains.exams.models import ExamStatus  # noqa: E402
+from app.domains.attempts.guarded_service import AttemptService
+from app.domains.attempts.models import AttemptStatus
+from app.domains.attempts.query_schemas import AttemptConnectivityStatus
+from app.domains.attempts.query_service import AttemptQueryService
+from app.domains.attempts.repository import AttemptRepository
+from app.domains.attempts.service import AttemptStateError
+from app.domains.exams.models import ExamStatus
 
 
 def context(*, is_makeup: bool = False):
@@ -116,9 +116,8 @@ class AttemptHeartbeatTests(unittest.IsolatedAsyncioTestCase):
                     AttemptService,
                     "_get_current_attempt",
                     new=AsyncMock(return_value=(attempt, SimpleNamespace(), exam)),
-                ):
-                    with self.assertRaises(AttemptStateError):
-                        await AttemptService.heartbeat_current(db, context=context())
+                ), self.assertRaises(AttemptStateError):
+                    await AttemptService.heartbeat_current(db, context=context())
                 db.commit.assert_not_awaited()
 
     async def test_makeup_attempt_can_heartbeat_on_closed_original_exam(self) -> None:

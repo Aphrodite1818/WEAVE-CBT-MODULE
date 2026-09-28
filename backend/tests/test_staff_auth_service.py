@@ -13,13 +13,13 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from app.domains.academics.repository import AcademicRepository  # noqa: E402
-from app.domains.auth.repository import AuthRepository  # noqa: E402
-from app.domains.auth.service import (  # noqa: E402
+from app.domains.academics.repository import AcademicRepository
+from app.domains.auth.repository import AuthRepository
+from app.domains.auth.service import (
     INVALID_LOCAL_STAFF_SESSION,
+    SYNC_TRUST_REVOKED_REASON,
     LocalAuthService,
     LocalSessionAuthenticationError,
-    SYNC_TRUST_REVOKED_REASON,
 )
 
 
@@ -383,16 +383,15 @@ class StaffRefreshTests(unittest.IsolatedAsyncioTestCase):
             patch(
                 "app.domains.auth.service.node_identity_store.load",
                 return_value=SimpleNamespace(server_id=uuid4()),
-            ),
+            ),self.assertRaisesRegex(
+            LocalSessionAuthenticationError,
+            INVALID_LOCAL_STAFF_SESSION,
+        )
         ):
-            with self.assertRaisesRegex(
-                LocalSessionAuthenticationError,
-                INVALID_LOCAL_STAFF_SESSION,
-            ):
-                await LocalAuthService.refresh_staff(
-                    db,
-                    refresh_token="old-token",
-                )
+            await LocalAuthService.refresh_staff(
+                db,
+                refresh_token="old-token",
+            )
 
         self.assertIsNotNone(stored_token.reuse_detected_at)
         self.assertIsNotNone(session.revoked_at)

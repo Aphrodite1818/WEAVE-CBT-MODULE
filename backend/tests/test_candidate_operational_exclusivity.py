@@ -9,10 +9,10 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from app.domains.candidates.models import CandidateStatus  # noqa: E402
-from app.domains.candidates.service import CandidateService  # noqa: E402
-from app.domains.exams.models import ExamStatus  # noqa: E402
-from app.domains.exams.timetable_service import ExamTimetableService  # noqa: E402
+from app.domains.candidates.models import CandidateStatus
+from app.domains.candidates.service import CandidateService
+from app.domains.exams.models import ExamStatus
+from app.domains.exams.timetable_service import ExamTimetableService
 
 
 class CandidateOperationalExclusivityTests(unittest.IsolatedAsyncioTestCase):
@@ -84,7 +84,9 @@ class CandidateOperationalExclusivityTests(unittest.IsolatedAsyncioTestCase):
 
         db.scalar.assert_not_awaited()
 
-    async def test_unblock_acquires_advisory_locks_before_candidate_and_exam_row_locks(self):
+    async def test_unblock_acquires_advisory_locks_before_candidate_and_exam_row_locks(
+        self,
+    ):
         db = AsyncMock()
         candidate = self.candidate()
         exam = self.exam(status=ExamStatus.ACTIVE)

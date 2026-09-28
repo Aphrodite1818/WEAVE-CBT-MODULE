@@ -8,7 +8,6 @@ from uuid import UUID
 from app.core.database import async_session_factory
 from app.domains.exams.execution_service import ExamExecutionService
 
-
 logger = logging.getLogger(__name__)
 
 

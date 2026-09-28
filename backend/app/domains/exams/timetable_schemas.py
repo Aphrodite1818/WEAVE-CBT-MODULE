@@ -66,9 +66,10 @@ class ActivationPreflightResponse(BaseModel):
     can_activate: bool
     blockers: list[str] | tuple[str, ...]
     conflicting_operational_exam_ids: list[UUID] | tuple[UUID, ...]
-    affected_exams: list[ActivationScheduleImpactResponse] | tuple[
-        ActivationScheduleImpactResponse, ...
-    ]
+    affected_exams: (
+        list[ActivationScheduleImpactResponse]
+        | tuple[ActivationScheduleImpactResponse, ...]
+    )
     suggestion_valid_until_at: datetime | None = None
 
 

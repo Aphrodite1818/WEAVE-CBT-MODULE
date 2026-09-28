@@ -11,12 +11,13 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     String,
+)
+from sqlalchemy import (
     text as sql_text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
-
 
 STUDENT_SESSION_TOKEN_HASH_LENGTH = 64
 STUDENT_SESSION_REASON_MAX_LENGTH = 500

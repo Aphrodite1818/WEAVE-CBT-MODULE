@@ -58,11 +58,13 @@ class ExamCollaborationLifecycleMixin:
             payload.expected_authoring_version,
         )
         cls._require_lead_or_admin(actor, exam)
-        await AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
-            db,
-            actor=actor,
-            curriculum_subject_id=exam.curriculum_subject_id,
-            academic_term_id=exam.term_id,
+        await (
+            AcademicAuthorizationService.require_can_author_curriculum_subject_for_term(
+                db,
+                actor=actor,
+                curriculum_subject_id=exam.curriculum_subject_id,
+                academic_term_id=exam.term_id,
+            )
         )
 
         question_bank = await QuestionRepository.get_bank_by_id(
@@ -83,9 +85,7 @@ class ExamCollaborationLifecycleMixin:
         question_ids = list(payload.manual_question_ids)
         existing_selections = await ExamRepository.list_question_selections(db, exam.id)
         current_ids = [row.question_id for row in existing_selections]
-        existing_by_question = {
-            row.question_id: row for row in existing_selections
-        }
+        existing_by_question = {row.question_id: row for row in existing_selections}
 
         if mode == ExamQuestionSelectionMode.RANDOM:
             if question_ids:
@@ -111,9 +111,7 @@ class ExamCollaborationLifecycleMixin:
             )
             questions_by_id = {question.id: question for question in questions}
             if len(questions_by_id) != len(question_ids):
-                raise ValueError(
-                    "One or more selected questions no longer exist"
-                )
+                raise ValueError("One or more selected questions no longer exist")
 
             newly_selected_ids = set(question_ids) - set(existing_by_question)
             for question_id in question_ids:

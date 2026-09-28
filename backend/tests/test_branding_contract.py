@@ -10,12 +10,12 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from app.core.database import Base  # noqa: E402
-from app.integrations.weave.branding import (  # noqa: E402
+import app.model_registry  # noqa: F401
+from app.core.database import Base
+from app.integrations.weave.branding import (
     BRANDING_PATH,
     WeaveBrandingProjection,
 )
-import app.model_registry  # noqa: E402,F401
 
 
 class BrandingProjectionContractTests(unittest.TestCase):

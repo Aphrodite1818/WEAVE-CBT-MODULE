@@ -12,8 +12,8 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from app.domains.questions.repository import QuestionRepository  # noqa: E402
-from app.domains.questions.service import QuestionService  # noqa: E402
+from app.domains.questions.repository import QuestionRepository
+from app.domains.questions.service import QuestionService
 
 
 class QuestionManagementScopeTests(unittest.IsolatedAsyncioTestCase):
@@ -116,13 +116,12 @@ class QuestionManagementScopeTests(unittest.IsolatedAsyncioTestCase):
             QuestionService,
             "list_actor_authorable_question_banks",
             new=AsyncMock(return_value=[allowed_bank]),
+        ), self.assertRaisesRegex(
+            Exception,
+            "not allowed to manage questions in this bank",
         ):
-            with self.assertRaisesRegex(
-                Exception,
-                "not allowed to manage questions in this bank",
-            ):
-                await QuestionService.list_actor_manageable_questions(
-                    db,
-                    actor=actor,
-                    bank_id=requested_bank_id,
-                )
+            await QuestionService.list_actor_manageable_questions(
+                db,
+                actor=actor,
+                bank_id=requested_bank_id,
+            )

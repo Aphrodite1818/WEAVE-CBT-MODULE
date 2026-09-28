@@ -51,12 +51,16 @@ class ElectiveProjectionRepository:
         from granting eligibility after a curriculum subject changes groups.
         """
 
-        if not curriculum_subject.is_elective or curriculum_subject.elective_group_id is None:
+        if (
+            not curriculum_subject.is_elective
+            or curriculum_subject.elective_group_id is None
+        ):
             return set(student_ids or ())
 
         query = select(StudentElectiveSelection.student_id).where(
             StudentElectiveSelection.curriculum_subject_id == curriculum_subject.id,
-            StudentElectiveSelection.elective_group_id == curriculum_subject.elective_group_id,
+            StudentElectiveSelection.elective_group_id
+            == curriculum_subject.elective_group_id,
             StudentElectiveSelection.source_deleted_at.is_(None),
         )
         if student_ids is not None:

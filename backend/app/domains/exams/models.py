@@ -11,7 +11,6 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
-    Enum as SQLEnum,
     ForeignKey,
     Index,
     Integer,
@@ -19,13 +18,17 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+)
+from sqlalchemy import (
+    Enum as SQLEnum,
+)
+from sqlalchemy import (
     text as sql_text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 from app.domains.questions.models import QuestionType
-
 
 EXAM_TITLE_MAX_LENGTH = 255
 WEAVE_ID_MAX_LENGTH = 128

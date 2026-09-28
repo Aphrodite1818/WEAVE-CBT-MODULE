@@ -35,7 +35,6 @@ from app.domains.exams.service import ExamService
 from app.domains.exams.timetable_schemas import ActivationPreflightResponse
 from app.workers.producer import arq_producer
 
-
 router = APIRouter(prefix="/exams", tags=["Exams"])
 
 
@@ -88,7 +87,9 @@ def _activation_preflight_http_error(preflight) -> HTTPException:
         code = "activation_preflight_failed"
         message = "Examination is not ready for activation"
 
-    payload = ActivationPreflightResponse.model_validate(preflight).model_dump(mode="json")
+    payload = ActivationPreflightResponse.model_validate(preflight).model_dump(
+        mode="json"
+    )
     return HTTPException(
         status_code=status.HTTP_409_CONFLICT,
         detail={"code": code, "message": message, "preflight": payload},

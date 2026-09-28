@@ -23,7 +23,6 @@ from app.domains.results.schemas import (
 from app.domains.results.service import ResultService
 from app.workers.producer import arq_producer
 
-
 router = APIRouter(tags=["Results"])
 
 

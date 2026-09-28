@@ -12,9 +12,9 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from app.core.exceptions import AcademicScopeError  # noqa: E402
-from app.domains.academics.eligibility import AcademicEligibilityService  # noqa: E402
-from app.domains.academics.repository import AcademicRepository  # noqa: E402
+from app.core.exceptions import AcademicScopeError
+from app.domains.academics.eligibility import AcademicEligibilityService
+from app.domains.academics.repository import AcademicRepository
 
 
 class AcademicEligibilityTests(unittest.IsolatedAsyncioTestCase):
@@ -403,18 +403,17 @@ class AcademicEligibilityTests(unittest.IsolatedAsyncioTestCase):
                 AcademicRepository,
                 "get_class_term_department",
                 new=AsyncMock(return_value=None),
-            ),
+            ),self.assertRaisesRegex(
+            AcademicScopeError,
+            "requires a department specialization",
+        )
         ):
-            with self.assertRaisesRegex(
-                AcademicScopeError,
-                "requires a department specialization",
-            ):
-                await AcademicEligibilityService.subject_applies_to_class(
-                    object(),  # type: ignore[arg-type]
-                    curriculum_subject_id=subject_id,
-                    class_id=class_id,
-                    academic_term_id=term_id,
-                )
+            await AcademicEligibilityService.subject_applies_to_class(
+                object(),  # type: ignore[arg-type]
+                curriculum_subject_id=subject_id,
+                class_id=class_id,
+                academic_term_id=term_id,
+            )
 
     async def test_inactive_class_is_rejected(self) -> None:
         class_id = uuid4()
@@ -435,15 +434,14 @@ class AcademicEligibilityTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(
                     return_value=SimpleNamespace(id=class_id, is_active=False)
                 ),
-            ),
+            ),self.assertRaisesRegex(AcademicScopeError, "Class is inactive")
         ):
-            with self.assertRaisesRegex(AcademicScopeError, "Class is inactive"):
-                await AcademicEligibilityService.subject_applies_to_class(
-                    object(),  # type: ignore[arg-type]
-                    curriculum_subject_id=subject_id,
-                    class_id=class_id,
-                    academic_term_id=term_id,
-                )
+            await AcademicEligibilityService.subject_applies_to_class(
+                object(),  # type: ignore[arg-type]
+                curriculum_subject_id=subject_id,
+                class_id=class_id,
+                academic_term_id=term_id,
+            )
 
 
 if __name__ == "__main__":

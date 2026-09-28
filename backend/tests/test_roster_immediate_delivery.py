@@ -32,7 +32,9 @@ class _TupleResult:
 
 
 class ImmediateRosterDeliveryTests(unittest.IsolatedAsyncioTestCase):
-    async def test_stale_rosters_use_version_scoped_reconciliation_job_ids(self) -> None:
+    async def test_stale_rosters_use_version_scoped_reconciliation_job_ids(
+        self,
+    ) -> None:
         first_exam_id = uuid4()
         second_exam_id = uuid4()
         session = SimpleNamespace(

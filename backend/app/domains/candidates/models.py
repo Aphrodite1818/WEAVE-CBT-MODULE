@@ -9,7 +9,6 @@ from uuid import UUID
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
-    Enum as SQLEnum,
     ForeignKey,
     Index,
     Integer,
@@ -17,12 +16,16 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+)
+from sqlalchemy import (
+    Enum as SQLEnum,
+)
+from sqlalchemy import (
     text as sql_text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
-
 
 ADMISSION_NUMBER_MAX_LENGTH = 128
 NAME_MAX_LENGTH = 255

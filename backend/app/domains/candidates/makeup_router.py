@@ -18,7 +18,6 @@ from app.domains.candidates.schemas import (
 from app.domains.candidates.service import CandidateService
 from app.domains.exams.exceptions import ExamNotFound
 
-
 router = APIRouter(tags=["Candidate Makeups"])
 
 

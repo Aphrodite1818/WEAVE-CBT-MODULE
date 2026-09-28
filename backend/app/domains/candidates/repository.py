@@ -14,6 +14,7 @@ from uuid import UUID
 from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domains.academics.models import Curriculum, CurriculumSubject
 from app.domains.attempts.models import ExamAttempt
 from app.domains.candidates.models import (
     CandidateLateStartAuthorization,
@@ -22,7 +23,6 @@ from app.domains.candidates.models import (
     ExamCandidate,
 )
 from app.domains.exams.models import Exam
-from app.domains.academics.models import Curriculum, CurriculumSubject
 
 
 class CandidateRepository:

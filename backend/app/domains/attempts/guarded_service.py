@@ -21,7 +21,6 @@ from app.domains.exams.models import ExamStatus
 from app.domains.exams.repository import ExamRepository
 from app.workers.producer import arq_producer
 
-
 _FINALIZING_STATES = {ExamStatus.CLOSING, ExamStatus.CANCELLING}
 ATTEMPT_HEARTBEAT_RECOMMENDED_INTERVAL_SECONDS = 20
 

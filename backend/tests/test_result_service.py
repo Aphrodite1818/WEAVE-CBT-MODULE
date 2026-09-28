@@ -10,10 +10,10 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from app.core.exceptions import AcademicAuthorizationError  # noqa: E402
-from app.domains.attempts.models import AttemptStatus  # noqa: E402
-from app.domains.results.models import ResultSyncStatus  # noqa: E402
-from app.domains.results.service import ResultService  # noqa: E402
+from app.core.exceptions import AcademicAuthorizationError
+from app.domains.attempts.models import AttemptStatus
+from app.domains.results.models import ResultSyncStatus
+from app.domains.results.service import ResultService
 
 
 class ResultScoringTests(unittest.IsolatedAsyncioTestCase):

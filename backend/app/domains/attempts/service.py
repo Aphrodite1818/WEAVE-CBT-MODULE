@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from secrets import SystemRandom
 from typing import cast
 from uuid import UUID
@@ -43,7 +43,7 @@ from app.domains.candidates.models import (
     ExamCandidate,
 )
 from app.domains.candidates.repository import CandidateRepository
-from app.domains.exams.exceptions import ExamNotFound, ExamStateError
+from app.domains.exams.exceptions import ExamNotFound
 from app.domains.exams.models import Exam, ExamStatus
 from app.domains.exams.repository import ExamRepository
 from app.domains.questions.models import QuestionType

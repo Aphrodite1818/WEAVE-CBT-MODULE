@@ -20,7 +20,6 @@ from app.domains.academics.models import (
 )
 from app.domains.academics.repository import AcademicRepository
 
-
 TERM_POSITIONS: dict[str, int] = {
     "first_term": 1,
     "second_term": 2,

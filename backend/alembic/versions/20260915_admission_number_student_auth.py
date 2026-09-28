@@ -15,8 +15,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 
+from alembic import op
 
 revision: str = "20260915_admission_auth"
 down_revision: str | Sequence[str] | None = "20260915_joint_authoring"

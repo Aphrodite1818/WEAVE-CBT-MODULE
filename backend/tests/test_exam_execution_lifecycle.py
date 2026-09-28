@@ -14,16 +14,16 @@ os.environ.setdefault(
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 os.environ["DEBUG"] = "false"
 
-from app.domains.exams.execution_models import (  # noqa: E402
+from app.domains.exams.execution_models import (
     ExamExecutionOperation,
     ExamOperationSource,
     ExamResultDisposition,
 )
-from app.domains.exams.execution_repository import ExamExecutionRepository  # noqa: E402
-from app.domains.exams.execution_service import ExamExecutionService  # noqa: E402
-from app.domains.exams.models import ExamStatus, ExamSuspensionSource  # noqa: E402
-from app.domains.exams.repository import ExamRepository  # noqa: E402
-from app.domains.runtime.repository import RuntimeRepository  # noqa: E402
+from app.domains.exams.execution_repository import ExamExecutionRepository
+from app.domains.exams.execution_service import ExamExecutionService
+from app.domains.exams.models import ExamStatus, ExamSuspensionSource
+from app.domains.exams.repository import ExamRepository
+from app.domains.runtime.repository import RuntimeRepository
 
 
 def admin() -> SimpleNamespace:

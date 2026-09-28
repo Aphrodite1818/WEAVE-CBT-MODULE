@@ -6,11 +6,11 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from app.domains.attempts.router import operator_router, student_router  # noqa: E402
-from app.domains.auth.student_router import router as student_auth_router  # noqa: E402
-from app.domains.candidates.makeup_router import router as makeup_router  # noqa: E402
-from app.domains.exams.timetable_router import router as timetable_router  # noqa: E402
-from app.domains.results.router import router as results_router  # noqa: E402
+from app.domains.attempts.router import operator_router, student_router
+from app.domains.auth.student_router import router as student_auth_router
+from app.domains.candidates.makeup_router import router as makeup_router
+from app.domains.exams.timetable_router import router as timetable_router
+from app.domains.results.router import router as results_router
 
 
 class ExecutionRouteTests(unittest.TestCase):

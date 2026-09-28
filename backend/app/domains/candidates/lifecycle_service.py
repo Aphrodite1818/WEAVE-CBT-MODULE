@@ -163,9 +163,7 @@ class CandidateService(_CandidateService):
         initial_preparation = exam.roster_version == 0
         recovery_mode = "prepare" if initial_preparation else "reconcile"
         exam.roster_status = (
-            ExamRosterStatus.PENDING
-            if initial_preparation
-            else ExamRosterStatus.STALE
+            ExamRosterStatus.PENDING if initial_preparation else ExamRosterStatus.STALE
         )
         exam.roster_error = None
 

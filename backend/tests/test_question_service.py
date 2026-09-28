@@ -12,19 +12,25 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from app.core.exceptions import AcademicAuthorizationError  # noqa: E402
-from app.domains.academics.authorization import AcademicAuthorizationService  # noqa: E402
-from app.domains.exams.repository import ExamRepository  # noqa: E402
-from app.domains.media.service import MediaService  # noqa: E402
-from app.domains.questions.models import Question, QuestionBank, QuestionType  # noqa: E402
-from app.domains.questions.repository import QuestionRepository  # noqa: E402
-from app.domains.questions.schemas import (  # noqa: E402
+from app.core.exceptions import AcademicAuthorizationError
+from app.domains.academics.authorization import (
+    AcademicAuthorizationService,
+)
+from app.domains.exams.repository import ExamRepository
+from app.domains.media.service import MediaService
+from app.domains.questions.models import (
+    Question,
+    QuestionBank,
+    QuestionType,
+)
+from app.domains.questions.repository import QuestionRepository
+from app.domains.questions.schemas import (
     QuestionBankUpdate,
     QuestionOptionCreate,
     QuestionUpdate,
     SingleChoiceQuestionCreate,
 )
-from app.domains.questions.service import (  # noqa: E402
+from app.domains.questions.service import (
     QuestionService,
     _normalize_and_validate_options,
     _require_can_manage_question,
@@ -368,19 +374,18 @@ class QuestionServiceTests(unittest.IsolatedAsyncioTestCase):
                 QuestionRepository,
                 "count_questions_for_bank",
                 new=AsyncMock(return_value=1),
-            ),
+            ),self.assertRaisesRegex(
+            ValueError, "only change while the bank is empty"
+        )
         ):
-            with self.assertRaisesRegex(
-                ValueError, "only change while the bank is empty"
-            ):
-                await QuestionService.update_question_bank(
-                    db,
-                    actor=admin,  # type: ignore[arg-type]
-                    bank_id=current_bank.id,
-                    payload=QuestionBankUpdate(
-                        curriculum_subject_id=uuid4(),
-                    ),
-                )
+            await QuestionService.update_question_bank(
+                db,
+                actor=admin,  # type: ignore[arg-type]
+                bank_id=current_bank.id,
+                payload=QuestionBankUpdate(
+                    curriculum_subject_id=uuid4(),
+                ),
+            )
 
         db.commit.assert_not_awaited()
 
@@ -418,14 +423,13 @@ class QuestionServiceTests(unittest.IsolatedAsyncioTestCase):
                 QuestionRepository,
                 "delete_question",
                 new=AsyncMock(),
-            ) as delete_question,
+            ) as delete_question,self.assertRaisesRegex(ValueError, "cannot be deleted")
         ):
-            with self.assertRaisesRegex(ValueError, "cannot be deleted"):
-                await QuestionService.delete_unused_question(
-                    db,
-                    actor=current_actor,  # type: ignore[arg-type]
-                    question_id=current_question.id,
-                )
+            await QuestionService.delete_unused_question(
+                db,
+                actor=current_actor,  # type: ignore[arg-type]
+                question_id=current_question.id,
+            )
 
         delete_question.assert_not_awaited()
         db.commit.assert_not_awaited()

@@ -26,7 +26,6 @@ from app.domains.candidates.models import CandidateStatus, ExamCandidate
 from app.domains.candidates.repository import CandidateRepository
 from app.domains.exams.models import Exam, ExamRosterStatus, ExamStatus
 
-
 STUDENT_SESSION_TOKEN_BYTES = 48
 STUDENT_SESSION_LIFETIME_HOURS = 8
 INVALID_STUDENT_LOGIN = "Invalid admission number or password"

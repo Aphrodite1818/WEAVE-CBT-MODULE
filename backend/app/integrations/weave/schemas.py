@@ -241,7 +241,7 @@ class WeaveAcademicBootstrap(SyncContractBase):
     )
 
     @model_validator(mode="after")
-    def require_supported_schema(self) -> "WeaveAcademicBootstrap":
+    def require_supported_schema(self) -> WeaveAcademicBootstrap:
         if self.metadata.schema_version != SYNC_SCHEMA_VERSION:
             raise ValueError(
                 f"Unsupported Weave CBT sync schema version {self.metadata.schema_version}."
@@ -283,7 +283,7 @@ class WeaveSyncChange(SyncContractBase):
     occurred_at: datetime
 
     @model_validator(mode="after")
-    def validate_change(self) -> "WeaveSyncChange":
+    def validate_change(self) -> WeaveSyncChange:
         if self.schema_version != SYNC_SCHEMA_VERSION:
             raise ValueError(
                 f"Unsupported Weave CBT sync schema version {self.schema_version}."
@@ -327,7 +327,7 @@ class WeaveResultBulkRequest(BaseModel):
     scores: list[WeaveResultScore] = Field(min_length=1, max_length=1000)
 
     @model_validator(mode="after")
-    def validate_unique_students(self) -> "WeaveResultBulkRequest":
+    def validate_unique_students(self) -> WeaveResultBulkRequest:
         student_ids = [item.student_id for item in self.scores]
         if len(student_ids) != len(set(student_ids)):
             raise ValueError(
@@ -361,7 +361,7 @@ class WeaveResultBulkResponse(BaseModel):
     errors: list[WeaveResultBulkError] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def validate_processing_counts(self) -> "WeaveResultBulkResponse":
+    def validate_processing_counts(self) -> WeaveResultBulkResponse:
         processed = self.applied + self.unchanged + self.rejected
         if processed != self.received:
             raise ValueError(

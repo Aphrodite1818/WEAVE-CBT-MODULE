@@ -13,7 +13,6 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 from app.core.settings import settings
 
-
 CANVAS_WIDTH = 1200
 CANVAS_HEIGHT = 900
 MAX_UPSCALE_FACTOR = 2.0

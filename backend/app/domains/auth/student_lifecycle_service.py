@@ -6,12 +6,13 @@ from app.domains.auth.student_schemas import StudentExamAvailability
 from app.domains.auth.student_service import (
     INVALID_STUDENT_LOGIN,
     StudentAuthenticationError,
-    StudentAuthService as _StudentAuthService,
     StudentExamResolution,
     StudentSessionContext,
 )
+from app.domains.auth.student_service import (
+    StudentAuthService as _StudentAuthService,
+)
 from app.domains.exams.models import ExamStatus
-
 
 SUSPENDED_MESSAGE = (
     "This examination is temporarily paused. Please wait for an administrator "
@@ -58,7 +59,7 @@ class StudentAuthService(_StudentAuthService):
 
 __all__ = [
     "INVALID_STUDENT_LOGIN",
-    "StudentAuthenticationError",
     "StudentAuthService",
+    "StudentAuthenticationError",
     "StudentSessionContext",
 ]

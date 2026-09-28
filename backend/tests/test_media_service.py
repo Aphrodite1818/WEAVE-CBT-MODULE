@@ -12,10 +12,10 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from app.domains.media.models import MediaAsset  # noqa: E402
-from app.domains.media.repository import MediaRepository  # noqa: E402
-from app.domains.media.service import MediaService  # noqa: E402
-from app.domains.media.storage import StoredMedia, local_media_storage  # noqa: E402
+from app.domains.media.models import MediaAsset
+from app.domains.media.repository import MediaRepository
+from app.domains.media.service import MediaService
+from app.domains.media.storage import StoredMedia, local_media_storage
 
 
 class MediaServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -44,15 +44,14 @@ class MediaServiceTests(unittest.IsolatedAsyncioTestCase):
                 local_media_storage,
                 "delete",
                 new=AsyncMock(),
-            ) as delete_file,
+            ) as delete_file,self.assertRaisesRegex(RuntimeError, "database failure")
         ):
-            with self.assertRaisesRegex(RuntimeError, "database failure"):
-                await MediaService.upload_question_image(
-                    db,
-                    actor=actor,  # type: ignore[arg-type]
-                    original_filename="diagram.png",
-                    data=b"image-bytes",
-                )
+            await MediaService.upload_question_image(
+                db,
+                actor=actor,  # type: ignore[arg-type]
+                original_filename="diagram.png",
+                data=b"image-bytes",
+            )
 
         db.rollback.assert_awaited_once()
         db.commit.assert_not_awaited()
@@ -90,13 +89,12 @@ class MediaServiceTests(unittest.IsolatedAsyncioTestCase):
                 local_media_storage,
                 "delete",
                 new=AsyncMock(),
-            ) as delete_file,
+            ) as delete_file,self.assertRaisesRegex(ValueError, "still referenced")
         ):
-            with self.assertRaisesRegex(ValueError, "still referenced"):
-                await MediaService.delete_unreferenced_asset(
-                    db,
-                    asset_id=asset.id,
-                )
+            await MediaService.delete_unreferenced_asset(
+                db,
+                asset_id=asset.id,
+            )
 
         get_asset.assert_awaited_once_with(db, asset.id, lock=True)
         delete_asset.assert_not_awaited()

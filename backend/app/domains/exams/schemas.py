@@ -97,9 +97,7 @@ class ExamCreate(InputBase):
             field_name="latest_normal_start_at",
         )
         if self.scheduled_start_at is None and self.latest_normal_start_at is not None:
-            raise ValueError(
-                "latest_normal_start_at requires scheduled_start_at"
-            )
+            raise ValueError("latest_normal_start_at requires scheduled_start_at")
         if (
             self.scheduled_start_at is not None
             and self.latest_normal_start_at is not None
@@ -173,9 +171,7 @@ class ExamUpdate(InputBase):
             and self.scheduled_start_at is None
             and self.latest_normal_start_at is not None
         ):
-            raise ValueError(
-                "latest_normal_start_at requires scheduled_start_at"
-            )
+            raise ValueError("latest_normal_start_at requires scheduled_start_at")
 
         if (
             "scheduled_start_at" in self.model_fields_set

@@ -14,8 +14,8 @@ os.environ.setdefault(
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 os.environ["DEBUG"] = "false"
 
-from app.domains.runtime.repository import RuntimeRepository  # noqa: E402
-from app.domains.runtime.service import (  # noqa: E402
+from app.domains.runtime.repository import RuntimeRepository
+from app.domains.runtime.service import (
     RUNTIME_GAP_SUSPEND_AFTER_SECONDS,
     RuntimeHeartbeatService,
 )

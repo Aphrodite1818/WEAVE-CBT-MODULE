@@ -118,7 +118,9 @@ class ManualRosterRetryServiceTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ManualRosterRetryEndpointTests(unittest.IsolatedAsyncioTestCase):
-    async def test_endpoint_enqueues_reconciliation_after_durable_transition(self) -> None:
+    async def test_endpoint_enqueues_reconciliation_after_durable_transition(
+        self,
+    ) -> None:
         exam_id = uuid4()
         exam = SimpleNamespace(
             id=exam_id,

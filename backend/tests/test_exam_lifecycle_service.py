@@ -17,31 +17,35 @@ os.environ.setdefault(
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ["DEBUG"] = "false"
 
-from app.core.exceptions import AcademicAuthorizationError, AcademicScopeError  # noqa: E402
-from app.domains.academics.authorization import AcademicAuthorizationService  # noqa: E402
-from app.domains.academics.eligibility import AcademicEligibilityService  # noqa: E402
-from app.domains.academics.repository import AcademicRepository  # noqa: E402
-from app.domains.exams.exceptions import (  # noqa: E402
+from app.core.exceptions import (
+    AcademicAuthorizationError,
+    AcademicScopeError,
+)
+from app.domains.academics.authorization import (
+    AcademicAuthorizationService,
+)
+from app.domains.academics.eligibility import AcademicEligibilityService
+from app.domains.academics.repository import AcademicRepository
+from app.domains.exams.exceptions import (
     ExamAuthorizationError,
     ExamStateError,
 )
-from app.domains.exams.models import (  # noqa: E402
+from app.domains.exams.models import (
     ExamQuestionSelectionMode,
     ExamRosterStatus,
     ExamStatus,
 )
-from app.domains.exams.repository import ExamRepository  # noqa: E402
-from app.domains.exams.schemas import (  # noqa: E402
+from app.domains.exams.repository import ExamRepository
+from app.domains.exams.schemas import (
     ExamInvigilatorAssignment,
     ExamResponse,
 )
-from app.domains.exams.service import ExamService  # noqa: E402
-from app.domains.exams.timetable_service import ExamTimetableService  # noqa: E402
-from app.domains.questions.models import QuestionType  # noqa: E402
-from app.domains.questions.repository import QuestionRepository  # noqa: E402
-from app.domains.runtime.repository import RuntimeRepository  # noqa: E402
-from app.domains.sync.repository import SyncRepository  # noqa: E402
-
+from app.domains.exams.service import ExamService
+from app.domains.exams.timetable_service import ExamTimetableService
+from app.domains.questions.models import QuestionType
+from app.domains.questions.repository import QuestionRepository
+from app.domains.runtime.repository import RuntimeRepository
+from app.domains.sync.repository import SyncRepository
 
 LEAD_ACTOR_ID = uuid4()
 
@@ -246,14 +250,13 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
             ExamRepository,
             "get_exam_by_id",
             new=AsyncMock(return_value=current_exam),
-        ):
-            with self.assertRaises(ExamAuthorizationError):
-                await ExamService.submit_exam(
-                    db,
-                    actor=contributor,  # type: ignore[arg-type]
-                    exam_id=current_exam.id,
-                    expected_authoring_version=1,
-                )
+        ), self.assertRaises(ExamAuthorizationError):
+            await ExamService.submit_exam(
+                db,
+                actor=contributor,  # type: ignore[arg-type]
+                exam_id=current_exam.id,
+                expected_authoring_version=1,
+            )
         db.commit.assert_not_awaited()
 
     async def test_stale_screen_cannot_submit_shared_paper(self) -> None:
@@ -263,14 +266,13 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
             ExamRepository,
             "get_exam_by_id",
             new=AsyncMock(return_value=current_exam),
-        ):
-            with self.assertRaisesRegex(ExamStateError, "Refresh"):
-                await ExamService.submit_exam(
-                    db,
-                    actor=actor(),  # type: ignore[arg-type]
-                    exam_id=current_exam.id,
-                    expected_authoring_version=4,
-                )
+        ), self.assertRaisesRegex(ExamStateError, "Refresh"):
+            await ExamService.submit_exam(
+                db,
+                actor=actor(),  # type: ignore[arg-type]
+                exam_id=current_exam.id,
+                expected_authoring_version=4,
+            )
 
     async def test_admin_return_to_draft_bumps_version_atomically(self) -> None:
         db = AsyncMock()
@@ -314,14 +316,13 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
             ExamRepository,
             "get_exam_by_id",
             new=AsyncMock(return_value=current_exam),
-        ):
-            with self.assertRaises(ExamAuthorizationError):
-                await ExamService.delete_draft_exam(
-                    db,
-                    actor=contributor,  # type: ignore[arg-type]
-                    exam_id=current_exam.id,
-                    expected_authoring_version=1,
-                )
+        ), self.assertRaises(ExamAuthorizationError):
+            await ExamService.delete_draft_exam(
+                db,
+                actor=contributor,  # type: ignore[arg-type]
+                exam_id=current_exam.id,
+                expected_authoring_version=1,
+            )
 
     async def test_lead_can_delete_draft_when_still_academically_authorized(
         self,
@@ -602,14 +603,13 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
             patch.object(ExamRepository, "save_exam", new=AsyncMock()) as save_exam,
             patch.object(
                 RuntimeRepository, "add_outbox_event", new=AsyncMock()
-            ) as add_event,
+            ) as add_event,self.assertRaisesRegex(ValueError, "could not be sealed")
         ):
-            with self.assertRaisesRegex(ValueError, "could not be sealed"):
-                await ExamService.seal_exam(
-                    db,
-                    actor=admin,  # type: ignore[arg-type]
-                    exam_id=current_exam.id,
-                )
+            await ExamService.seal_exam(
+                db,
+                actor=admin,  # type: ignore[arg-type]
+                exam_id=current_exam.id,
+            )
 
         db.rollback.assert_awaited_once()
         db.commit.assert_not_awaited()
@@ -678,14 +678,13 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch.object(
                 ExamRepository, "count_exam_questions", new=AsyncMock()
-            ) as count_questions,
+            ) as count_questions,self.assertRaisesRegex(ExamStateError, "READY")
         ):
-            with self.assertRaisesRegex(ExamStateError, "READY"):
-                await ExamService.activate_exam(
-                    db,
-                    actor=admin,  # type: ignore[arg-type]
-                    exam_id=current_exam.id,
-                )
+            await ExamService.activate_exam(
+                db,
+                actor=admin,  # type: ignore[arg-type]
+                exam_id=current_exam.id,
+            )
 
         count_questions.assert_not_awaited()
         db.commit.assert_not_awaited()
@@ -746,13 +745,12 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
             ExamRepository,
             "get_exam_by_id",
             new=AsyncMock(return_value=current_exam),
-        ):
-            with self.assertRaises(AcademicAuthorizationError):
-                await ExamService.return_exam_to_draft(
-                    db,
-                    actor=teacher,  # type: ignore[arg-type]
-                    exam_id=current_exam.id,
-                )
+        ), self.assertRaises(AcademicAuthorizationError):
+            await ExamService.return_exam_to_draft(
+                db,
+                actor=teacher,  # type: ignore[arg-type]
+                exam_id=current_exam.id,
+            )
 
     async def test_assign_invigilators_rejects_missing_teacher(self) -> None:
         db = AsyncMock()
@@ -772,15 +770,14 @@ class ExamLifecycleServiceTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch.object(
                 ExamRepository, "add_invigilators", new=AsyncMock()
-            ) as add_invigilators,
+            ) as add_invigilators,self.assertRaises(AcademicScopeError)
         ):
-            with self.assertRaises(AcademicScopeError):
-                await ExamService.assign_invigilators(
-                    db,
-                    actor=admin,  # type: ignore[arg-type]
-                    exam_id=current_exam.id,
-                    teacher_ids=[teacher_id],
-                )
+            await ExamService.assign_invigilators(
+                db,
+                actor=admin,  # type: ignore[arg-type]
+                exam_id=current_exam.id,
+                teacher_ids=[teacher_id],
+            )
 
         add_invigilators.assert_not_awaited()
         db.commit.assert_not_awaited()

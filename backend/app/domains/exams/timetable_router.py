@@ -28,7 +28,6 @@ from app.domains.exams.timetable_schemas import (
 )
 from app.domains.exams.timetable_service import ExamTimetableService
 
-
 router = APIRouter(prefix="/exams", tags=["Exam Timetable"])
 
 
@@ -160,9 +159,7 @@ async def start_exam_batch(
                 if preflight.affected_exams:
                     error = (
                         "Activation requires downstream timetable rescheduling: "
-                        + ", ".join(
-                            impact.title for impact in preflight.affected_exams
-                        )
+                        + ", ".join(impact.title for impact in preflight.affected_exams)
                     )
                 elif "candidate_scope_conflict" in preflight.blockers:
                     error = "Candidates overlap another operational examination"

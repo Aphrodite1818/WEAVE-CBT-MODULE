@@ -9,17 +9,20 @@ from uuid import UUID
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
-    Enum as SQLEnum,
     ForeignKey,
     Index,
     Integer,
     Text,
+)
+from sqlalchemy import (
+    Enum as SQLEnum,
+)
+from sqlalchemy import (
     text as sql_text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
-
 
 EXECUTION_ERROR_MAX_LENGTH = 2048
 RESULT_DECISION_REASON_MAX_LENGTH = 1000

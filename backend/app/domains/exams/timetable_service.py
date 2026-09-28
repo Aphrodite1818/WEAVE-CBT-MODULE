@@ -14,16 +14,18 @@ from app.domains.academics.electives import ElectiveEligibilityService
 from app.domains.academics.eligibility import AcademicEligibilityService
 from app.domains.academics.models import Curriculum, CurriculumSubject
 from app.domains.candidates.models import CandidateStatus, ExamCandidate
-from app.domains.exams.exceptions import ExamNotFound, ExamScheduleImpactError, ExamStateError
+from app.domains.exams.exceptions import (
+    ExamNotFound,
+    ExamScheduleImpactError,
+    ExamStateError,
+)
 from app.domains.exams.models import (
     Exam,
     ExamRosterStatus,
     ExamStatus,
     ExamSuspension,
-    ExamTargetClass,
 )
 from app.domains.exams.repository import ExamRepository
-
 
 OPERATIONAL_EXAM_STATUSES = (
     ExamStatus.ACTIVE,
@@ -344,7 +346,10 @@ class ExamTimetableService:
             for exam_id, student_id in rows.all():
                 mutable[exam_id].add(student_id)
             result.update(
-                {exam_id: frozenset(student_ids) for exam_id, student_ids in mutable.items()}
+                {
+                    exam_id: frozenset(student_ids)
+                    for exam_id, student_ids in mutable.items()
+                }
             )
 
         projected_cache: dict[
@@ -362,11 +367,13 @@ class ExamTimetableService:
                 class_scope,
             )
             if key not in projected_cache:
-                student_ids = await ElectiveEligibilityService.projected_student_ids_for_classes(
-                    db,
-                    curriculum_subject_id=exam.curriculum_subject_id,
-                    class_ids=class_scope,
-                    academic_session_id=exam.session_id,
+                student_ids = (
+                    await ElectiveEligibilityService.projected_student_ids_for_classes(
+                        db,
+                        curriculum_subject_id=exam.curriculum_subject_id,
+                        class_ids=class_scope,
+                        academic_session_id=exam.session_id,
+                    )
                 )
                 projected_cache[key] = frozenset(student_ids)
             result[exam.id] = projected_cache[key]
@@ -389,7 +396,9 @@ class ExamTimetableService:
                 ExamSuspension.resumed_at,
             ).where(ExamSuspension.exam_id.in_(exam_ids))
         )
-        completed: dict[UUID, timedelta] = {exam_id: timedelta(0) for exam_id in exam_ids}
+        completed: dict[UUID, timedelta] = {
+            exam_id: timedelta(0) for exam_id in exam_ids
+        }
         open_ids: set[UUID] = set()
         for exam_id, suspended_at, resumed_at in rows.all():
             if resumed_at is None:
@@ -479,13 +488,11 @@ class ExamTimetableService:
             )
             if proposed_is_grouped_elective and row_is_grouped_elective:
                 if proposed_student_ids is None:
-                    proposed_student_ids = (
-                        await ElectiveEligibilityService.projected_student_ids_for_classes(
-                            db,
-                            curriculum_subject_id=curriculum_subject_id,
-                            class_ids=tuple(proposed_class_ids),
-                            academic_session_id=session_id,
-                        )
+                    proposed_student_ids = await ElectiveEligibilityService.projected_student_ids_for_classes(
+                        db,
+                        curriculum_subject_id=curriculum_subject_id,
+                        class_ids=tuple(proposed_class_ids),
+                        academic_session_id=session_id,
                     )
                 row_student_ids = await cls._projected_audience_ids(db, exam=row)
                 if proposed_student_ids.isdisjoint(row_student_ids):
@@ -643,9 +650,8 @@ class ExamTimetableService:
             proposed_start = scheduled
             causes: list[UUID] = []
 
-            if (
-                scheduled < checked_at
-                and not node.class_ids.isdisjoint(source_window.class_ids)
+            if scheduled < checked_at and not node.class_ids.isdisjoint(
+                source_window.class_ids
             ):
                 if source_window.end_at is None:
                     impacts.append(
@@ -953,7 +959,9 @@ class ExamTimetableService:
             ):
                 continue
 
-            window_duration = timedelta(minutes=row.duration_minutes) + cls.entry_grace(row)
+            window_duration = timedelta(minutes=row.duration_minutes) + cls.entry_grace(
+                row
+            )
             fixed_windows.append(
                 _ScopeWindow(
                     exam_id=row.id,
@@ -972,7 +980,9 @@ class ExamTimetableService:
             if row.id in projected_parallel_overdue_ids:
                 continue
             base_start = overrides.get(row.id, row.scheduled_start_at)
-            window_duration = timedelta(minutes=row.duration_minutes) + cls.entry_grace(row)
+            window_duration = timedelta(minutes=row.duration_minutes) + cls.entry_grace(
+                row
+            )
             planned_nodes.append(
                 _PlannedNode(
                     exam_id=row.id,

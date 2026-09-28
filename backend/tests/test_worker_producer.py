@@ -8,7 +8,7 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from app.workers.producer import (  # noqa: E402
+from app.workers.producer import (
     ArqProducer,
     durable_exam_job_id,
     roster_reconcile_job_id,

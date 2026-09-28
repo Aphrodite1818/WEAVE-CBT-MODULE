@@ -6,7 +6,6 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
-
 WEB_ROOT = Path(os.getenv("WEAVE_WEB_ROOT", "/app/web")).resolve()
 
 

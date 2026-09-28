@@ -11,8 +11,11 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
-from app.domains.sync.service import SyncContractViolation, SyncService  # noqa: E402
-from app.integrations.weave.schemas import SYNC_SCHEMA_VERSION, WeaveSyncChange  # noqa: E402
+from app.domains.sync.service import SyncContractViolation, SyncService
+from app.integrations.weave.schemas import (
+    SYNC_SCHEMA_VERSION,
+    WeaveSyncChange,
+)
 
 
 class SyncV5EdgeTests(unittest.TestCase):

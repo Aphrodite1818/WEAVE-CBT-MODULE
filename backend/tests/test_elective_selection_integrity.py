@@ -101,17 +101,27 @@ async def test_compulsory_subject_preserves_existing_class_roster_behavior() -> 
 
 
 @pytest.mark.asyncio
-async def test_candidate_roster_intersects_frozen_classes_with_elective_choice() -> None:
+async def test_candidate_roster_intersects_frozen_classes_with_elective_choice() -> (
+    None
+):
     class_id = uuid4()
     session_id = uuid4()
     curriculum_subject_id = uuid4()
     selected = SimpleNamespace(
-        id=uuid4(), student_id=uuid4(), class_id=class_id, academic_session_id=session_id
+        id=uuid4(),
+        student_id=uuid4(),
+        class_id=class_id,
+        academic_session_id=session_id,
     )
     unselected = SimpleNamespace(
-        id=uuid4(), student_id=uuid4(), class_id=class_id, academic_session_id=session_id
+        id=uuid4(),
+        student_id=uuid4(),
+        class_id=class_id,
+        academic_session_id=session_id,
     )
-    exam = SimpleNamespace(session_id=session_id, curriculum_subject_id=curriculum_subject_id)
+    exam = SimpleNamespace(
+        session_id=session_id, curriculum_subject_id=curriculum_subject_id
+    )
 
     with (
         patch(
@@ -124,16 +134,22 @@ async def test_candidate_roster_intersects_frozen_classes_with_elective_choice()
         ) as elective_filter,
     ):
         result = await CandidateService._eligible_enrollments_for_frozen_classes(
-            SimpleNamespace(), exam=exam, target_classes=[SimpleNamespace(class_id=class_id)]
+            SimpleNamespace(),
+            exam=exam,
+            target_classes=[SimpleNamespace(class_id=class_id)],
         )
 
     assert result == {selected.student_id: selected}
-    enrollments.assert_awaited_once_with(ANY, [class_id], academic_session_id=session_id)
+    enrollments.assert_awaited_once_with(
+        ANY, [class_id], academic_session_id=session_id
+    )
     elective_filter.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_stale_sealed_roster_uses_current_projection_for_timetable_audience() -> None:
+async def test_stale_sealed_roster_uses_current_projection_for_timetable_audience() -> (
+    None
+):
     class_id = uuid4()
     current_student_id = uuid4()
     exam = SimpleNamespace(
@@ -186,7 +202,9 @@ async def test_ready_sealed_roster_keeps_frozen_candidate_audience() -> None:
     db = SimpleNamespace(execute=AsyncMock(return_value=result))
 
     with (
-        patch.object(ExamTimetableService, "_exam_delivery_class_ids", new=AsyncMock()) as class_scope,
+        patch.object(
+            ExamTimetableService, "_exam_delivery_class_ids", new=AsyncMock()
+        ) as class_scope,
         patch.object(
             ElectiveEligibilityService,
             "projected_student_ids_for_classes",
@@ -202,7 +220,9 @@ async def test_ready_sealed_roster_keeps_frozen_candidate_audience() -> None:
 
 
 @pytest.mark.asyncio
-async def test_activation_scope_rechecks_stale_sibling_against_current_selection() -> None:
+async def test_activation_scope_rechecks_stale_sibling_against_current_selection() -> (
+    None
+):
     shared_student_id = uuid4()
     frozen_class_id = uuid4()
     now = datetime.now(UTC)
@@ -296,24 +316,40 @@ async def test_planning_allows_disjoint_grouped_electives_in_same_class_slot() -
     )
 
     with (
-        patch.object(ExamTimetableService, "level_id", new=AsyncMock(return_value=uuid4())),
+        patch.object(
+            ExamTimetableService, "level_id", new=AsyncMock(return_value=uuid4())
+        ),
         patch.object(ExamTimetableService, "acquire_level_lock", new=AsyncMock()),
         patch.object(
-            ExamTimetableService, "_derived_delivery_class_ids", new=AsyncMock(return_value={class_id})
-        ),
-        patch.object(ExamTimetableService, "list_leaf_exams", new=AsyncMock(return_value=[existing_exam])),
-        patch.object(
-            ExamTimetableService, "_exam_delivery_class_ids", new=AsyncMock(return_value={class_id})
+            ExamTimetableService,
+            "_derived_delivery_class_ids",
+            new=AsyncMock(return_value={class_id}),
         ),
         patch.object(
-            ElectiveEligibilityService, "subject_requires_selection", new=AsyncMock(return_value=True)
+            ExamTimetableService,
+            "list_leaf_exams",
+            new=AsyncMock(return_value=[existing_exam]),
+        ),
+        patch.object(
+            ExamTimetableService,
+            "_exam_delivery_class_ids",
+            new=AsyncMock(return_value={class_id}),
+        ),
+        patch.object(
+            ElectiveEligibilityService,
+            "subject_requires_selection",
+            new=AsyncMock(return_value=True),
         ),
         patch.object(
             ElectiveEligibilityService,
             "projected_student_ids_for_classes",
             new=AsyncMock(return_value={uuid4()}),
         ),
-        patch.object(ExamTimetableService, "_projected_audience_ids", new=AsyncMock(return_value={uuid4()})),
+        patch.object(
+            ExamTimetableService,
+            "_projected_audience_ids",
+            new=AsyncMock(return_value={uuid4()}),
+        ),
     ):
         await ExamTimetableService.require_planned_slot_available(
             SimpleNamespace(),
@@ -327,7 +363,9 @@ async def test_planning_allows_disjoint_grouped_electives_in_same_class_slot() -
 
 
 @pytest.mark.asyncio
-async def test_planning_rejects_grouped_electives_when_student_audiences_intersect() -> None:
+async def test_planning_rejects_grouped_electives_when_student_audiences_intersect() -> (
+    None
+):
     now = datetime.now(UTC)
     class_id = uuid4()
     shared_student_id = uuid4()
@@ -345,17 +383,29 @@ async def test_planning_rejects_grouped_electives_when_student_audiences_interse
     )
 
     with (
-        patch.object(ExamTimetableService, "level_id", new=AsyncMock(return_value=uuid4())),
+        patch.object(
+            ExamTimetableService, "level_id", new=AsyncMock(return_value=uuid4())
+        ),
         patch.object(ExamTimetableService, "acquire_level_lock", new=AsyncMock()),
         patch.object(
-            ExamTimetableService, "_derived_delivery_class_ids", new=AsyncMock(return_value={class_id})
-        ),
-        patch.object(ExamTimetableService, "list_leaf_exams", new=AsyncMock(return_value=[existing_exam])),
-        patch.object(
-            ExamTimetableService, "_exam_delivery_class_ids", new=AsyncMock(return_value={class_id})
+            ExamTimetableService,
+            "_derived_delivery_class_ids",
+            new=AsyncMock(return_value={class_id}),
         ),
         patch.object(
-            ElectiveEligibilityService, "subject_requires_selection", new=AsyncMock(return_value=True)
+            ExamTimetableService,
+            "list_leaf_exams",
+            new=AsyncMock(return_value=[existing_exam]),
+        ),
+        patch.object(
+            ExamTimetableService,
+            "_exam_delivery_class_ids",
+            new=AsyncMock(return_value={class_id}),
+        ),
+        patch.object(
+            ElectiveEligibilityService,
+            "subject_requires_selection",
+            new=AsyncMock(return_value=True),
         ),
         patch.object(
             ElectiveEligibilityService,
@@ -402,7 +452,10 @@ def test_weave_v5_contract_contains_elective_projection_entities() -> None:
     assert selection.curriculum_subject_id == curriculum_subject_id
     assert "student_elective_selection" in ENTITY_SCHEMAS
     assert "student_elective_selection" in ENTITY_MODELS
-    assert ("student_elective_selection", "student_elective_selections") in BOOTSTRAP_SECTIONS
+    assert (
+        "student_elective_selection",
+        "student_elective_selections",
+    ) in BOOTSTRAP_SECTIONS
 
 
 def test_v5_bootstrap_remains_compatible_when_selection_field_is_absent() -> None:
@@ -414,7 +467,11 @@ def test_v5_bootstrap_remains_compatible_when_selection_field_is_absent() -> Non
                 "generated_at": datetime.now(UTC),
                 "cursor": 0,
             },
-            "school": {"id": uuid4(), "name": "Test School", "timezone": "Africa/Lagos"},
+            "school": {
+                "id": uuid4(),
+                "name": "Test School",
+                "timezone": "Africa/Lagos",
+            },
             "server": {"id": uuid4(), "name": "CBT Server"},
             "sessions": [],
             "terms": [],

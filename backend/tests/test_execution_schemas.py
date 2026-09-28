@@ -6,9 +6,9 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
-from app.domains.attempts.schemas import AttemptAnswerMutation  # noqa: E402
-from app.domains.auth.student_schemas import StudentLoginRequest  # noqa: E402
-from app.domains.exams.timetable_schemas import BatchExamStartRequest  # noqa: E402
+from app.domains.attempts.schemas import AttemptAnswerMutation
+from app.domains.auth.student_schemas import StudentLoginRequest
+from app.domains.exams.timetable_schemas import BatchExamStartRequest
 
 
 class ExecutionSchemaTests(unittest.TestCase):

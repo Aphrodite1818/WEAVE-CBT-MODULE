@@ -24,7 +24,6 @@ from app.domains.runtime.models import CBTRuntimeState, RealtimeOutboxEvent
 from app.domains.runtime.repository import RuntimeRepository
 from app.workers.producer import arq_producer
 
-
 logger = logging.getLogger(__name__)
 
 RUNTIME_HEARTBEAT_INTERVAL_SECONDS = 5.0
@@ -143,8 +142,7 @@ class RuntimeHeartbeatService:
             cutoff = outage_started_at
             if exam.activated_at is not None and cutoff < exam.activated_at:
                 cutoff = exam.activated_at
-            if cutoff > now:
-                cutoff = now
+            cutoff = min(cutoff, now)
 
             open_suspension = await ExamRepository.get_open_suspension_for_exam(
                 db,
