@@ -1,5 +1,5 @@
 const teacherSections = new Set(['overview', 'question-banks', 'bank-detail', 'questions', 'create-question', 'edit-question', 'preview-question', 'exams', 'exam-history', 'create-exam'])
-const adminSections = new Set(['dashboard', 'question-banks', 'create-bank', 'bank-detail', 'questions', 'create-question', 'edit-question', 'preview-question', 'exams', 'create-exam', 'exam-history', 'roster', 'roster-detail', 'timetable', 'operations', 'operation-detail', 'results', 'result-detail', 'students', 'invigilators', 'reports', 'settings'])
+const adminSections = new Set(['dashboard', 'question-banks', 'create-bank', 'bank-detail', 'questions', 'create-question', 'edit-question', 'preview-question', 'exams', 'create-exam', 'exam-history', 'roster', 'roster-history', 'roster-detail', 'timetable', 'operations', 'operation-detail', 'results', 'result-detail', 'students', 'invigilators', 'reports', 'settings'])
 const examViews = { history: 'exam-history', edit: 'create-exam', roster: 'roster-detail', operations: 'operation-detail', results: 'result-detail' }
 
 export function staffSectionForRole(role, section) {
