@@ -7,6 +7,7 @@ from app.domains.attempts.repository import AttemptRepository
 from app.domains.auth.student_schemas import StudentExamAvailability
 from app.domains.auth.student_service import (
     INVALID_STUDENT_LOGIN,
+    NO_EXAM_MESSAGE,
     READY_MESSAGE,
     StudentAuthenticationError,
     StudentExamResolution,
@@ -21,97 +22,74 @@ SUSPENDED_MESSAGE = (
     "This examination is temporarily paused. Please wait for an administrator "
     "to resume it. Your saved work and remaining time are protected."
 )
-FINALIZING_MESSAGE = (
-    "This examination is being finalized. No further answers can be submitted."
-)
 COMPLETED_MESSAGE = (
     "You have already completed this examination. Your score is ready to view."
 )
 
-_CURRENT_OPERATIONAL_STATUSES = (
+# A submitted score is candidate-facing only while that exact sitting is still
+# live. Closing/cancelling/closed/cancelled exams deliberately fall out of this
+# set so the student returns to normal waiting-room resolution for the next exam.
+_LIVE_EXAM_STATUSES = (
     ExamStatus.ACTIVE,
     ExamStatus.SUSPENDED,
-    ExamStatus.CLOSING,
-    ExamStatus.CANCELLING,
 )
-_PAUSED_STATUSES = {
-    ExamStatus.SUSPENDED,
-    ExamStatus.CLOSING,
-    ExamStatus.CANCELLING,
+_UNFINISHED_ATTEMPT_STATUSES = {
+    AttemptStatus.IN_PROGRESS,
+    AttemptStatus.INTERRUPTED,
 }
 
 
 class StudentAuthService(_StudentAuthService):
-    """Resolve completed work before the current exam operational state."""
+    """Resolve one deterministic student-facing state across concurrent live exams."""
 
-    @classmethod
-    async def _completed_resolution(cls, db, rows):
-        completed = []
-        for candidate, exam in rows:
-            attempt = await AttemptRepository.get_attempt_by_candidate_id(
-                db,
-                candidate.id,
-            )
-            if attempt is not None and attempt.status == AttemptStatus.SUBMITTED:
-                completed.append((candidate, exam))
-
-        if len(completed) > 1:
-            raise StudentAuthenticationError(
-                "Multiple completed operational examinations were found for this student"
-            )
-        if not completed:
-            return None
-
-        candidate, exam = completed[0]
+    @staticmethod
+    def _no_live_exam_resolution() -> StudentExamResolution:
         return StudentExamResolution(
-            candidate=candidate,
-            exam=exam,
+            candidate=None,
+            exam=None,
             makeup_authorization_id=None,
-            availability=StudentExamAvailability.COMPLETED,
-            status_message=COMPLETED_MESSAGE,
+            availability=StudentExamAvailability.NO_EXAM,
+            status_message=NO_EXAM_MESSAGE,
         )
 
     @classmethod
     async def _resolve_candidate(cls, db, *, enrollment):
-        operational = await cls._normal_candidate_rows(
+        live_rows = await cls._normal_candidate_rows(
             db,
             student_id=enrollment.student_id,
-            statuses=_CURRENT_OPERATIONAL_STATUSES,
+            statuses=_LIVE_EXAM_STATUSES,
         )
 
-        # Attempt completion is candidate-specific and final. Once the student
-        # has submitted this sitting, later suspension/finalization of the exam
-        # must not send them back into operational waiting-room messaging.
-        completed = await cls._completed_resolution(db, operational)
-        if completed is not None:
-            return completed
+        classified = []
+        for candidate, exam in live_rows:
+            attempt = await AttemptRepository.get_attempt_by_candidate_id(
+                db,
+                candidate.id,
+            )
+            classified.append((candidate, exam, attempt))
 
-        paused = [row for row in operational if row[1].status in _PAUSED_STATUSES]
-        if len(paused) > 1:
+        # Work that still needs the student's attention always wins over an
+        # already-submitted live paper. This matters for legitimate concurrent
+        # elective/departmental sittings where the same level has many live exams.
+        unfinished = [
+            row
+            for row in classified
+            if row[2] is None or row[2].status in _UNFINISHED_ATTEMPT_STATUSES
+        ]
+        if len(unfinished) > 1:
             raise StudentAuthenticationError(
-                "Multiple paused examinations were found for this student"
+                "Multiple unfinished live examinations were found for this student"
             )
-        if paused:
-            candidate, exam = paused[0]
-            return StudentExamResolution(
-                candidate=candidate,
-                exam=exam,
-                makeup_authorization_id=None,
-                availability=StudentExamAvailability.SUSPENDED,
-                status_message=(
-                    SUSPENDED_MESSAGE
-                    if exam.status == ExamStatus.SUSPENDED
-                    else FINALIZING_MESSAGE
-                ),
-            )
-
-        active = [row for row in operational if row[1].status == ExamStatus.ACTIVE]
-        if len(active) > 1:
-            raise StudentAuthenticationError(
-                "Multiple active examinations were found for this student"
-            )
-        if active:
-            candidate, exam = active[0]
+        if unfinished:
+            candidate, exam, _attempt = unfinished[0]
+            if exam.status == ExamStatus.SUSPENDED:
+                return StudentExamResolution(
+                    candidate=candidate,
+                    exam=exam,
+                    makeup_authorization_id=None,
+                    availability=StudentExamAvailability.SUSPENDED,
+                    status_message=SUSPENDED_MESSAGE,
+                )
             return StudentExamResolution(
                 candidate=candidate,
                 exam=exam,
@@ -120,6 +98,31 @@ class StudentAuthService(_StudentAuthService):
                 status_message=READY_MESSAGE,
             )
 
+        completed = [
+            row
+            for row in classified
+            if row[2] is not None and row[2].status == AttemptStatus.SUBMITTED
+        ]
+        if len(completed) == 1:
+            candidate, exam, _attempt = completed[0]
+            return StudentExamResolution(
+                candidate=candidate,
+                exam=exam,
+                makeup_authorization_id=None,
+                availability=StudentExamAvailability.COMPLETED,
+                status_message=COMPLETED_MESSAGE,
+            )
+
+        # Two simultaneously live submitted papers are an impossible/ambiguous
+        # scheduling state for normal CBT use. Do not arbitrarily pick a score.
+        # Likewise, a live candidate row whose attempt ended without submission
+        # must never be offered as a fresh start.
+        if live_rows:
+            return cls._no_live_exam_resolution()
+
+        # With no ACTIVE/SUSPENDED exam left, fall back to the normal resolver:
+        # SEALED -> waiting for activation, approved makeup -> makeup, otherwise
+        # the general waiting room. CLOSED/CANCELLED exams are therefore ignored.
         return await super()._resolve_candidate(db, enrollment=enrollment)
 
 
