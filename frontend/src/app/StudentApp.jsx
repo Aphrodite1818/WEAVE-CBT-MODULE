@@ -15,6 +15,7 @@ export default function StudentApp() {
     gateway: studentGateway,
   })
   const branding = state.installation.configured ? state.branding : createDefaultBranding()
+  const completed = state.studentResolution?.state === 'completed'
 
   return (
     <div className="weave-app" style={buildBrandingThemeStyle(branding)}>
@@ -42,10 +43,10 @@ export default function StudentApp() {
           onBack={() => dispatch({ type: 'view', view: 'landing' })}
         />
       )}
-      {state.view === 'student' && state.studentResolution?.state === 'completed' && (
+      {state.view === 'student' && completed && (
         <StudentCompletedExamPage gateway={studentGateway} returnToSignIn={signOut} />
       )}
-      {state.view === 'student' && state.studentResolution?.state !== 'completed' && (
+      {state.view === 'student' && !completed && (
         <StudentWorkspace serverName={state.installation.status?.server_name} onExamSuspended={handleStudentSuspension}
           branding={branding}
           schoolName={state.installation.status?.tenant_name}
@@ -56,7 +57,7 @@ export default function StudentApp() {
           returnToSignIn={signOut}
         />
       )}
-      <StudentSuspensionNotice notice={studentSuspension} onDismiss={dismissStudentSuspension} />
+      {!completed && <StudentSuspensionNotice notice={studentSuspension} onDismiss={dismissStudentSuspension} />}
       <ToastHost />
     </div>
   )
