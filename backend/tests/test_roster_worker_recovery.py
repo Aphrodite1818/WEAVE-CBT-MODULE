@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, Mock, call, patch
 from uuid import uuid4
 
 from app.domains.exams.models import ExamRosterStatus, ExamStatus
-from app.workers.candidates import reconcile_exam_roster
+from app.workers.candidates import prepare_exam_roster, reconcile_exam_roster
 from app.workers.maintenance import recover_background_work
 
 
@@ -40,6 +40,10 @@ class RosterReconciliationWorkerTests(unittest.IsolatedAsyncioTestCase):
                 "app.workers.candidates.ExamRepository.get_exam_by_id",
                 AsyncMock(return_value=exam),
             ) as get_exam,
+            patch(
+                "app.workers.candidates.ExamRepository.get_latest_child_revision",
+                AsyncMock(return_value=None),
+            ),
             patch(
                 "app.workers.candidates.CandidateService.reconcile_roster",
                 AsyncMock(),
@@ -76,6 +80,10 @@ class RosterReconciliationWorkerTests(unittest.IsolatedAsyncioTestCase):
                 AsyncMock(return_value=exam),
             ),
             patch(
+                "app.workers.candidates.ExamRepository.get_latest_child_revision",
+                AsyncMock(return_value=None),
+            ),
+            patch(
                 "app.workers.candidates.CandidateService.reconcile_roster",
                 AsyncMock(),
             ) as reconcile,
@@ -83,6 +91,73 @@ class RosterReconciliationWorkerTests(unittest.IsolatedAsyncioTestCase):
             await reconcile_exam_roster({}, str(exam_id))
 
         reconcile.assert_not_awaited()
+
+    async def test_queued_reconciliation_for_superseded_revision_is_ignored(self) -> None:
+        exam_id = uuid4()
+        session = SimpleNamespace()
+        exam = SimpleNamespace(
+            id=exam_id,
+            status=ExamStatus.SEALED,
+            roster_status=ExamRosterStatus.STALE,
+        )
+        child = SimpleNamespace(id=uuid4())
+
+        with (
+            patch(
+                "app.workers.candidates.async_session_factory",
+                Mock(return_value=_AsyncSessionContext(session)),
+            ),
+            patch(
+                "app.workers.candidates.ExamRepository.get_exam_by_id",
+                AsyncMock(return_value=exam),
+            ),
+            patch(
+                "app.workers.candidates.ExamRepository.get_latest_child_revision",
+                AsyncMock(return_value=child),
+            ) as get_child,
+            patch(
+                "app.workers.candidates.CandidateService.reconcile_roster",
+                AsyncMock(),
+            ) as reconcile,
+        ):
+            await reconcile_exam_roster({}, str(exam_id))
+
+        get_child.assert_awaited_once_with(session, exam_id)
+        reconcile.assert_not_awaited()
+        self.assertEqual(exam.roster_status, ExamRosterStatus.STALE)
+
+    async def test_queued_preparation_for_superseded_revision_is_ignored(self) -> None:
+        exam_id = uuid4()
+        session = SimpleNamespace()
+        exam = SimpleNamespace(
+            id=exam_id,
+            status=ExamStatus.SEALED,
+            roster_status=ExamRosterStatus.PENDING,
+        )
+        child = SimpleNamespace(id=uuid4())
+
+        with (
+            patch(
+                "app.workers.candidates.async_session_factory",
+                Mock(return_value=_AsyncSessionContext(session)),
+            ),
+            patch(
+                "app.workers.candidates.ExamRepository.get_exam_by_id",
+                AsyncMock(return_value=exam),
+            ),
+            patch(
+                "app.workers.candidates.ExamRepository.get_latest_child_revision",
+                AsyncMock(return_value=child),
+            ),
+            patch(
+                "app.workers.candidates.CandidateService.prepare_roster",
+                AsyncMock(),
+            ) as prepare,
+        ):
+            await prepare_exam_roster({}, str(exam_id))
+
+        prepare.assert_not_awaited()
+        self.assertEqual(exam.roster_status, ExamRosterStatus.PENDING)
 
 
 class RosterMaintenanceRecoveryTests(unittest.IsolatedAsyncioTestCase):
