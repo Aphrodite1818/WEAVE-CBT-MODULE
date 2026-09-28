@@ -9,7 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.attempts.models import AttemptStatus
 from app.domains.attempts.repository import AttemptRepository
-from app.domains.attempts.schemas import AttemptHeartbeatResponse
+from app.domains.attempts.schemas import (
+    AttemptHeartbeatResponse,
+    AttemptSubmissionResponse,
+)
 from app.domains.attempts.service import AttemptService as _AttemptService
 from app.domains.attempts.service import AttemptStateError
 from app.domains.auth.models import LocalActor
@@ -19,6 +22,7 @@ from app.domains.exams.exceptions import ExamNotFound
 from app.domains.exams.execution_repository import ExamExecutionRepository
 from app.domains.exams.models import ExamStatus
 from app.domains.exams.repository import ExamRepository
+from app.domains.results.repository import ResultRepository
 from app.workers.producer import arq_producer
 
 _FINALIZING_STATES = {ExamStatus.CLOSING, ExamStatus.CANCELLING}
@@ -136,6 +140,40 @@ class AttemptService(_AttemptService):
                 return await cls._build_finalizing_response(db, context=context)
             await db.rollback()
         return await super().get_current(db, context=context)
+
+    @classmethod
+    async def get_current_result(
+        cls,
+        db: AsyncSession,
+        *,
+        context: StudentSessionContext,
+    ) -> AttemptSubmissionResponse:
+        """Return the immutable score for the exact submitted student attempt."""
+
+        attempt, _candidate, _exam = await cls._get_current_attempt(
+            db,
+            context=context,
+            lock=False,
+        )
+        if attempt.status != AttemptStatus.SUBMITTED:
+            raise AttemptStateError("Candidate examination attempt is not completed")
+
+        result = await ResultRepository.get_result_by_attempt_id(db, attempt.id)
+        if result is None:
+            raise AttemptStateError("Submitted attempt is missing its result")
+
+        return AttemptSubmissionResponse(
+            attempt_id=attempt.id,
+            status=attempt.status,
+            end_reason=attempt.end_reason,
+            ended_at=attempt.ended_at,
+            result_id=result.id,
+            raw_score=result.raw_score,
+            raw_max_score=result.raw_max_score,
+            percentage=str(result.percentage),
+            component_score=str(result.component_score),
+            component_maximum_score=str(result.component_maximum_score),
+        )
 
     @classmethod
     async def start_current(
