@@ -20,7 +20,11 @@ from app.domains.auth.student_lifecycle_service import (
     StudentAuthService,
 )
 from app.domains.auth.student_schemas import StudentExamAvailability
-from app.domains.auth.student_service import NO_EXAM_MESSAGE, StudentSessionContext
+from app.domains.auth.student_service import (
+    NO_EXAM_MESSAGE,
+    StudentAuthenticationError,
+    StudentSessionContext,
+)
 from app.domains.exams.models import ExamStatus
 from app.domains.results.repository import ResultRepository
 
@@ -231,7 +235,7 @@ class StudentCompletedAttemptResolutionTests(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(side_effect=get_attempt),
             ),
             self.assertRaisesRegex(
-                Exception,
+                StudentAuthenticationError,
                 "Multiple unfinished live examinations",
             ),
         ):
