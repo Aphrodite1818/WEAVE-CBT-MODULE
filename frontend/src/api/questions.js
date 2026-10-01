@@ -58,6 +58,42 @@ export function createMultipleChoiceQuestion(bankId, payload) {
   }).then(rememberQuestionVersion)
 }
 
+export function generateAIQuestionDrafts(bankId, payload, options = {}) {
+  return weaveRequest(`/questions/banks/${bankId}/ai/generate`, {
+    ...options,
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export function regenerateAIQuestionDraft(bankId, payload, options = {}) {
+  return weaveRequest(`/questions/banks/${bankId}/ai/regenerate`, {
+    ...options,
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export function regenerateStoredQuestionWithAI(questionId, payload, options = {}) {
+  return weaveRequest(`/questions/${questionId}/ai/regenerate`, {
+    ...options,
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export function saveAIQuestionDrafts(bankId, payload, options = {}) {
+  return weaveRequest(`/questions/banks/${bankId}/ai/save`, {
+    ...options,
+    method: 'POST',
+    body: payload,
+    successMessage: options.successMessage || 'Generated questions saved.',
+  }).then((result) => {
+    result?.questions?.forEach(rememberQuestionVersion)
+    return result
+  })
+}
+
 export function listQuestionsForBank(bankId, params = {}, options = {}) {
   return weaveRequest(`/questions/banks/${bankId}/items${queryString(params)}`, options)
 }

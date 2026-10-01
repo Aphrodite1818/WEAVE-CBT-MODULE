@@ -1,41 +1,35 @@
-# =========================================#
-# backend.app.integrations.weave.exceptions
-# =========================================#
+"""Custom exceptions for the Weave Cloud integration boundary."""
 
+from __future__ import annotations
 
-"""
-Custom exceptions for integration boundary
-"""
+from typing import Any
 
 
 class WeaveIntegrationError(Exception):
-    """Base exception for communication with Weave Cloud"""
+    """Base exception for communication with Weave Cloud."""
 
 
 class WeaveUnavailableError(WeaveIntegrationError):
-    """
-    Raised when Weave cannot be reacherd because of a network,
-    timeout, DNS or similar connectivity failure
-    """
+    """Raised for timeout, DNS, connection, or equivalent transport failures."""
 
 
 class WeaveRequestRejectedError(WeaveIntegrationError):
-    """
-    Raised when Weave successfully receives the request but rejects it
-    """
+    """Raised when Weave receives a request but rejects it."""
 
     def __init__(
-        self, *, status_code: int, detail: str, retry_after: int | None = None
+        self,
+        *,
+        status_code: int,
+        detail: str,
+        retry_after: int | None = None,
+        payload: dict[str, Any] | None = None,
     ) -> None:
         self.status_code = status_code
         self.detail = detail
         self.retry_after = retry_after
-
+        self.payload = payload or {}
         super().__init__(detail)
 
 
 class WeaveContractError(WeaveIntegrationError):
-    """
-    Raised when Weave responds successfully but the response does not
-    match the contract expected by this CBT version
-    """
+    """Raised when a successful Weave response violates the expected contract."""

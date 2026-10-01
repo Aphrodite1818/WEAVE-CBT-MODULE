@@ -83,6 +83,7 @@ class WeaveClient:
                 status_code=response.status_code,
                 detail=self._extract_error_detail(response),
                 retry_after=self._extract_retry_after(response),
+                payload=self._extract_error_payload(response),
             )
         return self._parse_json_object(response)
 
@@ -191,6 +192,16 @@ class WeaveClient:
             if isinstance(message, str) and message.strip():
                 return message.strip()
         return "Weave rejected the request."
+
+    @staticmethod
+    def _extract_error_payload(response: httpx.Response) -> dict[str, Any]:
+        try:
+            payload = response.json()
+        except ValueError:
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+        return {key: value for key, value in payload.items() if key != "detail"}
 
     @staticmethod
     def _extract_retry_after(response: httpx.Response) -> int | None:

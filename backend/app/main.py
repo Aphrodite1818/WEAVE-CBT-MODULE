@@ -31,6 +31,7 @@ from app.domains.exams.router import router as exams_router
 from app.domains.exams.timetable_router import router as timetable_router
 from app.domains.media.router import router as media_router
 from app.domains.node.router import router as node_router
+from app.domains.questions.ai_router import router as question_ai_router
 from app.domains.questions.exceptions import QuestionConflictError
 from app.domains.questions.management_router import router as question_management_router
 from app.domains.questions.router import router as questions_router
@@ -47,14 +48,7 @@ async def lifespan(_app: FastAPI):
     """Start durable runtime recovery and non-blocking coordination."""
 
     await check_database_connection()
-
-    # Redis is supporting infrastructure. PostgreSQL remains authoritative and
-    # maintenance reconstructs missed jobs if queue delivery is unavailable.
     await arq_producer.start()
-
-    # Start the durable runtime heartbeat before serving traffic. An unclean
-    # previous boot is recovered here, including backdated exam suspension and
-    # re-enqueue of partially completed close/cancel operations.
     await runtime_heartbeat_service.start()
 
     sync_task = asyncio.create_task(
@@ -68,10 +62,6 @@ async def lifespan(_app: FastAPI):
         sync_task.cancel()
         with suppress(asyncio.CancelledError):
             await sync_task
-
-        # Persist clean shutdown before Redis/database resources are released.
-        # If this write fails, the next boot deliberately treats the stop as
-        # unclean and protects any active exam by suspending it.
         await runtime_heartbeat_service.stop()
         await arq_producer.close()
         await weave_client.close()
@@ -115,10 +105,8 @@ for router in (
     media_router,
     academic_router,
     question_management_router,
+    question_ai_router,
     questions_router,
-    # Register the static exam-authoring routes before the generic /exams/{exam_id}
-    # read route. Starlette resolves routes in declaration order, so endpoints such
-    # as /exams/lead-candidates and /exams/invigilators/available must be seen first.
     exams_router,
     exam_question_authoring_router,
     exam_read_router,

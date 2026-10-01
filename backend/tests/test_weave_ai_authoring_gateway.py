@@ -1,0 +1,58 @@
+from __future__ import annotations
+
+from unittest.mock import AsyncMock
+
+import pytest
+from pydantic import SecretStr
+
+from app.integrations.weave.ai_authoring import WeaveAIQuestionAuthoringGateway
+from app.integrations.weave.ai_authoring_schemas import AIGenerateQuestionsRequest
+from app.integrations.weave.exceptions import WeaveUnavailableError
+
+
+@pytest.mark.asyncio
+async def test_ai_authoring_transport_retry_reuses_same_idempotency_key() -> None:
+    client = AsyncMock()
+    client.request_actor_authenticated.side_effect = [
+        WeaveUnavailableError("timeout"),
+        {
+            "questions": [
+                {
+                    "question_type": "single_choice",
+                    "prompt": "Question?",
+                    "instruction": None,
+                    "image": None,
+                    "options": [
+                        {"text": "A", "is_correct": True, "image": None},
+                        {"text": "B", "is_correct": False, "image": None},
+                    ],
+                }
+            ],
+            "repaired": False,
+            "charge": {
+                "reservation_id": "00000000-0000-0000-0000-000000000001",
+                "credits_charged": 1,
+                "credits_released": 0,
+            },
+        },
+    ]
+    gateway = WeaveAIQuestionAuthoringGateway(
+        gateway=type("Gateway", (), {"client": client})()
+    )
+
+    result = await gateway.generate_questions(
+        payload=AIGenerateQuestionsRequest(
+            subject="Biology",
+            academic_level="SS 2",
+            generation_prompt="Cells",
+            question_count=1,
+        ),
+        idempotency_key="operation-123",
+        server_credential=SecretStr("server-secret"),
+        actor_access_token="actor-token",
+    )
+
+    assert result.charge.credits_charged == 1
+    assert client.request_actor_authenticated.await_count == 2
+    for call in client.request_actor_authenticated.await_args_list:
+        assert call.kwargs["headers"] == {"Idempotency-Key": "operation-123"}

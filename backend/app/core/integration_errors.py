@@ -48,9 +48,13 @@ async def weave_request_rejected_handler(
     if exc.retry_after is not None:
         headers["Retry-After"] = str(exc.retry_after)
 
+    content = {"detail": detail}
+    if is_expected_client_failure:
+        content.update(exc.payload)
+
     return JSONResponse(
         status_code=response_status,
-        content={"detail": detail},
+        content=content,
         headers=headers,
     )
 
