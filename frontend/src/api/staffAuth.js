@@ -24,16 +24,34 @@ function normalizeStaffSession(session) {
   }
 }
 
-function pendingRefreshOperationId() {
+function createOperationId() {
+  const bytes = new Uint8Array(16)
+  window.crypto.getRandomValues(bytes)
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, '0'))
+  return [
+    hex.slice(0, 4).join(''),
+    hex.slice(4, 6).join(''),
+    hex.slice(6, 8).join(''),
+    hex.slice(8, 10).join(''),
+    hex.slice(10, 16).join(''),
+  ].join('-')
+}
+
+function ensureRefreshOperationId() {
   const existing = window.localStorage.getItem(STAFF_REFRESH_OPERATION_KEY)
   if (existing) return existing
+  return replaceRefreshOperationId()
+}
 
-  const operationId = window.crypto.randomUUID()
+function replaceRefreshOperationId() {
+  const operationId = createOperationId()
   window.localStorage.setItem(STAFF_REFRESH_OPERATION_KEY, operationId)
   return operationId
 }
 
-function clearPendingRefreshOperation() {
+function clearRefreshOperationId() {
   window.localStorage.removeItem(STAFF_REFRESH_OPERATION_KEY)
 }
 
@@ -44,15 +62,35 @@ function clearRefreshTimer() {
   }
 }
 
-function scheduleStaffRefresh(accessTokenExpiresAt) {
+function expireStaffSession() {
+  clearStaffSession()
+  window.location.assign('/staff/login')
+}
+
+function scheduleStaffRefresh(accessTokenExpiresAt, sessionExpiresAt) {
   clearRefreshTimer()
 
-  const expiresAt = Date.parse(accessTokenExpiresAt || '')
-  if (!Number.isFinite(expiresAt)) return
+  const now = Date.now()
+  const accessExpiry = Date.parse(accessTokenExpiresAt || '')
+  const hardExpiry = Date.parse(sessionExpiresAt || '')
+  if (!Number.isFinite(accessExpiry) || !Number.isFinite(hardExpiry)) return
+
+  if (hardExpiry <= now) {
+    expireStaffSession()
+    return
+  }
+
+  // Near the absolute Weave authorization deadline there is no useful refresh
+  // left to perform because every new access token is truncated to that same
+  // hard deadline. Let the current token finish and require a fresh login.
+  if (hardExpiry - now <= REFRESH_EARLY_MS) {
+    refreshTimer = window.setTimeout(expireStaffSession, hardExpiry - now)
+    return
+  }
 
   const jitter = Math.floor(Math.random() * REFRESH_JITTER_MS)
-  const targetAt = expiresAt - REFRESH_EARLY_MS - jitter
-  const delay = Math.max(1000, targetAt - Date.now())
+  const targetAt = accessExpiry - REFRESH_EARLY_MS - jitter
+  const delay = Math.max(1000, targetAt - now)
 
   refreshTimer = window.setTimeout(() => {
     refreshTimer = null
@@ -73,13 +111,12 @@ async function runScheduledRefresh() {
     await refreshStaff()
   } catch (error) {
     if (error?.status === 401) {
-      clearStaffSession()
-      window.location.assign('/staff/login')
+      expireStaffSession()
       return
     }
 
     // A transient local-server/coordination failure should not turn into a
-    // logout. Keep the same pending idempotency key and retry shortly.
+    // logout. Keep the same idempotency key and retry shortly.
     scheduleRefreshRetry()
   }
 }
@@ -91,16 +128,22 @@ export async function loginStaff({ email, password }) {
     body: { email, password },
   })
 
-  clearPendingRefreshOperation()
+  // Pre-seed the operation ID for the next rotation. Every tab shares this
+  // value through localStorage, so concurrent refreshes of the same HttpOnly
+  // cookie identify themselves as the same logical operation.
+  replaceRefreshOperationId()
   setStaffAccessToken(session.access_token)
-  scheduleStaffRefresh(session.access_token_expires_at)
+  scheduleStaffRefresh(
+    session.access_token_expires_at,
+    session.session_expires_at,
+  )
   return normalizeStaffSession(session)
 }
 
 export async function refreshStaff() {
   if (refreshInFlight) return refreshInFlight
 
-  const operationId = pendingRefreshOperationId()
+  const operationId = ensureRefreshOperationId()
   refreshInFlight = weaveRequest('/auth/refresh', {
     method: 'POST',
     staffAuth: false,
@@ -108,14 +151,17 @@ export async function refreshStaff() {
   })
     .then((session) => {
       setStaffAccessToken(session.access_token)
-      clearPendingRefreshOperation()
-      scheduleStaffRefresh(session.access_token_expires_at)
+      replaceRefreshOperationId()
+      scheduleStaffRefresh(
+        session.access_token_expires_at,
+        session.session_expires_at,
+      )
       return normalizeStaffSession(session)
     })
     .catch((error) => {
       if (error?.status === 401) {
         clearStaffAccessToken()
-        clearPendingRefreshOperation()
+        clearRefreshOperationId()
         clearRefreshTimer()
       }
       throw error
@@ -137,6 +183,6 @@ export async function signOutStaff() {
 
 export function clearStaffSession() {
   clearRefreshTimer()
-  clearPendingRefreshOperation()
+  clearRefreshOperationId()
   clearStaffAccessToken()
 }
