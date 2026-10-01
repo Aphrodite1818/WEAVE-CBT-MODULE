@@ -9,7 +9,6 @@ TEST_ENVIRONMENT = {
     "DATABASE_URL": "postgresql+asyncpg://user:password@localhost/cbt",
     "DEBUG": "false",
     "REDIS_URL": "redis://localhost:6379/0",
-    "TASKIQ_REDIS_URL": "redis://localhost:6379/1",
     "WEAVE_API_BASE_URL": "https://weave.invalid",
 }
 
@@ -25,7 +24,6 @@ class DatabaseSettingsTests(unittest.TestCase):
 
         self.required_settings = {
             "REDIS_URL": "redis://localhost:6379/0",
-            "TASKIQ_REDIS_URL": "redis://localhost:6379/1",
             "WEAVE_API_BASE_URL": "https://weave.invalid",
         }
 
