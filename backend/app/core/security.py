@@ -2,42 +2,24 @@
 # backend.app.core.security
 # ========================== #
 
-"""
-Low-level security primitives for the Weave CBT runtime.
+"""Low-level security primitives for the Weave CBT runtime."""
 
-Responsibilities:
-
-- persistent local JWT signing-secret management;
-- local actor access-token creation and validation;
-- opaque local refresh-token generation and hashing;
-- candidate examination PIN generation, hashing, and verification.
-
-Local actors are Weave-authenticated teachers and tenant administrators.
-Candidate/student authentication is handled separately by the CBT runtime.
-
-This module does NOT:
-
-- authenticate teachers/admins against Weave;
-- pair CBT installations;
-- store the Weave installation credential;
-- query PostgreSQL;
-- create, rotate, or revoke database session records;
-- authorize teachers for classes or subjects;
-- determine candidate eligibility.
-
-Those responsibilities belong to their respective integration/domain layers.
-"""
+from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import os
 import secrets
 from collections.abc import Mapping
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from jose import ExpiredSignatureError, JWTError, jwt
 from pwdlib import PasswordHash
 from pwdlib.exceptions import UnknownHashError
@@ -59,6 +41,10 @@ MIN_LOCAL_SIGNING_SECRET_LENGTH = 64
 REFRESH_TOKEN_BYTES = 64
 TOKEN_ID_BYTES = 24
 
+WEAVE_CREDENTIAL_NONCE_BYTES = 12
+WEAVE_CREDENTIAL_KEY_BYTES = 32
+WEAVE_CREDENTIAL_HKDF_SALT = b"weave-cbt-auth-storage-v1"
+WEAVE_CREDENTIAL_HKDF_INFO = b"weave/cbt/local-auth/weave-credentials"
 
 # ========================== #
 # CANDIDATE PIN CONSTANTS
@@ -67,11 +53,6 @@ TOKEN_ID_BYTES = 24
 DEFAULT_CANDIDATE_PIN_LENGTH = 6
 MIN_CANDIDATE_PIN_LENGTH = 6
 MAX_CANDIDATE_PIN_LENGTH = 10
-
-
-# ========================== #
-# RESERVED JWT CLAIMS
-# ========================== #
 
 _RESERVED_ACCESS_TOKEN_CLAIMS = frozenset(
     {
@@ -88,7 +69,6 @@ _RESERVED_ACCESS_TOKEN_CLAIMS = frozenset(
         "token_type",
     }
 )
-
 
 _password_hash = PasswordHash.recommended()
 
@@ -118,182 +98,106 @@ class StoredCredentialHashError(SecurityError):
     """Raised when a stored candidate credential hash is invalid."""
 
 
+class StoredSecretDecryptionError(SecurityError):
+    """Raised when an encrypted local secret cannot be authenticated/decrypted."""
+
+
 # ========================== #
 # INTERNAL HELPERS
 # ========================== #
 
 
 def _local_signing_secret_path() -> Path:
-    """Return the persistent path of the local JWT signing secret."""
-
     return settings.IDENTITY_STORAGE_PATH / LOCAL_SIGNING_SECRET_FILENAME
 
 
-def _ensure_identity_directory(
-    path: Path,
-) -> None:
-    """
-    Ensure the persistent identity directory exists and restrict it
-    to the CBT container user.
-    """
-
+def _ensure_identity_directory(path: Path) -> None:
     try:
-        path.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        os.chmod(
-            path,
-            0o700,
-        )
-
+        path.mkdir(parents=True, exist_ok=True)
+        os.chmod(path, 0o700)
     except OSError as exc:
         raise SecurityConfigurationError(
             "Unable to initialize the CBT identity directory."
         ) from exc
 
 
-def _restrict_secret_file_permissions(
-    path: Path,
-) -> None:
-    """
-    Restrict the signing-secret file to the CBT container user.
-
-    The CBT application runs inside Linux containers regardless of
-    whether Docker is hosted by Windows, macOS, or Linux.
-    """
-
+def _restrict_secret_file_permissions(path: Path) -> None:
     try:
-        os.chmod(
-            path,
-            0o600,
-        )
-
+        os.chmod(path, 0o600)
     except OSError as exc:
         raise SecurityConfigurationError(
             "Unable to restrict local JWT signing-secret permissions."
         ) from exc
 
 
-def _read_local_signing_secret(
-    path: Path,
-) -> str:
-    """Read and validate the persistent local JWT signing secret."""
-
+def _read_local_signing_secret(path: Path) -> str:
     secret = path.read_text(encoding="utf-8").strip()
-
     if not secret:
         raise SecurityConfigurationError("Local JWT signing-secret file is empty.")
-
     if len(secret) < MIN_LOCAL_SIGNING_SECRET_LENGTH:
         raise SecurityConfigurationError("Local JWT signing-secret file is invalid.")
-
     return secret
 
 
-def _normalize_utc_datetime(
-    value: datetime | None,
-) -> datetime:
-    """Return a timezone-aware UTC datetime."""
-
+def _normalize_utc_datetime(value: datetime | None) -> datetime:
     if value is None:
         return datetime.now(UTC)
-
     if value.tzinfo is None:
-        raise ValueError("now must be timezone-aware.")
-
+        raise ValueError("datetime value must be timezone-aware.")
     return value.astimezone(UTC)
 
 
-def _require_non_empty_string(
-    value: str,
-    field_name: str,
-) -> str:
-    """Normalize and validate a required string."""
-
+def _require_non_empty_string(value: str, field_name: str) -> str:
     if not isinstance(value, str):
-        raise ValueError(f"{field_name} must be a string.")  # noqa : TRY004
-
+        raise ValueError(f"{field_name} must be a string.")
     normalized = value.strip()
-
     if not normalized:
         raise ValueError(f"{field_name} cannot be empty.")
-
     return normalized
 
 
-def _require_token_claim(
-    payload: Mapping[str, Any],
-    claim_name: str,
-) -> str:
-    """Return a required non-empty string JWT claim."""
-
+def _require_token_claim(payload: Mapping[str, Any], claim_name: str) -> str:
     value = payload.get(claim_name)
-
     if not isinstance(value, str) or not value.strip():
         raise InvalidLocalTokenError(
             f"Local access token claim '{claim_name}' is invalid."
         )
-
     return value
 
 
-def _is_valid_candidate_pin(
-    pin: str,
-) -> bool:
-    """Return whether a candidate PIN has the required format."""
-
-    if not isinstance(pin, str):
-        return False
-
-    if not pin.isdigit():
-        return False
-
-    return MIN_CANDIDATE_PIN_LENGTH <= len(pin) <= MAX_CANDIDATE_PIN_LENGTH
+def _is_valid_candidate_pin(pin: str) -> bool:
+    return bool(
+        isinstance(pin, str)
+        and pin.isdigit()
+        and MIN_CANDIDATE_PIN_LENGTH <= len(pin) <= MAX_CANDIDATE_PIN_LENGTH
+    )
 
 
-def _validate_candidate_pin(
-    pin: str,
-) -> None:
-    """Raise when a candidate PIN has an invalid format."""
-
+def _validate_candidate_pin(pin: str) -> None:
     if not _is_valid_candidate_pin(pin):
         raise ValueError(
-            "Candidate PIN must contain only digits "
-            "and be between "
-            f"{MIN_CANDIDATE_PIN_LENGTH} and "
-            f"{MAX_CANDIDATE_PIN_LENGTH} "
+            "Candidate PIN must contain only digits and be between "
+            f"{MIN_CANDIDATE_PIN_LENGTH} and {MAX_CANDIDATE_PIN_LENGTH} "
             "characters long."
         )
 
 
 # ========================== #
-# PERSISTENT SIGNING SECRET
+# PERSISTENT BACKEND SECRET
 # ========================== #
 
 
 @lru_cache(maxsize=1)
 def get_local_signing_secret() -> str:
-    """
-    Load the persistent local JWT signing secret.
-
-    This function never creates a new secret.
-
-    Installation/pairing initialization is responsible
-    for creating it first.
-    """
+    """Load the persistent CBT backend signing secret without creating it."""
 
     secret_path = _local_signing_secret_path()
-
     try:
         return _read_local_signing_secret(secret_path)
-
     except FileNotFoundError as exc:
         raise SecurityConfigurationError(
             "Local JWT signing secret has not been initialized."
         ) from exc
-
     except OSError as exc:
         raise SecurityConfigurationError(
             "Unable to read the local JWT signing secret."
@@ -301,32 +205,15 @@ def get_local_signing_secret() -> str:
 
 
 def ensure_local_signing_secret() -> str:
-    """
-    Return the persistent local JWT signing secret,
-    creating it if necessary.
-
-    This should normally be called by the successful installation
-    pairing flow, not automatically during generic application startup.
-
-    IDENTITY_STORAGE_PATH must use persistent Docker storage so the
-    secret survives:
-
-    - API container replacement;
-    - image upgrades;
-    - Docker restarts;
-    - host restarts.
-    """
+    """Create the persistent CBT backend secret during pairing if necessary."""
 
     secret_path = _local_signing_secret_path()
-
     _ensure_identity_directory(secret_path.parent)
 
     try:
         existing_secret = _read_local_signing_secret(secret_path)
-
     except FileNotFoundError:
         existing_secret = None
-
     except OSError as exc:
         raise SecurityConfigurationError(
             "Unable to read the local JWT signing secret."
@@ -334,58 +221,92 @@ def ensure_local_signing_secret() -> str:
 
     if existing_secret is not None:
         _restrict_secret_file_permissions(secret_path)
-
         return existing_secret
 
     secret = secrets.token_urlsafe(LOCAL_SIGNING_SECRET_BYTES)
-
     try:
         file_descriptor = os.open(
             secret_path,
             os.O_WRONLY | os.O_CREAT | os.O_EXCL,
             0o600,
         )
-
     except FileExistsError:
         try:
             return _read_local_signing_secret(secret_path)
-
         except OSError as exc:
             raise SecurityConfigurationError(
                 "Unable to read the local JWT signing secret."
             ) from exc
-
     except OSError as exc:
         raise SecurityConfigurationError(
             "Unable to create the local JWT signing secret."
         ) from exc
 
     try:
-        with os.fdopen(
-            file_descriptor,
-            "w",
-            encoding="utf-8",
-        ) as secret_file:
+        with os.fdopen(file_descriptor, "w", encoding="utf-8") as secret_file:
             secret_file.write(secret)
-
             secret_file.flush()
-
             os.fsync(secret_file.fileno())
-
     except Exception:
         try:
             secret_path.unlink()
-
         except FileNotFoundError:
             pass
-
         raise
 
     _restrict_secret_file_permissions(secret_path)
-
     get_local_signing_secret.cache_clear()
-
+    _weave_credential_encryption_key.cache_clear()
     return secret
+
+
+@lru_cache(maxsize=1)
+def _weave_credential_encryption_key() -> bytes:
+    """Derive an AES key from the same persistent CBT backend secret."""
+
+    return HKDF(
+        algorithm=hashes.SHA256(),
+        length=WEAVE_CREDENTIAL_KEY_BYTES,
+        salt=WEAVE_CREDENTIAL_HKDF_SALT,
+        info=WEAVE_CREDENTIAL_HKDF_INFO,
+    ).derive(get_local_signing_secret().encode("utf-8"))
+
+
+def encrypt_local_secret(value: str, *, purpose: str) -> str:
+    """Encrypt a recoverable secret using the persistent CBT backend secret."""
+
+    plaintext = _require_non_empty_string(value, "value").encode("utf-8")
+    associated_data = _require_non_empty_string(purpose, "purpose").encode("utf-8")
+    nonce = secrets.token_bytes(WEAVE_CREDENTIAL_NONCE_BYTES)
+    ciphertext = AESGCM(_weave_credential_encryption_key()).encrypt(
+        nonce,
+        plaintext,
+        associated_data,
+    )
+    return base64.urlsafe_b64encode(nonce + ciphertext).decode("ascii")
+
+
+def decrypt_local_secret(value: str, *, purpose: str) -> str:
+    """Authenticate and decrypt a secret encrypted by ``encrypt_local_secret``."""
+
+    encoded = _require_non_empty_string(value, "value")
+    associated_data = _require_non_empty_string(purpose, "purpose").encode("utf-8")
+    try:
+        payload = base64.urlsafe_b64decode(encoded.encode("ascii"))
+        nonce = payload[:WEAVE_CREDENTIAL_NONCE_BYTES]
+        ciphertext = payload[WEAVE_CREDENTIAL_NONCE_BYTES:]
+        if len(nonce) != WEAVE_CREDENTIAL_NONCE_BYTES or not ciphertext:
+            raise ValueError("invalid encrypted payload")
+        plaintext = AESGCM(_weave_credential_encryption_key()).decrypt(
+            nonce,
+            ciphertext,
+            associated_data,
+        )
+        return plaintext.decode("utf-8")
+    except Exception as exc:
+        raise StoredSecretDecryptionError(
+            "Stored encrypted credential cannot be decrypted."
+        ) from exc
 
 
 # ========================== #
@@ -394,53 +315,20 @@ def ensure_local_signing_secret() -> str:
 
 
 def generate_token_id() -> str:
-    """
-    Generate a unique and unpredictable identifier for a token.
-    """
-
     return secrets.token_urlsafe(TOKEN_ID_BYTES)
 
 
 def generate_refresh_token() -> str:
-    """
-    Generate a high-entropy opaque local refresh token.
-
-    The refresh token carries no identity claims.
-
-    The raw value is returned to the client while only its
-    SHA-256 fingerprint should be persisted in PostgreSQL.
-    """
-
     return secrets.token_urlsafe(REFRESH_TOKEN_BYTES)
 
 
-def hash_refresh_token(
-    token: str,
-) -> str:
-    """
-    Return the SHA-256 fingerprint of a refresh token.
-
-    Refresh tokens are high-entropy random secrets, so they do not
-    require slow password hashing such as Argon2.
-    """
-
+def hash_refresh_token(token: str) -> str:
     if not isinstance(token, str) or not token:
         raise ValueError("Refresh token cannot be empty.")
-
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def verify_refresh_token(
-    token: str,
-    expected_hash: str,
-) -> bool:
-    """
-    Compare a raw refresh token against its stored fingerprint.
-
-    Expiration, rotation, revocation, reuse detection,
-    and session ownership belong to the auth domain.
-    """
-
+def verify_refresh_token(token: str, expected_hash: str) -> bool:
     if (
         not isinstance(token, str)
         or not token
@@ -448,13 +336,7 @@ def verify_refresh_token(
         or not expected_hash
     ):
         return False
-
-    candidate_hash = hash_refresh_token(token)
-
-    return secrets.compare_digest(
-        candidate_hash,
-        expected_hash,
-    )
+    return secrets.compare_digest(hash_refresh_token(token), expected_hash)
 
 
 # ========================== #
@@ -468,72 +350,21 @@ def create_local_access_token(
     session_id: str,
     role: str,
     installation_id: str,
+    expires_at: datetime,
     additional_claims: Mapping[str, Any] | None = None,
     now: datetime | None = None,
 ) -> str:
-    """
-    Create a short-lived local access JWT for a
-    Weave-authenticated actor.
+    """Create a local JWT whose expiry is supplied by the auth/session layer."""
 
-    Local actors currently include:
-
-    - teachers;
-    - tenant administrators.
-
-    Parameters
-    ----------
-    subject:
-        The authenticated Weave actor identifier.
-
-    session_id:
-        The local CBT session identifier stored in PostgreSQL.
-
-    role:
-        The actor's role returned by Weave authentication.
-
-    installation_id:
-        The paired CBT installation identifier.
-
-    additional_claims:
-        Optional non-security-critical contextual claims,
-        such as a Weave membership identifier.
-
-    now:
-        Optional timezone-aware datetime used primarily for testing.
-
-    Class-subject assignments are intentionally not embedded into
-    the JWT.
-
-    They should be checked against local academic projections so
-    assignment changes can take effect without waiting for an
-    access token to expire.
-    """
-
-    subject = _require_non_empty_string(
-        subject,
-        "subject",
-    )
-
-    session_id = _require_non_empty_string(
-        session_id,
-        "session_id",
-    )
-
-    role = _require_non_empty_string(
-        role,
-        "role",
-    )
-
-    installation_id = _require_non_empty_string(
-        installation_id,
-        "installation_id",
-    )
+    subject = _require_non_empty_string(subject, "subject")
+    session_id = _require_non_empty_string(session_id, "session_id")
+    role = _require_non_empty_string(role, "role")
+    installation_id = _require_non_empty_string(installation_id, "installation_id")
 
     issued_at = _normalize_utc_datetime(now)
-
-    expires_at = issued_at + timedelta(
-        minutes=(settings.LOCAL_ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
+    normalized_expiry = _normalize_utc_datetime(expires_at)
+    if normalized_expiry <= issued_at:
+        raise ValueError("expires_at must be later than the access-token issue time.")
 
     payload: dict[str, Any] = {
         "iss": LOCAL_TOKEN_ISSUER,
@@ -541,7 +372,7 @@ def create_local_access_token(
         "sub": subject,
         "iat": int(issued_at.timestamp()),
         "nbf": int(issued_at.timestamp()),
-        "exp": int(expires_at.timestamp()),
+        "exp": int(normalized_expiry.timestamp()),
         "jti": generate_token_id(),
         "sid": session_id,
         "role": role,
@@ -551,14 +382,11 @@ def create_local_access_token(
 
     if additional_claims:
         protected_claims = _RESERVED_ACCESS_TOKEN_CLAIMS & set(additional_claims)
-
         if protected_claims:
             claim_names = ", ".join(sorted(protected_claims))
-
             raise ValueError(
                 f"additional_claims cannot override protected JWT claims: {claim_names}"
             )
-
         payload.update(additional_claims)
 
     return jwt.encode(
@@ -568,27 +396,8 @@ def create_local_access_token(
     )
 
 
-def decode_local_access_token(
-    token: str,
-) -> dict[str, Any]:
-    """
-    Validate and decode a local actor access JWT.
-
-    Validation includes:
-
-    - signature;
-    - expiration;
-    - not-before time;
-    - issued-at time;
-    - issuer;
-    - audience;
-    - subject;
-    - JWT identifier;
-    - local session identifier;
-    - actor role;
-    - installation identifier;
-    - token type.
-    """
+def decode_local_access_token(token: str) -> dict[str, Any]:
+    """Validate and decode a local actor access JWT."""
 
     if not isinstance(token, str) or not token.strip():
         raise InvalidLocalTokenError("Local access token is missing.")
@@ -597,9 +406,7 @@ def decode_local_access_token(
         payload = jwt.decode(
             token,
             key=get_local_signing_secret(),
-            algorithms=[
-                settings.LOCAL_JWT_ALGORITHM,
-            ],
+            algorithms=[settings.LOCAL_JWT_ALGORITHM],
             audience=LOCAL_TOKEN_AUDIENCE,
             issuer=LOCAL_TOKEN_ISSUER,
             options={
@@ -620,46 +427,19 @@ def decode_local_access_token(
                 "require_jti": True,
             },
         )
-
     except ExpiredSignatureError as exc:
         raise ExpiredLocalTokenError("Local access token has expired.") from exc
-
     except JWTError as exc:
         raise InvalidLocalTokenError("Local access token is invalid.") from exc
 
-    _require_token_claim(
-        payload,
-        "sub",
-    )
-
-    _require_token_claim(
-        payload,
-        "jti",
-    )
-
-    _require_token_claim(
-        payload,
-        "sid",
-    )
-
-    _require_token_claim(
-        payload,
-        "role",
-    )
-
-    _require_token_claim(
-        payload,
-        "installation_id",
-    )
-
-    token_type = _require_token_claim(
-        payload,
-        "token_type",
-    )
-
+    _require_token_claim(payload, "sub")
+    _require_token_claim(payload, "jti")
+    _require_token_claim(payload, "sid")
+    _require_token_claim(payload, "role")
+    _require_token_claim(payload, "installation_id")
+    token_type = _require_token_claim(payload, "token_type")
     if token_type != LOCAL_ACCESS_TOKEN_TYPE:
         raise InvalidLocalTokenError("Unexpected local token type.")
-
     return payload
 
 
@@ -668,69 +448,28 @@ def decode_local_access_token(
 # ========================== #
 
 
-def generate_candidate_pin(
-    length: int = DEFAULT_CANDIDATE_PIN_LENGTH,
-) -> str:
-    """
-    Generate a cryptographically secure numeric examination PIN.
-
-    PIN uniqueness for a particular examination is a domain/database
-    responsibility and is intentionally not handled here.
-    """
-
+def generate_candidate_pin(length: int = DEFAULT_CANDIDATE_PIN_LENGTH) -> str:
     if not (MIN_CANDIDATE_PIN_LENGTH <= length <= MAX_CANDIDATE_PIN_LENGTH):
         raise ValueError(
             "Candidate PIN length must be between "
-            f"{MIN_CANDIDATE_PIN_LENGTH} and "
-            f"{MAX_CANDIDATE_PIN_LENGTH} digits."
+            f"{MIN_CANDIDATE_PIN_LENGTH} and {MAX_CANDIDATE_PIN_LENGTH} digits."
         )
-
-    upper_bound = 10**length
-
-    value = secrets.randbelow(upper_bound)
-
+    value = secrets.randbelow(10**length)
     return f"{value:0{length}d}"
 
 
-async def hash_candidate_pin(
-    pin: str,
-) -> str:
-    """
-    Hash a candidate examination PIN.
-
-    Password hashing is CPU-intensive, so it is moved to a worker
-    thread rather than blocking FastAPI's async event loop.
-    """
-
+async def hash_candidate_pin(pin: str) -> str:
     _validate_candidate_pin(pin)
-
-    return await asyncio.to_thread(
-        _password_hash.hash,
-        pin,
-    )
+    return await asyncio.to_thread(_password_hash.hash, pin)
 
 
-async def verify_candidate_pin(
-    pin: str,
-    hashed_pin: str,
-) -> bool:
-    """
-    Verify a candidate examination PIN against its stored hash.
-    """
-
+async def verify_candidate_pin(pin: str, hashed_pin: str) -> bool:
     if not _is_valid_candidate_pin(pin):
         return False
-
     if not isinstance(hashed_pin, str) or not hashed_pin:
         return False
-
     try:
-        return await asyncio.to_thread(
-            _password_hash.verify,
-            pin,
-            hashed_pin,
-        )
-
+        return await asyncio.to_thread(_password_hash.verify, pin, hashed_pin)
     except UnknownHashError as exc:
         raise StoredCredentialHashError(
             "Stored candidate PIN hash is invalid."
