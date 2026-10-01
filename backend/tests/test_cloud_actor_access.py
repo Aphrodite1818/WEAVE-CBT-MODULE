@@ -9,8 +9,11 @@ from uuid import uuid4
 
 from pydantic import SecretStr
 
-from app.domains.auth.cloud_access import get_or_repair_weave_actor_access_token
-from app.domains.auth.service import LocalAuthService, LocalSessionAuthenticationError
+from app.domains.auth.cloud_access import (
+    _CloudAccessPreparation,
+    get_or_repair_weave_actor_access_token,
+)
+from app.domains.auth.coordination import LocalAuthCoordinationUnavailable
 from app.integrations.weave.auth_schemas import WeaveActorTokenPair
 from app.integrations.weave.exceptions import (
     WeaveRequestRejectedError,
@@ -23,23 +26,36 @@ async def _unlocked(_session_id):
     yield
 
 
+@asynccontextmanager
+async def _coordination_failure(_session_id):
+    raise LocalAuthCoordinationUnavailable("redis unavailable")
+    yield
+
+
 class CloudActorAccessTests(unittest.IsolatedAsyncioTestCase):
     async def test_valid_cloud_access_token_returns_without_rotation(self):
         db = AsyncMock()
         session_id = uuid4()
 
-        with patch.object(
-            LocalAuthService,
-            "get_weave_actor_access_token",
-            new=AsyncMock(return_value="current-actor-token"),
-        ) as current_token:
+        with patch(
+            "app.domains.auth.cloud_access._inspect_cloud_access",
+            new=AsyncMock(
+                return_value=_CloudAccessPreparation(
+                    access_token="current-actor-token"
+                )
+            ),
+        ) as inspect:
             result = await get_or_repair_weave_actor_access_token(
                 db,
                 session_id=session_id,
             )
 
         self.assertEqual(result, "current-actor-token")
-        current_token.assert_awaited_once_with(db, session_id=session_id)
+        inspect.assert_awaited_once_with(
+            db,
+            session_id=session_id,
+            prepare_repair=False,
+        )
 
     async def test_expired_cloud_access_repairs_with_persisted_operation_id(self):
         db = AsyncMock()
@@ -56,23 +72,21 @@ class CloudActorAccessTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with (
-            patch.object(
-                LocalAuthService,
-                "get_weave_actor_access_token",
+            patch(
+                "app.domains.auth.cloud_access._inspect_cloud_access",
                 new=AsyncMock(
                     side_effect=[
-                        LocalSessionAuthenticationError("expired"),
-                        LocalSessionAuthenticationError("expired"),
+                        _CloudAccessPreparation(),
+                        _CloudAccessPreparation(
+                            operation_id=operation_id,
+                            refresh_token="old-cloud-refresh",
+                        ),
                     ]
                 ),
             ),
             patch(
                 "app.domains.auth.cloud_access.staff_refresh_lock",
                 side_effect=_unlocked,
-            ),
-            patch(
-                "app.domains.auth.cloud_access._prepare_cloud_repair",
-                new=AsyncMock(return_value=(operation_id, "old-cloud-refresh")),
             ),
             patch(
                 "app.domains.auth.cloud_access.node_identity_store.load",
@@ -114,20 +128,21 @@ class CloudActorAccessTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with (
-            patch.object(
-                LocalAuthService,
-                "get_weave_actor_access_token",
+            patch(
+                "app.domains.auth.cloud_access._inspect_cloud_access",
                 new=AsyncMock(
-                    side_effect=LocalSessionAuthenticationError("expired")
+                    side_effect=[
+                        _CloudAccessPreparation(),
+                        _CloudAccessPreparation(
+                            operation_id=operation_id,
+                            refresh_token="old-cloud-refresh",
+                        ),
+                    ]
                 ),
             ),
             patch(
                 "app.domains.auth.cloud_access.staff_refresh_lock",
                 side_effect=_unlocked,
-            ),
-            patch(
-                "app.domains.auth.cloud_access._prepare_cloud_repair",
-                new=AsyncMock(return_value=(operation_id, "old-cloud-refresh")),
             ),
             patch(
                 "app.domains.auth.cloud_access.node_identity_store.load",
@@ -163,20 +178,21 @@ class CloudActorAccessTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with (
-            patch.object(
-                LocalAuthService,
-                "get_weave_actor_access_token",
+            patch(
+                "app.domains.auth.cloud_access._inspect_cloud_access",
                 new=AsyncMock(
-                    side_effect=LocalSessionAuthenticationError("expired")
+                    side_effect=[
+                        _CloudAccessPreparation(),
+                        _CloudAccessPreparation(
+                            operation_id=operation_id,
+                            refresh_token="old-cloud-refresh",
+                        ),
+                    ]
                 ),
             ),
             patch(
                 "app.domains.auth.cloud_access.staff_refresh_lock",
                 side_effect=_unlocked,
-            ),
-            patch(
-                "app.domains.auth.cloud_access._prepare_cloud_repair",
-                new=AsyncMock(return_value=(operation_id, "old-cloud-refresh")),
             ),
             patch(
                 "app.domains.auth.cloud_access.node_identity_store.load",
@@ -204,6 +220,26 @@ class CloudActorAccessTests(unittest.IsolatedAsyncioTestCase):
 
         revoke.assert_awaited_once()
         self.assertEqual(revoke.await_args.kwargs["session_id"], session_id)
+
+    async def test_coordination_failure_becomes_retryable_cloud_unavailable(self):
+        db = AsyncMock()
+        session_id = uuid4()
+
+        with (
+            patch(
+                "app.domains.auth.cloud_access._inspect_cloud_access",
+                new=AsyncMock(return_value=_CloudAccessPreparation()),
+            ),
+            patch(
+                "app.domains.auth.cloud_access.staff_refresh_lock",
+                side_effect=_coordination_failure,
+            ),
+        ):
+            with self.assertRaises(WeaveUnavailableError):
+                await get_or_repair_weave_actor_access_token(
+                    db,
+                    session_id=session_id,
+                )
 
 
 if __name__ == "__main__":
