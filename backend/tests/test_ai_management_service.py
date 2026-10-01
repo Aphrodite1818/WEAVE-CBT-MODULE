@@ -8,9 +8,9 @@ from uuid import uuid4
 from pydantic import SecretStr
 
 from app.domains.ai.service import CBTAIManagementService
-from app.domains.auth.service import LocalAuthService, LocalSessionAuthenticationError
+from app.domains.auth.service import LocalSessionAuthenticationError
 from app.integrations.weave.ai_schemas import AIQuotaRequestCreate
-from app.integrations.weave.exceptions import WeaveUnavailableError
+from app.integrations.weave.exceptions import WeaveRequestRejectedError
 
 
 class CBTAIManagementServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -26,9 +26,8 @@ class CBTAIManagementServiceTests(unittest.IsolatedAsyncioTestCase):
                 "app.domains.ai.service.node_identity_store.load",
                 return_value=installation,
             ),
-            patch.object(
-                LocalAuthService,
-                "get_weave_actor_access_token",
+            patch(
+                "app.domains.ai.service.get_or_repair_weave_actor_access_token",
                 new=AsyncMock(return_value="weave-actor-token"),
             ) as get_actor_token,
         ):
@@ -43,7 +42,7 @@ class CBTAIManagementServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(actor_token, "weave-actor-token")
         get_actor_token.assert_awaited_once_with(db, session_id=session_id)
 
-    async def test_unsynchronized_cloud_auth_becomes_retryable_cloud_unavailable(self):
+    async def test_invalid_cloud_auth_is_exposed_as_local_reauthentication(self):
         db = AsyncMock()
         session_id = uuid4()
         installation = SimpleNamespace(
@@ -55,21 +54,26 @@ class CBTAIManagementServiceTests(unittest.IsolatedAsyncioTestCase):
                 "app.domains.ai.service.node_identity_store.load",
                 return_value=installation,
             ),
-            patch.object(
-                LocalAuthService,
-                "get_weave_actor_access_token",
+            patch(
+                "app.domains.ai.service.get_or_repair_weave_actor_access_token",
                 new=AsyncMock(
                     side_effect=LocalSessionAuthenticationError(
-                        "Weave cloud authorization requires refresh."
+                        "Local staff session is invalid or expired."
                     )
                 ),
             ),
         ):
-            with self.assertRaises(WeaveUnavailableError):
+            with self.assertRaises(WeaveRequestRejectedError) as captured:
                 await CBTAIManagementService._cloud_credentials(
                     db,
                     session_id=session_id,
                 )
+
+        self.assertEqual(captured.exception.status_code, 401)
+        self.assertEqual(
+            captured.exception.detail,
+            "Staff session requires reauthentication.",
+        )
 
     async def test_request_credits_passes_internal_credentials_to_gateway(self):
         db = AsyncMock()
