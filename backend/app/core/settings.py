@@ -112,14 +112,6 @@ class Settings(BaseSettings):
     BRANDING_LOGO_MAX_SIZE_BYTES: int = Field(default=2 * 1024 * 1024, ge=1)
 
     # ========================== #
-    # LOCAL STAFF AUTHENTICATION
-    # ========================== #
-
-    # Weave supplies the access-token and hard authorization expiry timestamps.
-    # CBT therefore has no independent access/refresh lifetime configuration.
-    LOCAL_JWT_ALGORITHM: str = "HS256"
-
-    # ========================== #
     # WEAVE CLOUD INTEGRATION
     # ========================== #
 
@@ -194,14 +186,6 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"LOG_LEVEL must be one of: {', '.join(sorted(valid_levels))}"
             )
-        return normalized
-
-    @field_validator("LOCAL_JWT_ALGORITHM")
-    @classmethod
-    def validate_local_jwt_algorithm(cls, value: str) -> str:
-        normalized = value.strip().upper()
-        if normalized != "HS256":
-            raise ValueError("LOCAL_JWT_ALGORITHM must currently be HS256.")
         return normalized
 
     @field_validator("CORS_ORIGINS")
