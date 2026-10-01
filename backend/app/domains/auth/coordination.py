@@ -11,7 +11,9 @@ from redis.exceptions import RedisError
 
 from app.core.redis import get_redis_client
 
-REFRESH_LOCK_TTL_SECONDS = 15
+# Keep the lock comfortably beyond the configured 10-second Weave request
+# timeout plus the short PostgreSQL phases on either side of the network call.
+REFRESH_LOCK_TTL_SECONDS = 30
 REFRESH_LOCK_WAIT_SECONDS = 3.0
 REFRESH_LOCK_POLL_SECONDS = 0.05
 
@@ -70,6 +72,6 @@ async def staff_refresh_lock(session_id: UUID):
                 owner,
             )
         except RedisError:
-            # The lock has a short TTL, so a failed best-effort release cannot
+            # The lock has a bounded TTL, so a failed best-effort release cannot
             # permanently block the session.
             pass
