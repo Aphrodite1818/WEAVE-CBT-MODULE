@@ -3,38 +3,61 @@
  * Keep scroll affordances visible without giving them desktop-browser bulk.
  */
 
-* {
+/*
+ * The document viewport is the primary page scroller. Explicitly reserve its
+ * vertical scrollbar so Chromium/Edge does not leave the page with no visible
+ * scroll affordance until an overlay scrollbar happens to appear.
+ */
+html {
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
-  scrollbar-color: rgb(var(--color-text-muted, 95 111 149) / .42) transparent;
+  scrollbar-color: rgb(var(--color-text-muted, 95 111 149) / .58) rgb(8 27 74 / .035);
 }
 
+/* Nested tables, drawers and editor surfaces keep the same compact treatment. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--color-text-muted, 95 111 149) / .48) transparent;
+}
+
+html::-webkit-scrollbar,
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
+  -webkit-appearance: none;
+}
+
+html::-webkit-scrollbar-track {
+  background: rgb(8 27 74 / .035);
 }
 
 *::-webkit-scrollbar-track {
   background: transparent;
 }
 
+html::-webkit-scrollbar-thumb,
 *::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: rgb(var(--color-text-muted, 95 111 149) / .38);
+  background: rgb(var(--color-text-muted, 95 111 149) / .52);
   background-clip: padding-box;
 }
 
+html::-webkit-scrollbar-thumb:hover,
 *::-webkit-scrollbar-thumb:hover {
-  background: rgb(var(--color-text-muted, 95 111 149) / .62);
+  background: rgb(var(--color-text-muted, 95 111 149) / .72);
   background-clip: padding-box;
 }
 
+html::-webkit-scrollbar-button,
 *::-webkit-scrollbar-button {
   width: 0;
   height: 0;
   display: none;
 }
 
+html::-webkit-scrollbar-corner,
 *::-webkit-scrollbar-corner {
   background: transparent;
 }
