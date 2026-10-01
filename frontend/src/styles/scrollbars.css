@@ -7,7 +7,7 @@
 /* Compact nested scroll areas such as tables and drawers. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgb(80 87 102 / .48) transparent;
+  scrollbar-color: rgb(214 208 211) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -22,12 +22,12 @@
 *::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: rgb(80 87 102 / .48);
+  background: rgb(214 208 211);
   background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: rgb(62 69 84 / .68);
+  background: rgb(214 208 211);
   background-clip: padding-box;
 }
 
@@ -96,23 +96,23 @@ body:has(.teacher-shell) .page-scrollbar {
   width: 7px;
   min-height: 56px;
   border-radius: 4px 0 0 4px;
-  background: rgb(54 60 74 / .82);
+  background: rgb(214 208 211);
   box-shadow: none;
   cursor: grab;
-  transition: width 120ms ease, background-color 120ms ease;
+  transition: width 120ms ease;
   will-change: transform;
 }
 
 .page-scrollbar:hover .page-scrollbar__thumb,
 .page-scrollbar:focus-visible .page-scrollbar__thumb {
   width: 8px;
-  background: rgb(62 69 84 / .90);
+  background: rgb(214 208 211);
 }
 
 .page-scrollbar__thumb:active {
   width: 8px;
   cursor: grabbing;
-  background: rgb(45 51 64 / .96);
+  background: rgb(214 208 211);
 }
 
 @media (pointer: coarse) {
