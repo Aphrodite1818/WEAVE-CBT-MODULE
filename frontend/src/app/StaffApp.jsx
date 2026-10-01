@@ -1,4 +1,5 @@
 import { ToastHost } from '../shared/ui/ToastHost'
+import { PageScrollbar } from '../shared/ui/PageScrollbar'
 import { useEffect } from 'react'
 import { AdminWorkspace } from '../features/admin/AdminWorkspace'
 import { StaffLoginPage } from '../features/auth/StaffLoginPage'
@@ -106,6 +107,7 @@ export default function StaffApp() {
           gateway={staffGateway}
         />
       )}
+      <PageScrollbar />
       <ToastHost />
     </div>
   )
