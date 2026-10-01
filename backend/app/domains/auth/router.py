@@ -150,7 +150,7 @@ async def get_staff_session(
     )
     return StaffSessionResponse(
         actor=LocalActorResponse.model_validate(context.actor),
-        access_token_expires_at=session.weave_access_token_expires_at,
+        cloud_access_token_expires_at=session.weave_access_token_expires_at,
         session_expires_at=session.expires_at,
         cloud_auth_state=session.weave_auth_state,
         cloud_access_available=cloud_access_available,
