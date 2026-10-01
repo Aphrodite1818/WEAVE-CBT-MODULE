@@ -1,6 +1,7 @@
 import { StudentSuspensionNotice } from '../features/student/StudentSuspensionNotice'
 import { StudentCompletedExamPage } from '../features/student/StudentCompletedExamPage'
 import { ToastHost } from '../shared/ui/ToastHost'
+import { PageScrollbar } from '../shared/ui/PageScrollbar'
 import { StudentLoginPage } from '../features/auth/StudentLoginPage'
 import { LandingPage } from '../features/landing/LandingPage'
 import { StudentWorkspace } from '../features/student/StudentWorkspace'
@@ -58,6 +59,7 @@ export default function StudentApp() {
         />
       )}
       {!completed && <StudentSuspensionNotice notice={studentSuspension} onDismiss={dismissStudentSuspension} />}
+      <PageScrollbar />
       <ToastHost />
     </div>
   )
