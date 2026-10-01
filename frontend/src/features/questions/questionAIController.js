@@ -138,6 +138,20 @@ export function createQuestionAIController({
     )
   }
 
+  async function updateDraftQuestions(draftId, questions) {
+    const draft = await draftStore.get(draftId)
+    if (!draft || draft.status !== 'review') {
+      throw new Error('AI question draft was not found.')
+    }
+    const updated = {
+      ...draft,
+      questions,
+      updated_at: new Date().toISOString(),
+    }
+    await draftStore.put(updated)
+    return updated
+  }
+
   async function regenerateDraft(
     draftId,
     questionIndex,
@@ -217,13 +231,17 @@ export function createQuestionAIController({
   }
 
   async function save(draftId, questions = null) {
-    const draft = await draftStore.get(draftId)
+    let draft = await draftStore.get(draftId)
     if (!draft || draft.status !== 'review') {
       throw new Error('AI question draft was not found.')
     }
+    if (questions !== null) {
+      draft = await updateDraftQuestions(draftId, questions)
+    }
+
     const result = await questionsApi.saveAIQuestionDrafts(draft.bank_id, {
       draft_id: draft.draft_id,
-      questions: questions || draft.questions,
+      questions: draft.questions,
     })
     // Keep the IndexedDB copy through every failure path. The CBT backend makes
     // draft_id persistence idempotent, so even a lost success response is safe
@@ -235,6 +253,7 @@ export function createQuestionAIController({
   return {
     generate,
     retryGeneration,
+    updateDraftQuestions,
     regenerateDraft,
     retryDraftRegeneration,
     regenerateStored,
