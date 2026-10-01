@@ -36,7 +36,7 @@ export function TeacherGenerationOptions({ count, setCount, difficulty, setDiffi
     setCount(5)
     setDifficulty('medium')
     setType('single_choice')
-    setVisuals('auto')
+    setVisuals('text_only')
   }
   return <div className="teacher-generation-options" ref={root} onBlur={(event) => {
     if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false)
