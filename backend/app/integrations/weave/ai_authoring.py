@@ -15,6 +15,7 @@ from app.integrations.weave.ai_authoring_schemas import (
 )
 from app.integrations.weave.exceptions import (
     WeaveContractError,
+    WeaveRequestRejectedError,
     WeaveUnavailableError,
 )
 
@@ -78,7 +79,7 @@ class WeaveAIQuestionAuthoringGateway:
         server_credential: SecretStr,
         actor_access_token: str,
     ) -> dict:
-        """Retry one ambiguous transport failure with exactly the same key."""
+        """Retry one ambiguous/retryable Cloud failure with exactly the same key."""
 
         for attempt in range(2):
             try:
@@ -93,7 +94,12 @@ class WeaveAIQuestionAuthoringGateway:
             except WeaveUnavailableError:
                 if attempt:
                     raise
-                await asyncio.sleep(0.2)
+            except WeaveRequestRejectedError as exc:
+                # Retry only transient upstream failures. Business/auth/quota
+                # rejections are terminal for this logical operation.
+                if attempt or exc.status_code not in {502, 503, 504}:
+                    raise
+            await asyncio.sleep(0.2)
         raise RuntimeError("Unreachable AI authoring retry state")
 
 

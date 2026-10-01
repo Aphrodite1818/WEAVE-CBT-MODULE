@@ -10,6 +10,7 @@ from app.domains.candidates import models as candidates_models  # noqa: F401
 from app.domains.exams import execution_models as exam_execution_models  # noqa: F401
 from app.domains.exams import models as exams_models  # noqa: F401
 from app.domains.media import models as media_models  # noqa: F401
+from app.domains.questions import ai_models as question_ai_models  # noqa: F401
 from app.domains.questions import models as questions_models  # noqa: F401
 from app.domains.results import models as results_models  # noqa: F401
 from app.domains.runtime import models as runtime_models  # noqa: F401

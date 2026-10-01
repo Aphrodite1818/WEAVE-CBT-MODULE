@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import json
 import logging
 from dataclasses import dataclass
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AcademicAuthorizationError, AcademicScopeError
@@ -18,6 +21,8 @@ from app.domains.media.models import MediaAsset
 from app.domains.media.repository import MediaRepository
 from app.domains.media.service import MediaService
 from app.domains.media.storage import local_media_storage
+from app.domains.questions.ai_models import QuestionAIImportBatch, QuestionAIImportItem
+from app.domains.questions.ai_repository import QuestionAIRepository
 from app.domains.questions.ai_schemas import (
     QuestionAIBulkSaveRequest,
     QuestionAIDraft,
@@ -27,6 +32,7 @@ from app.domains.questions.ai_schemas import (
     QuestionAIRegenerateResponse,
     QuestionAIRegenerateStoredRequest,
 )
+from app.domains.questions.exceptions import QuestionConflictError
 from app.domains.questions.models import Question, QuestionOption, QuestionType
 from app.domains.questions.repository import QuestionRepository
 from app.domains.questions.schemas import QuestionOptionCreate
@@ -207,6 +213,26 @@ class QuestionAIService:
             charge=response.charge.model_dump(mode="json"),
         )
 
+    @staticmethod
+    def _persistence_request_hash(
+        *,
+        bank_id: UUID,
+        payload: QuestionAIBulkSaveRequest,
+    ) -> str:
+        canonical = json.dumps(
+            {
+                "bank_id": str(bank_id),
+                "questions": [
+                    question.model_dump(mode="json", exclude_none=True)
+                    for question in payload.questions
+                ],
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        return hashlib.sha256(canonical).hexdigest()
+
     async def persist_reviewed_questions(
         self,
         db: AsyncSession,
@@ -220,6 +246,20 @@ class QuestionAIService:
                 "Only active school staff can persist generated questions"
             )
 
+        request_hash = self._persistence_request_hash(bank_id=bank_id, payload=payload)
+        existing_batch = await QuestionAIRepository.get_import_batch_by_draft_id(
+            db,
+            payload.draft_id,
+        )
+        if existing_batch is not None:
+            return await self._resolve_existing_import(
+                db,
+                actor=actor,
+                bank_id=bank_id,
+                request_hash=request_hash,
+                batch=existing_batch,
+            )
+
         bank = await QuestionRepository.get_bank_by_id(db, bank_id, lock=True)
         if bank is None:
             raise ValueError("Question bank does not exist")
@@ -231,10 +271,37 @@ class QuestionAIService:
             curriculum_subject_id=bank.curriculum_subject_id,
         )
 
+        batch = QuestionAIImportBatch(
+            draft_id=payload.draft_id,
+            bank_id=bank.id,
+            actor_id=actor.id,
+            request_hash=request_hash,
+        )
+        try:
+            await QuestionAIRepository.add_import_batch(db, batch)
+        except IntegrityError:
+            # A concurrent retry can win the unique draft_id race while this
+            # request waits on the question-bank row lock. Resolve the committed
+            # batch rather than inserting a duplicate set of questions.
+            await db.rollback()
+            existing_batch = await QuestionAIRepository.get_import_batch_by_draft_id(
+                db,
+                payload.draft_id,
+            )
+            if existing_batch is None:
+                raise
+            return await self._resolve_existing_import(
+                db,
+                actor=actor,
+                bank_id=bank_id,
+                request_hash=request_hash,
+                batch=existing_batch,
+            )
+
         created_storage_keys: list[str] = []
         created_questions: list[Question] = []
         try:
-            for draft in payload.questions:
+            for question_position, draft in enumerate(payload.questions, start=1):
                 question_image_id = await self._persist_draft_image(
                     db,
                     actor=actor,
@@ -298,6 +365,14 @@ class QuestionAIService:
                         )
                     ],
                 )
+                await QuestionAIRepository.add_import_item(
+                    db,
+                    QuestionAIImportItem(
+                        batch_id=batch.id,
+                        question_id=question.id,
+                        position=question_position,
+                    ),
+                )
                 created_questions.append(question)
 
             await db.commit()
@@ -313,6 +388,33 @@ class QuestionAIService:
                         storage_key,
                     )
             raise
+
+    @staticmethod
+    async def _resolve_existing_import(
+        db: AsyncSession,
+        *,
+        actor: LocalActor,
+        bank_id: UUID,
+        request_hash: str,
+        batch: QuestionAIImportBatch,
+    ) -> list[Question]:
+        if batch.actor_id != actor.id or batch.bank_id != bank_id:
+            raise AcademicAuthorizationError(
+                "AI draft does not belong to this question authoring context"
+            )
+        if batch.request_hash != request_hash:
+            raise QuestionConflictError(
+                "AI draft was already persisted with different reviewed questions"
+            )
+        questions = await QuestionAIRepository.list_questions_for_import_batch(
+            db,
+            batch.id,
+        )
+        if not questions:
+            raise QuestionConflictError(
+                "The previously persisted AI draft no longer contains questions"
+            )
+        return questions
 
     @staticmethod
     async def _resolve_bank_context(

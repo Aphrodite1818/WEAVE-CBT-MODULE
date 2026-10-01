@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { createQuestionAIController } from './questionAIController'
 
+const OPERATION_ID = '00000000-0000-0000-0000-000000000111'
+const OTHER_OPERATION_ID = '00000000-0000-0000-0000-000000000222'
+
 function memoryDraftStore() {
   const rows = new Map()
   return {
@@ -40,32 +43,44 @@ function generatedResponse(operationId) {
 }
 
 describe('question AI controller', () => {
-  it('reuses the supplied operation id for an uncertain generation retry', async () => {
+  it('persists the operation before generation and retries with the same id', async () => {
     const store = memoryDraftStore()
     const questionsApi = {
-      generateAIQuestionDrafts: vi.fn(async (_bankId, payload) => generatedResponse(payload.operation_id)),
+      generateAIQuestionDrafts: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('connection lost'))
+        .mockImplementationOnce(async (_bankId, payload) => generatedResponse(payload.operation_id)),
     }
     const controller = createQuestionAIController({
       questionsApi,
       draftStore: store,
-      createOperationId: () => 'new-operation',
+      createOperationId: () => OPERATION_ID,
     })
 
-    await controller.retryGeneration('bank-1', { generation_prompt: 'Cells', question_count: 1 }, 'same-operation')
+    await expect(
+      controller.generate('bank-1', { generation_prompt: 'Cells', question_count: 1 }),
+    ).rejects.toMatchObject({ operationId: OPERATION_ID })
 
-    expect(questionsApi.generateAIQuestionDrafts).toHaveBeenCalledWith(
-      'bank-1',
-      expect.objectContaining({ operation_id: 'same-operation' }),
-    )
-    expect(store.rows.has('same-operation')).toBe(true)
+    expect(store.rows.get(OPERATION_ID)).toMatchObject({
+      status: 'generating',
+      generation_operation_id: OPERATION_ID,
+    })
+
+    const recovered = await controller.retryGeneration(OPERATION_ID)
+    expect(recovered.status).toBe('review')
+    expect(questionsApi.generateAIQuestionDrafts).toHaveBeenCalledTimes(2)
+    for (const call of questionsApi.generateAIQuestionDrafts.mock.calls) {
+      expect(call[1].operation_id).toBe(OPERATION_ID)
+    }
   })
 
-  it('keeps the IndexedDB draft when permanent save fails', async () => {
+  it('keeps the IndexedDB review draft when permanent save fails', async () => {
     const store = memoryDraftStore()
     await store.put({
-      draft_id: 'draft-1',
+      draft_id: OPERATION_ID,
       bank_id: 'bank-1',
-      questions: generatedResponse('draft-1').questions,
+      status: 'review',
+      questions: generatedResponse(OPERATION_ID).questions,
     })
     const questionsApi = {
       saveAIQuestionDrafts: vi.fn(async () => {
@@ -74,23 +89,69 @@ describe('question AI controller', () => {
     }
     const controller = createQuestionAIController({ questionsApi, draftStore: store })
 
-    await expect(controller.save('draft-1')).rejects.toThrow('network lost')
-    expect(store.rows.has('draft-1')).toBe(true)
+    await expect(controller.save(OPERATION_ID)).rejects.toThrow('network lost')
+    expect(store.rows.has(OPERATION_ID)).toBe(true)
   })
 
   it('clears the IndexedDB draft only after CBT confirms persistence', async () => {
     const store = memoryDraftStore()
     await store.put({
-      draft_id: 'draft-1',
+      draft_id: OPERATION_ID,
       bank_id: 'bank-1',
-      questions: generatedResponse('draft-1').questions,
+      status: 'review',
+      questions: generatedResponse(OPERATION_ID).questions,
     })
     const questionsApi = {
-      saveAIQuestionDrafts: vi.fn(async () => ({ draft_id: 'draft-1', questions: [] })),
+      saveAIQuestionDrafts: vi.fn(async () => ({
+        draft_id: OPERATION_ID,
+        questions: [],
+      })),
     }
     const controller = createQuestionAIController({ questionsApi, draftStore: store })
 
-    await controller.save('draft-1')
-    expect(store.rows.has('draft-1')).toBe(false)
+    await controller.save(OPERATION_ID)
+    expect(store.rows.has(OPERATION_ID)).toBe(false)
+  })
+
+  it('preserves a failed regeneration operation so it can reuse the same id', async () => {
+    const store = memoryDraftStore()
+    await store.put({
+      draft_id: OPERATION_ID,
+      bank_id: 'bank-1',
+      status: 'review',
+      questions: generatedResponse(OPERATION_ID).questions,
+      regeneration_charges: [],
+    })
+    const questionsApi = {
+      regenerateAIQuestionDraft: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('timeout'))
+        .mockResolvedValueOnce({
+          operation_id: OTHER_OPERATION_ID,
+          question: {
+            ...generatedResponse(OPERATION_ID).questions[0],
+            prompt: 'Regenerated?',
+          },
+          repaired: false,
+          charge: generatedResponse(OPERATION_ID).charge,
+        }),
+    }
+    const controller = createQuestionAIController({
+      questionsApi,
+      draftStore: store,
+      createOperationId: () => OTHER_OPERATION_ID,
+    })
+
+    await expect(
+      controller.regenerateDraft(OPERATION_ID, 0, { instruction: 'Make it harder' }),
+    ).rejects.toMatchObject({ operationId: OTHER_OPERATION_ID })
+
+    expect(store.rows.get(OPERATION_ID).pending_regeneration.operation_id).toBe(OTHER_OPERATION_ID)
+    const recovered = await controller.retryDraftRegeneration(OPERATION_ID)
+    expect(recovered.questions[0].prompt).toBe('Regenerated?')
+    expect(questionsApi.regenerateAIQuestionDraft).toHaveBeenCalledTimes(2)
+    for (const call of questionsApi.regenerateAIQuestionDraft.mock.calls) {
+      expect(call[1].operation_id).toBe(OTHER_OPERATION_ID)
+    }
   })
 })
