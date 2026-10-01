@@ -1,42 +1,26 @@
 /*
  * Shared scrollbar treatment for all CBT frontends.
- * Keep scroll affordances visible without giving them desktop-browser bulk.
+ * Nested scroll surfaces use compact native scrollbars. The document viewport
+ * uses a frontend-owned scrollbar so it remains visible even when the browser
+ * or operating system auto-hides native overlay scrollbars.
  */
 
-/*
- * The document viewport is the primary page scroller. Explicitly reserve its
- * vertical scrollbar so Chromium/Edge does not leave the page with no visible
- * scroll affordance until an overlay scrollbar happens to appear.
- */
-html {
-  overflow-y: scroll;
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: rgb(var(--color-text-muted, 95 111 149) / .58) rgb(8 27 74 / .035);
-}
-
-/* Nested tables, drawers and editor surfaces keep the same compact treatment. */
+/* Compact native scrollbars for tables, drawers, editors and other nested areas. */
 * {
   scrollbar-width: thin;
   scrollbar-color: rgb(var(--color-text-muted, 95 111 149) / .48) transparent;
 }
 
-html::-webkit-scrollbar,
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
   -webkit-appearance: none;
 }
 
-html::-webkit-scrollbar-track {
-  background: rgb(8 27 74 / .035);
-}
-
 *::-webkit-scrollbar-track {
   background: transparent;
 }
 
-html::-webkit-scrollbar-thumb,
 *::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
@@ -44,20 +28,89 @@ html::-webkit-scrollbar-thumb,
   background-clip: padding-box;
 }
 
-html::-webkit-scrollbar-thumb:hover,
 *::-webkit-scrollbar-thumb:hover {
   background: rgb(var(--color-text-muted, 95 111 149) / .72);
   background-clip: padding-box;
 }
 
-html::-webkit-scrollbar-button,
 *::-webkit-scrollbar-button {
   width: 0;
   height: 0;
   display: none;
 }
 
-html::-webkit-scrollbar-corner,
 *::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+/*
+ * Hide only the browser-owned document scrollbar. PageScrollbar renders the
+ * visible replacement at the extreme right without taking layout width.
+ */
+html,
+body {
+  scrollbar-width: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* Persistent page scrollbar, modelled after a slim desktop browser rail. */
+.page-scrollbar {
+  position: fixed;
+  top: 4px;
+  right: 2px;
+  bottom: 4px;
+  z-index: 10000;
+  width: 7px;
+  border-radius: 999px;
+  background: rgb(var(--color-text-muted, 95 111 149) / .10);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, background-color 140ms ease;
+  touch-action: none;
+}
+
+.page-scrollbar.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.page-scrollbar:hover,
+.page-scrollbar:focus-visible {
+  background: rgb(var(--color-text-muted, 95 111 149) / .16);
+  outline: none;
+}
+
+.page-scrollbar__thumb {
+  position: absolute;
+  top: 0;
+  left: 1px;
+  right: 1px;
+  min-height: 44px;
+  border-radius: 999px;
+  background: rgb(var(--color-text-muted, 95 111 149) / .58);
+  box-shadow: 0 0 0 1px rgb(var(--color-surface, 255 255 255) / .22);
+  cursor: grab;
+  transition: background-color 140ms ease;
+  will-change: transform;
+}
+
+.page-scrollbar__thumb:hover {
+  background: rgb(var(--color-text-muted, 95 111 149) / .76);
+}
+
+.page-scrollbar__thumb:active {
+  cursor: grabbing;
+  background: rgb(var(--color-text-muted, 95 111 149) / .88);
+}
+
+@media (pointer: coarse) {
+  .page-scrollbar {
+    right: 1px;
+    width: 6px;
+  }
 }
