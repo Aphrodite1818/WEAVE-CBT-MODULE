@@ -1,4 +1,5 @@
 import * as academics from './academics'
+import * as ai from './ai'
 import * as attempts from './attempts'
 import * as auth from './auth'
 import * as branding from './branding'
@@ -14,6 +15,7 @@ import * as timetable from './timetable'
 
 export const weaveApi = {
   academics,
+  ai,
   attempts,
   auth,
   branding,
