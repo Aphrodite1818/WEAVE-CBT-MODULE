@@ -93,6 +93,35 @@ describe('question AI controller', () => {
     expect(store.rows.has(OPERATION_ID)).toBe(true)
   })
 
+  it('persists reviewed edits before save so a lost response can replay exactly', async () => {
+    const store = memoryDraftStore()
+    await store.put({
+      draft_id: OPERATION_ID,
+      bank_id: 'bank-1',
+      status: 'review',
+      questions: generatedResponse(OPERATION_ID).questions,
+    })
+    const editedQuestions = [
+      {
+        ...generatedResponse(OPERATION_ID).questions[0],
+        prompt: 'Edited question?',
+      },
+    ]
+    const questionsApi = {
+      saveAIQuestionDrafts: vi.fn(async () => {
+        throw new Error('response lost')
+      }),
+    }
+    const controller = createQuestionAIController({ questionsApi, draftStore: store })
+
+    await expect(controller.save(OPERATION_ID, editedQuestions)).rejects.toThrow('response lost')
+    expect(store.rows.get(OPERATION_ID).questions).toEqual(editedQuestions)
+    expect(questionsApi.saveAIQuestionDrafts).toHaveBeenCalledWith('bank-1', {
+      draft_id: OPERATION_ID,
+      questions: editedQuestions,
+    })
+  })
+
   it('clears the IndexedDB draft only after CBT confirms persistence', async () => {
     const store = memoryDraftStore()
     await store.put({
