@@ -19,7 +19,7 @@ export function TeacherAIComposer({ bank, state, dispatch, gateway, onClose }) {
   const [count, setCount] = useState(5)
   const [type, setType] = useState('single_choice')
   const [difficulty, setDifficulty] = useState('medium')
-  const [visuals, setVisuals] = useState('auto')
+  const [visuals, setVisuals] = useState('text_only')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [drafts, setDrafts] = useState([])
