@@ -6,6 +6,12 @@ import { TeacherGenerationStatus } from './TeacherGenerationStatus'
 import { TeacherAIQuota } from './TeacherAIQuota'
 import { useTeacherAIController, useTeacherAIQuota } from './teacherAI'
 
+export function handlePromptKeyDown(event, disabled = false) {
+  if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing) return
+  event.preventDefault()
+  if (!disabled) event.currentTarget.form?.requestSubmit()
+}
+
 export function TeacherAIComposer({ bank, state, dispatch, gateway, onClose }) {
   const controller = useTeacherAIController(gateway, state.session?.actor?.id)
   const quota = useTeacherAIQuota(gateway.ai)
@@ -92,6 +98,15 @@ export function TeacherAIComposer({ bank, state, dispatch, gateway, onClose }) {
       if (mounted.current) { setBusy(false); void quota.refresh() }
     }
   }
+  const generationDisabled = busy
+    || drafts.some((draft) => draft.status === 'generating')
+    || !bank
+    || !controller
+    || !prompt.trim()
+    || quota.loading
+    || !quota.quota
+    || quota.quota.total_available_credits === 0
+
   return <aside className="teacher-ai-composer" aria-label="Question generation">
     <header className="teacher-ai-composer__heading"><RiFileList3Line size={18} /><h2>Generate questions</h2>{onClose && <button type="button" className="teacher-ai-icon-button" aria-label="Close question generation" onClick={onClose}><RiCloseLine size={19} /></button>}</header>
     <div className="teacher-ai-bank"><span>Question bank</span><strong>{bank?.name || 'Choose a question bank in the editor'}</strong></div>
@@ -107,8 +122,8 @@ export function TeacherAIComposer({ bank, state, dispatch, gateway, onClose }) {
     </div>
     <div className="teacher-ai-bottom">
     <form className="teacher-ai-prompt" onSubmit={generate}>
-      <textarea ref={promptInput} aria-label="Describe questions to generate" placeholder="e.g. Questions on fractions using everyday situations…" value={prompt} maxLength={10000} required disabled={busy} onChange={(event) => setPrompt(event.target.value)} rows={3} />
-      <div className="teacher-ai-prompt__actions"><TeacherGenerationOptions count={count} setCount={setCount} difficulty={difficulty} setDifficulty={setDifficulty} type={type} setType={setType} visuals={visuals} setVisuals={setVisuals} disabled={busy} onOpen={() => { if (creditsDetails.current) creditsDetails.current.open = false }} /><button className="teacher-ai-send" type="submit" aria-label="Generate questions" title={busy ? "Generating questions" : "Generate questions"} disabled={busy || drafts.some((draft) => draft.status === 'generating') || !bank || !controller || !prompt.trim() || quota.loading || !quota.quota || quota.quota.total_available_credits === 0}><RiCornerDownLeftLine size={19} /></button></div>
+      <textarea ref={promptInput} aria-label="Describe questions to generate" placeholder="e.g. Questions on fractions using everyday situations…" value={prompt} maxLength={10000} required disabled={busy} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => handlePromptKeyDown(event, generationDisabled)} rows={3} />
+      <div className="teacher-ai-prompt__actions"><TeacherGenerationOptions count={count} setCount={setCount} difficulty={difficulty} setDifficulty={setDifficulty} type={type} setType={setType} visuals={visuals} setVisuals={setVisuals} disabled={busy} onOpen={() => { if (creditsDetails.current) creditsDetails.current.open = false }} /><button className="teacher-ai-send" type="submit" aria-label="Generate questions" title={busy ? "Generating questions" : "Generate questions"} disabled={generationDisabled}><RiCornerDownLeftLine size={19} /></button></div>
     </form>
     <div className="teacher-ai-footer">
     <details ref={creditsDetails} className="teacher-ai-credit-details"><summary aria-label={quota.quota ? `${quota.quota.total_available_credits} AI credits available` : 'AI credit usage'}>
