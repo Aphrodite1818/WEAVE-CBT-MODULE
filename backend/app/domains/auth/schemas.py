@@ -55,7 +55,7 @@ class StaffSessionResponse(BaseModel):
     """Current authoritative local session status for the staff frontend."""
 
     actor: LocalActorResponse
-    access_token_expires_at: datetime | None
+    cloud_access_token_expires_at: datetime | None
     session_expires_at: datetime
     cloud_auth_state: CloudAuthState
     cloud_access_available: bool
