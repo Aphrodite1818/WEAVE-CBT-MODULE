@@ -6,6 +6,10 @@ import { QuestionPreview } from './QuestionBuilder'
 import { useTeacherAIController, useTeacherAIQuota, validateAIQuestion } from './teacherAI'
 import './teacher-ai.css'
 
+export function scrollRegenerationFormIntoView(element) {
+  element?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+}
+
 export function TeacherAIReviewPage({ state, dispatch, teacherData, gateway }) {
   const controller = useTeacherAIController(gateway, state.session?.actor?.id)
   const quota = useTeacherAIQuota(gateway.ai, { includeRequests: false })
@@ -14,6 +18,7 @@ export function TeacherAIReviewPage({ state, dispatch, teacherData, gateway }) {
   const [activeIndex, setActiveIndex] = useState(0)
   const [previewOpen, setPreviewOpen] = useState(false)
   const questionHeading = useRef(null)
+  const regenerationForm = useRef(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
@@ -27,6 +32,11 @@ export function TeacherAIReviewPage({ state, dispatch, teacherData, gateway }) {
   useEffect(() => {
     questionHeading.current?.focus()
   }, [currentIndex, previewOpen])
+  useEffect(() => {
+    if (regenerating === null) return undefined
+    const frame = window.requestAnimationFrame(() => scrollRegenerationFormIntoView(regenerationForm.current))
+    return () => window.cancelAnimationFrame(frame)
+  }, [regenerating])
   useEffect(() => {
     let active = true
     if (!controller) return undefined
@@ -111,7 +121,7 @@ export function TeacherAIReviewPage({ state, dispatch, teacherData, gateway }) {
             <ol className="teacher-ai-answers">{question.options.map((option, position) => <li key={position} className={option.is_correct ? 'is-correct' : ''}><span>{String.fromCharCode(65 + position)}</span><div><FormattedText text={option.text || ''} /><DraftImage image={option.image} /></div>{option.is_correct && <span className="teacher-ai-answer-correct"><RiCheckLine size={16} /> Correct</span>}</li>)}</ol>
           </>}
           {deleting === index && <div className="teacher-ai-inline-confirm"><p>Remove this question from the draft?</p><button className="teacher-secondary-action" type="button" disabled={locked} onClick={() => setDeleting(null)}>Keep question</button><button className="teacher-secondary-action" type="button" disabled={locked} onClick={() => update(draft.questions.filter((_, position) => position !== index))}>Remove question</button></div>}
-          {regenerating === index && !draft.pending_regeneration && <form className="teacher-ai-refine" onSubmit={(event) => { event.preventDefault(); void regenerate(index) }}><label>What should change?<textarea value={feedback} required maxLength={10000} disabled={locked} onChange={(event) => setFeedback(event.target.value)} placeholder="e.g. Use a real-life example and make the distractors less obvious." /></label>{quota.error && <p role="alert">{quota.error} <button className="text-button" type="button" disabled={quota.loading} onClick={() => void quota.refresh()}>Retry credit check</button></p>}
+          {regenerating === index && !draft.pending_regeneration && <form ref={regenerationForm} className="teacher-ai-refine" onSubmit={(event) => { event.preventDefault(); void regenerate(index) }}><label>What should change?<textarea value={feedback} required maxLength={10000} disabled={locked} onChange={(event) => setFeedback(event.target.value)} placeholder="e.g. Use a real-life example and make the distractors less obvious." /></label>{quota.error && <p role="alert">{quota.error} <button className="text-button" type="button" disabled={quota.loading} onClick={() => void quota.refresh()}>Retry credit check</button></p>}
             {!quota.loading && quota.quota?.total_available_credits === 0 && <p role="status">No credits available for regeneration.</p>}
             <div><small>{quota.loading ? 'Checking available credits...' : 'Regeneration uses AI credits.'}</small><button className="text-button" type="button" disabled={locked} onClick={() => setRegenerating(null)}>Cancel</button><button className="teacher-primary-action" type="submit" disabled={locked || !feedback.trim() || quota.loading || !quota.quota?.total_available_credits}>Regenerate</button></div></form>}
         </article>})}
