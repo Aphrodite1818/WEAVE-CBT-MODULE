@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
-const MIN_THUMB_HEIGHT = 52
-const MAX_THUMB_HEIGHT = 86
+const MIN_THUMB_HEIGHT = 48
+const MAX_THUMB_HEIGHT = 72
 
 export function PageScrollbar() {
   const trackRef = useRef(null)
