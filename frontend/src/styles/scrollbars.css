@@ -1,20 +1,18 @@
 /*
  * Shared scrollbar treatment for all CBT frontends.
- * Nested scroll surfaces use compact native scrollbars. The document viewport
- * uses a frontend-owned scrollbar so it remains visible even when the browser
- * or operating system auto-hides native overlay scrollbars.
+ * Nested scroll surfaces stay compact. The document viewport uses an app-owned
+ * scrollbar so its appearance never depends on the browser or operating system.
  */
 
-/* Compact native scrollbars for tables, drawers, editors and other nested areas. */
+/* Compact nested scroll areas such as tables and drawers. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgb(var(--color-text-muted, 95 111 149) / .48) transparent;
+  scrollbar-color: rgb(var(--color-text-muted, 95 111 149) / .42) transparent;
 }
 
 *::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-  -webkit-appearance: none;
+  width: 7px;
+  height: 7px;
 }
 
 *::-webkit-scrollbar-track {
@@ -24,12 +22,12 @@
 *::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: rgb(var(--color-text-muted, 95 111 149) / .52);
+  background: rgb(var(--color-text-muted, 95 111 149) / .44);
   background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: rgb(var(--color-text-muted, 95 111 149) / .72);
+  background: rgb(var(--color-text-muted, 95 111 149) / .66);
   background-clip: padding-box;
 }
 
@@ -43,10 +41,7 @@
   background: transparent;
 }
 
-/*
- * Hide only the browser-owned document scrollbar. PageScrollbar renders the
- * visible replacement at the extreme right without taking layout width.
- */
+/* The browser-owned document scrollbar is intentionally hidden. */
 html,
 body {
   scrollbar-width: none;
@@ -58,20 +53,33 @@ body::-webkit-scrollbar {
   height: 0;
 }
 
-/* Persistent page scrollbar, modelled after a slim desktop browser rail. */
+/* -------------------------------------------------------------------------- */
+/* Weave page scrollbar                                                       */
+/* -------------------------------------------------------------------------- */
+
 .page-scrollbar {
   position: fixed;
-  top: 4px;
-  right: 2px;
-  bottom: 4px;
+  top: 12px;
+  right: 3px;
+  bottom: 12px;
   z-index: 10000;
-  width: 7px;
-  border-radius: 999px;
-  background: rgb(var(--color-text-muted, 95 111 149) / .10);
+  width: 10px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 140ms ease, background-color 140ms ease;
   touch-action: none;
+  transition: opacity 150ms ease;
+}
+
+.page-scrollbar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  border-radius: 999px;
+  background: rgb(var(--color-primary, 196 18 62) / .13);
+  transform: translateX(-50%);
 }
 
 .page-scrollbar.is-visible {
@@ -79,38 +87,59 @@ body::-webkit-scrollbar {
   pointer-events: auto;
 }
 
-.page-scrollbar:hover,
 .page-scrollbar:focus-visible {
-  background: rgb(var(--color-text-muted, 95 111 149) / .16);
   outline: none;
 }
 
 .page-scrollbar__thumb {
   position: absolute;
   top: 0;
-  left: 1px;
-  right: 1px;
-  min-height: 44px;
+  left: 50%;
+  width: 4px;
+  min-height: 52px;
+  max-height: 86px;
   border-radius: 999px;
-  background: rgb(var(--color-text-muted, 95 111 149) / .58);
-  box-shadow: 0 0 0 1px rgb(var(--color-surface, 255 255 255) / .22);
+  background:
+    linear-gradient(
+      180deg,
+      rgb(var(--color-primary, 196 18 62) / .78),
+      rgb(var(--color-primary, 196 18 62) / .58)
+    );
+  box-shadow:
+    0 2px 8px rgb(var(--color-primary, 196 18 62) / .18),
+    0 0 0 1px rgb(var(--color-surface, 255 255 255) / .58);
   cursor: grab;
-  transition: background-color 140ms ease;
+  transform-origin: center;
+  transition: width 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
   will-change: transform;
 }
 
-.page-scrollbar__thumb:hover {
-  background: rgb(var(--color-text-muted, 95 111 149) / .76);
+.page-scrollbar:hover .page-scrollbar__thumb,
+.page-scrollbar:focus-visible .page-scrollbar__thumb {
+  width: 6px;
+  box-shadow:
+    0 3px 10px rgb(var(--color-primary, 196 18 62) / .24),
+    0 0 0 1px rgb(var(--color-surface, 255 255 255) / .68);
 }
 
 .page-scrollbar__thumb:active {
+  width: 6px;
   cursor: grabbing;
-  background: rgb(var(--color-text-muted, 95 111 149) / .88);
+  background:
+    linear-gradient(
+      180deg,
+      rgb(var(--color-primary, 196 18 62) / .94),
+      rgb(var(--color-primary, 196 18 62) / .76)
+    );
 }
 
 @media (pointer: coarse) {
   .page-scrollbar {
     right: 1px;
-    width: 6px;
+    width: 8px;
+  }
+
+  .page-scrollbar__thumb {
+    width: 4px;
   }
 }
