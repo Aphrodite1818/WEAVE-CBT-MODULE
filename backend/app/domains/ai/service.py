@@ -55,8 +55,16 @@ class CBTAIManagementService:
             ) from exc
         return installation.server_credential, actor_access_token
 
-    async def get_quota(self, db: AsyncSession, *, session_id: UUID) -> AIQuotaStatusResponse:
-        server_credential, actor_token = await self._cloud_credentials(db, session_id=session_id)
+    async def get_quota(
+        self,
+        db: AsyncSession,
+        *,
+        session_id: UUID,
+    ) -> AIQuotaStatusResponse:
+        server_credential, actor_token = await self._cloud_credentials(
+            db,
+            session_id=session_id,
+        )
         return await self.gateway.get_quota(
             server_credential=server_credential,
             actor_access_token=actor_token,
@@ -69,7 +77,10 @@ class CBTAIManagementService:
         session_id: UUID,
         payload: AIQuotaRequestCreate,
     ) -> AIQuotaRequestResponse:
-        server_credential, actor_token = await self._cloud_credentials(db, session_id=session_id)
+        server_credential, actor_token = await self._cloud_credentials(
+            db,
+            session_id=session_id,
+        )
         return await self.gateway.request_credits(
             payload=payload,
             server_credential=server_credential,
@@ -84,7 +95,10 @@ class CBTAIManagementService:
         offset: int,
         limit: int,
     ) -> AIQuotaRequestListResponse:
-        server_credential, actor_token = await self._cloud_credentials(db, session_id=session_id)
+        server_credential, actor_token = await self._cloud_credentials(
+            db,
+            session_id=session_id,
+        )
         return await self.gateway.list_my_requests(
             offset=offset,
             limit=limit,
@@ -99,7 +113,10 @@ class CBTAIManagementService:
         session_id: UUID,
         request_id: UUID,
     ) -> AIQuotaRequestResponse:
-        server_credential, actor_token = await self._cloud_credentials(db, session_id=session_id)
+        server_credential, actor_token = await self._cloud_credentials(
+            db,
+            session_id=session_id,
+        )
         return await self.gateway.cancel_request(
             request_id=request_id,
             server_credential=server_credential,
@@ -112,7 +129,10 @@ class CBTAIManagementService:
         *,
         session_id: UUID,
     ) -> AITenantQuotaSummaryResponse:
-        server_credential, actor_token = await self._cloud_credentials(db, session_id=session_id)
+        server_credential, actor_token = await self._cloud_credentials(
+            db,
+            session_id=session_id,
+        )
         return await self.gateway.get_admin_summary(
             server_credential=server_credential,
             actor_access_token=actor_token,
@@ -124,7 +144,10 @@ class CBTAIManagementService:
         *,
         session_id: UUID,
     ) -> AIActorQuotaBalanceListResponse:
-        server_credential, actor_token = await self._cloud_credentials(db, session_id=session_id)
+        server_credential, actor_token = await self._cloud_credentials(
+            db,
+            session_id=session_id,
+        )
         return await self.gateway.list_actor_balances(
             server_credential=server_credential,
             actor_access_token=actor_token,
@@ -139,7 +162,10 @@ class CBTAIManagementService:
         offset: int,
         limit: int,
     ) -> AIQuotaRequestListResponse:
-        server_credential, actor_token = await self._cloud_credentials(db, session_id=session_id)
+        server_credential, actor_token = await self._cloud_credentials(
+            db,
+            session_id=session_id,
+        )
         return await self.gateway.list_admin_requests(
             status=status,
             offset=offset,
@@ -156,7 +182,10 @@ class CBTAIManagementService:
         request_id: UUID,
         payload: AIQuotaRequestApprove,
     ) -> AIQuotaRequestResponse:
-        server_credential, actor_token = await self._cloud_credentials(db, session_id=session_id)
+        server_credential, actor_token = await self._cloud_credentials(
+            db,
+            session_id=session_id,
+        )
         return await self.gateway.approve_request(
             request_id=request_id,
             payload=payload,
@@ -172,7 +201,10 @@ class CBTAIManagementService:
         request_id: UUID,
         payload: AIQuotaRequestReject,
     ) -> AIQuotaRequestResponse:
-        server_credential, actor_token = await self._cloud_credentials(db, session_id=session_id)
+        server_credential, actor_token = await self._cloud_credentials(
+            db,
+            session_id=session_id,
+        )
         return await self.gateway.reject_request(
             request_id=request_id,
             payload=payload,
@@ -187,7 +219,10 @@ class CBTAIManagementService:
         session_id: UUID,
         payload: AICreditAllocationCreate,
     ) -> AICreditAllocationResponse:
-        server_credential, actor_token = await self._cloud_credentials(db, session_id=session_id)
+        server_credential, actor_token = await self._cloud_credentials(
+            db,
+            session_id=session_id,
+        )
         return await self.gateway.allocate_credits(
             payload=payload,
             server_credential=server_credential,
@@ -202,7 +237,10 @@ class CBTAIManagementService:
         offset: int,
         limit: int,
     ) -> AICreditAllocationListResponse:
-        server_credential, actor_token = await self._cloud_credentials(db, session_id=session_id)
+        server_credential, actor_token = await self._cloud_credentials(
+            db,
+            session_id=session_id,
+        )
         return await self.gateway.list_allocations(
             offset=offset,
             limit=limit,
@@ -217,7 +255,10 @@ class CBTAIManagementService:
         session_id: UUID,
         payload: AIQuotaTopUpRequest,
     ) -> AIQuotaPurchaseQuote:
-        server_credential, actor_token = await self._cloud_credentials(db, session_id=session_id)
+        server_credential, actor_token = await self._cloud_credentials(
+            db,
+            session_id=session_id,
+        )
         return await self.gateway.quote_purchase(
             payload=payload,
             server_credential=server_credential,
@@ -231,7 +272,10 @@ class CBTAIManagementService:
         session_id: UUID,
         payload: AIQuotaTopUpRequest,
     ) -> AIQuotaPurchaseCheckoutResponse:
-        server_credential, actor_token = await self._cloud_credentials(db, session_id=session_id)
+        server_credential, actor_token = await self._cloud_credentials(
+            db,
+            session_id=session_id,
+        )
         return await self.gateway.checkout_purchase(
             payload=payload,
             server_credential=server_credential,
@@ -245,7 +289,10 @@ class CBTAIManagementService:
         session_id: UUID,
         reference: str,
     ) -> AIQuotaPurchaseResponse:
-        server_credential, actor_token = await self._cloud_credentials(db, session_id=session_id)
+        server_credential, actor_token = await self._cloud_credentials(
+            db,
+            session_id=session_id,
+        )
         return await self.gateway.verify_purchase(
             reference=reference,
             server_credential=server_credential,
@@ -261,7 +308,10 @@ class CBTAIManagementService:
         offset: int,
         limit: int,
     ) -> AIQuotaPurchaseListResponse:
-        server_credential, actor_token = await self._cloud_credentials(db, session_id=session_id)
+        server_credential, actor_token = await self._cloud_credentials(
+            db,
+            session_id=session_id,
+        )
         return await self.gateway.list_purchases(
             status=status,
             offset=offset,
@@ -277,7 +327,10 @@ class CBTAIManagementService:
         session_id: UUID,
         purchase_id: UUID,
     ) -> AIQuotaPurchaseResponse:
-        server_credential, actor_token = await self._cloud_credentials(db, session_id=session_id)
+        server_credential, actor_token = await self._cloud_credentials(
+            db,
+            session_id=session_id,
+        )
         return await self.gateway.get_purchase(
             purchase_id=purchase_id,
             server_credential=server_credential,
