@@ -7,7 +7,8 @@ from uuid import UUID
 from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domains.auth.service import LocalAuthService, LocalSessionAuthenticationError
+from app.domains.auth.cloud_access import get_or_repair_weave_actor_access_token
+from app.domains.auth.service import LocalSessionAuthenticationError
 from app.domains.node.identity_store import node_identity_store
 from app.integrations.weave.ai import WeaveAIGateway, weave_ai_gateway
 from app.integrations.weave.ai_schemas import (
@@ -28,7 +29,7 @@ from app.integrations.weave.ai_schemas import (
     AIQuotaTopUpRequest,
     AITenantQuotaSummaryResponse,
 )
-from app.integrations.weave.exceptions import WeaveUnavailableError
+from app.integrations.weave.exceptions import WeaveRequestRejectedError
 
 
 class CBTAIManagementService:
@@ -45,13 +46,14 @@ class CBTAIManagementService:
     ) -> tuple[SecretStr, str]:
         installation = node_identity_store.load()
         try:
-            actor_access_token = await LocalAuthService.get_weave_actor_access_token(
+            actor_access_token = await get_or_repair_weave_actor_access_token(
                 db,
                 session_id=session_id,
             )
         except LocalSessionAuthenticationError as exc:
-            raise WeaveUnavailableError(
-                "Weave actor authorization requires a synchronized staff session."
+            raise WeaveRequestRejectedError(
+                status_code=401,
+                detail="Staff session requires reauthentication.",
             ) from exc
         return installation.server_credential, actor_access_token
 
