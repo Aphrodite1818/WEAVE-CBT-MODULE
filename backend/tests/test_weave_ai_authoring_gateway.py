@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import SecretStr
 
-from app.integrations.weave.ai_authoring import WeaveAIQuestionAuthoringGateway
+from app.integrations.weave.ai_authoring import (
+    AI_AUTHORING_REQUEST_TIMEOUT_SECONDS,
+    WeaveAIQuestionAuthoringGateway,
+)
 from app.integrations.weave.ai_authoring_schemas import AIGenerateQuestionsRequest
 from app.integrations.weave.exceptions import (
     WeaveRequestRejectedError,
@@ -67,6 +70,43 @@ async def test_ai_authoring_transport_retry_reuses_same_idempotency_key() -> Non
     assert client.request_actor_authenticated.await_count == 2
     for call in client.request_actor_authenticated.await_args_list:
         assert call.kwargs["headers"] == {"Idempotency-Key": "operation-123"}
+        assert call.kwargs["timeout_seconds"] == AI_AUTHORING_REQUEST_TIMEOUT_SECONDS
+
+
+@pytest.mark.asyncio
+async def test_ai_authoring_waits_for_in_progress_after_ambiguous_timeout() -> None:
+    client = AsyncMock()
+    client.request_actor_authenticated.side_effect = [
+        WeaveUnavailableError("timeout"),
+        WeaveRequestRejectedError(
+            status_code=409,
+            detail="This AI request is already being processed.",
+            payload={"code": "AI_REQUEST_IN_PROGRESS", "retryable": True},
+        ),
+        _success_payload(),
+    ]
+    gateway = WeaveAIQuestionAuthoringGateway(
+        gateway=type("Gateway", (), {"client": client})(),
+        in_progress_poll_interval_seconds=0.01,
+        in_progress_max_wait_seconds=1.0,
+    )
+
+    sleep = AsyncMock()
+    with patch("app.integrations.weave.ai_authoring.asyncio.sleep", sleep):
+        result = await gateway.generate_questions(
+            payload=_request(),
+            idempotency_key="operation-in-progress",
+            server_credential=SecretStr("server-secret"),
+            actor_access_token="actor-token",
+        )
+
+    assert result.charge.credits_charged == 1
+    assert client.request_actor_authenticated.await_count == 3
+    assert sleep.await_count == 2
+    assert {
+        call.kwargs["headers"]["Idempotency-Key"]
+        for call in client.request_actor_authenticated.await_args_list
+    } == {"operation-in-progress"}
 
 
 @pytest.mark.asyncio

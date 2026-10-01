@@ -19,12 +19,29 @@ from app.integrations.weave.exceptions import (
     WeaveUnavailableError,
 )
 
+AI_AUTHORING_REQUEST_TIMEOUT_SECONDS = 120.0
+AI_AUTHORING_IN_PROGRESS_POLL_INTERVAL_SECONDS = 1.0
+AI_AUTHORING_IN_PROGRESS_MAX_WAIT_SECONDS = 120.0
+AI_AUTHORING_TRANSIENT_RETRY_DELAY_SECONDS = 0.2
+AI_AUTHORING_MAX_TRANSIENT_RETRIES = 1
+AI_REQUEST_IN_PROGRESS_CODE = "AI_REQUEST_IN_PROGRESS"
+
 
 class WeaveAIQuestionAuthoringGateway:
     """Add authoring calls while reusing the shared AI gateway/client/auth stack."""
 
-    def __init__(self, gateway: WeaveAIGateway = weave_ai_gateway) -> None:
+    def __init__(
+        self,
+        gateway: WeaveAIGateway = weave_ai_gateway,
+        *,
+        request_timeout_seconds: float = AI_AUTHORING_REQUEST_TIMEOUT_SECONDS,
+        in_progress_poll_interval_seconds: float = AI_AUTHORING_IN_PROGRESS_POLL_INTERVAL_SECONDS,
+        in_progress_max_wait_seconds: float = AI_AUTHORING_IN_PROGRESS_MAX_WAIT_SECONDS,
+    ) -> None:
         self.gateway = gateway
+        self.request_timeout_seconds = request_timeout_seconds
+        self.in_progress_poll_interval_seconds = in_progress_poll_interval_seconds
+        self.in_progress_max_wait_seconds = in_progress_max_wait_seconds
 
     async def generate_questions(
         self,
@@ -79,9 +96,13 @@ class WeaveAIQuestionAuthoringGateway:
         server_credential: SecretStr,
         actor_access_token: str,
     ) -> dict:
-        """Retry one ambiguous/retryable Cloud failure with exactly the same key."""
+        """Recover ambiguous AI calls without changing their idempotency identity."""
 
-        for attempt in range(2):
+        transient_retries = 0
+        in_progress_started_at: float | None = None
+        loop = asyncio.get_running_loop()
+
+        while True:
             try:
                 return await self.gateway.client.request_actor_authenticated(
                     "POST",
@@ -90,17 +111,50 @@ class WeaveAIQuestionAuthoringGateway:
                     actor_access_token=actor_access_token,
                     json=payload,
                     headers={"Idempotency-Key": idempotency_key},
+                    timeout_seconds=self.request_timeout_seconds,
                 )
             except WeaveUnavailableError:
-                if attempt:
+                if transient_retries >= AI_AUTHORING_MAX_TRANSIENT_RETRIES:
                     raise
+                transient_retries += 1
+                await asyncio.sleep(AI_AUTHORING_TRANSIENT_RETRY_DELAY_SECONDS)
+                continue
             except WeaveRequestRejectedError as exc:
-                # Retry only transient upstream failures. Business/auth/quota
-                # rejections are terminal for this logical operation.
-                if attempt or exc.status_code not in {502, 503, 504}:
-                    raise
-            await asyncio.sleep(0.2)
-        raise RuntimeError("Unreachable AI authoring retry state")
+                if self._is_request_in_progress(exc):
+                    now = loop.time()
+                    if in_progress_started_at is None:
+                        in_progress_started_at = now
+                    remaining = self.in_progress_max_wait_seconds - (
+                        now - in_progress_started_at
+                    )
+                    if remaining <= 0:
+                        raise
+
+                    retry_delay = (
+                        float(exc.retry_after)
+                        if exc.retry_after is not None
+                        else self.in_progress_poll_interval_seconds
+                    )
+                    retry_delay = min(max(retry_delay, 0.05), remaining)
+                    await asyncio.sleep(retry_delay)
+                    continue
+
+                if (
+                    exc.status_code in {502, 503, 504}
+                    and transient_retries < AI_AUTHORING_MAX_TRANSIENT_RETRIES
+                ):
+                    transient_retries += 1
+                    await asyncio.sleep(AI_AUTHORING_TRANSIENT_RETRY_DELAY_SECONDS)
+                    continue
+                raise
+
+    @staticmethod
+    def _is_request_in_progress(exc: WeaveRequestRejectedError) -> bool:
+        return (
+            exc.status_code == 409
+            and exc.payload.get("code") == AI_REQUEST_IN_PROGRESS_CODE
+            and exc.payload.get("retryable") is True
+        )
 
 
 weave_ai_question_authoring_gateway = WeaveAIQuestionAuthoringGateway()

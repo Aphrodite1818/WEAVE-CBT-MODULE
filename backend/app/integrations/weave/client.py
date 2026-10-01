@@ -62,17 +62,24 @@ class WeaveClient:
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
+        timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         url = self._build_url_path(path)
         try:
             client = await self._get_client()
-            response = await client.request(
-                method=method,
-                url=url,
-                json=json,
-                params=params,
-                headers=headers,
-            )
+            request_kwargs: dict[str, Any] = {
+                "method": method,
+                "url": url,
+                "json": json,
+                "params": params,
+                "headers": headers,
+            }
+            if timeout_seconds is not None:
+                request_kwargs["timeout"] = httpx.Timeout(
+                    timeout=timeout_seconds,
+                    connect=settings.WEAVE_CONNECT_TIMEOUT_SECONDS,
+                )
+            response = await client.request(**request_kwargs)
         except httpx.TimeoutException as exc:
             raise WeaveUnavailableError("Weave Cloud did not respond in time") from exc
         except httpx.RequestError as exc:
@@ -104,6 +111,7 @@ class WeaveClient:
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
+        timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         request_headers = {
             "Authorization": f"Bearer {server_credential.get_secret_value()}"
@@ -116,6 +124,7 @@ class WeaveClient:
             json=json,
             params=params,
             headers=request_headers,
+            timeout_seconds=timeout_seconds,
         )
 
     async def request_actor_authenticated(
@@ -128,6 +137,7 @@ class WeaveClient:
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
+        timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         """Call a Weave route requiring both server and staff-actor authorization."""
 
@@ -147,6 +157,7 @@ class WeaveClient:
             json=json,
             params=params,
             headers=request_headers,
+            timeout_seconds=timeout_seconds,
         )
 
     def _build_url_path(self, path: str) -> str:
