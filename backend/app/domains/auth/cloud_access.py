@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -12,7 +13,10 @@ from app.core.security import (
     decrypt_local_secret,
     encrypt_local_secret,
 )
-from app.domains.auth.coordination import staff_refresh_lock
+from app.domains.auth.coordination import (
+    LocalAuthCoordinationUnavailable,
+    staff_refresh_lock,
+)
 from app.domains.auth.models import (
     WEAVE_AUTH_STATE_DEGRADED,
     WEAVE_AUTH_STATE_LEGACY,
@@ -29,7 +33,19 @@ from app.domains.auth.service import (
 )
 from app.domains.node.identity_store import node_identity_store
 from app.integrations.weave.auth import weave_auth_gateway
-from app.integrations.weave.exceptions import WeaveRequestRejectedError, WeaveUnavailableError
+from app.integrations.weave.auth_schemas import WeaveActorTokenPair
+from app.integrations.weave.exceptions import (
+    WeaveContractError,
+    WeaveRequestRejectedError,
+    WeaveUnavailableError,
+)
+
+
+@dataclass(frozen=True)
+class _CloudAccessPreparation:
+    access_token: str | None = None
+    operation_id: UUID | None = None
+    refresh_token: str | None = None
 
 
 async def get_or_repair_weave_actor_access_token(
@@ -39,82 +55,111 @@ async def get_or_repair_weave_actor_access_token(
 ) -> str:
     """Return a usable actor token, repairing its Weave rotation when necessary."""
 
+    current = await _inspect_cloud_access(
+        db,
+        session_id=session_id,
+        prepare_repair=False,
+    )
+    if current.access_token is not None:
+        return current.access_token
+
     try:
-        return await LocalAuthService.get_weave_actor_access_token(
-            db,
-            session_id=session_id,
-        )
-    except LocalSessionAuthenticationError:
-        pass
-
-    async with staff_refresh_lock(session_id):
-        try:
-            return await LocalAuthService.get_weave_actor_access_token(
+        async with staff_refresh_lock(session_id):
+            prepared = await _inspect_cloud_access(
                 db,
                 session_id=session_id,
+                prepare_repair=True,
             )
-        except LocalSessionAuthenticationError:
-            pass
+            if prepared.access_token is not None:
+                return prepared.access_token
+            if prepared.operation_id is None or prepared.refresh_token is None:
+                raise LocalSessionAuthenticationError(INVALID_LOCAL_STAFF_SESSION)
 
-        operation_id, refresh_token = await _prepare_cloud_repair(
-            db,
-            session_id=session_id,
-        )
-        installation = node_identity_store.load()
-
-        try:
-            token_pair = await weave_auth_gateway.refresh_staff_authorization(
-                refresh_token=refresh_token,
-                idempotency_key=operation_id,
-                server_credential=installation.server_credential,
-            )
-        except WeaveUnavailableError:
-            await _mark_cloud_repair_degraded(
-                db,
-                session_id=session_id,
-                operation_id=operation_id,
-            )
-            raise
-        except WeaveRequestRejectedError as exc:
-            if exc.status_code in {401, 403}:
-                await _revoke_cloud_session(
-                    db,
-                    session_id=session_id,
-                    reason=WEAVE_AUTH_REJECTED_REASON,
+            installation = node_identity_store.load()
+            try:
+                token_pair = await weave_auth_gateway.refresh_staff_authorization(
+                    refresh_token=prepared.refresh_token,
+                    idempotency_key=prepared.operation_id,
+                    server_credential=installation.server_credential,
                 )
-            else:
+            except WeaveUnavailableError:
                 await _mark_cloud_repair_degraded(
                     db,
                     session_id=session_id,
-                    operation_id=operation_id,
+                    operation_id=prepared.operation_id,
                 )
-            raise
+                raise
+            except WeaveRequestRejectedError as exc:
+                if exc.status_code in {401, 403}:
+                    await _revoke_cloud_session(
+                        db,
+                        session_id=session_id,
+                        reason=WEAVE_AUTH_REJECTED_REASON,
+                    )
+                else:
+                    await _mark_cloud_repair_degraded(
+                        db,
+                        session_id=session_id,
+                        operation_id=prepared.operation_id,
+                    )
+                raise
 
-        return await _complete_cloud_repair(
-            db,
-            session_id=session_id,
-            operation_id=operation_id,
-            token_pair=token_pair,
-        )
+            return await _complete_cloud_repair(
+                db,
+                session_id=session_id,
+                operation_id=prepared.operation_id,
+                token_pair=token_pair,
+            )
+    except LocalAuthCoordinationUnavailable as exc:
+        raise WeaveUnavailableError(
+            "Local cloud-authorization coordination is temporarily unavailable."
+        ) from exc
 
 
-async def _prepare_cloud_repair(
+async def _inspect_cloud_access(
     db: AsyncSession,
     *,
     session_id: UUID,
-) -> tuple[UUID, str]:
+    prepare_repair: bool,
+) -> _CloudAccessPreparation:
     now = datetime.now(UTC)
-    operation_id: UUID | None = None
-    refresh_token: str | None = None
 
     async with db.begin():
-        session = await AuthRepository.get_session_by_id(db, session_id, lock=True)
+        session = await AuthRepository.get_session_by_id(
+            db,
+            session_id,
+            lock=prepare_repair,
+        )
         if (
             session is None
             or session.revoked_at is not None
             or session.expires_at <= now
-            or session.weave_auth_state in {WEAVE_AUTH_STATE_LEGACY, WEAVE_AUTH_STATE_REVOKED}
-            or session.weave_refresh_token_encrypted is None
+            or session.weave_auth_state
+            in {WEAVE_AUTH_STATE_LEGACY, WEAVE_AUTH_STATE_REVOKED}
+        ):
+            raise LocalSessionAuthenticationError(INVALID_LOCAL_STAFF_SESSION)
+
+        if (
+            session.weave_auth_state == WEAVE_AUTH_STATE_SYNCED
+            and session.weave_access_token_encrypted is not None
+            and session.weave_access_token_expires_at is not None
+            and session.weave_access_token_expires_at > now
+        ):
+            try:
+                access_token = decrypt_local_secret(
+                    session.weave_access_token_encrypted,
+                    purpose=LocalAuthService._weave_access_purpose(session.id),
+                )
+            except StoredSecretDecryptionError:
+                access_token = None
+            if access_token is not None:
+                return _CloudAccessPreparation(access_token=access_token)
+
+        if not prepare_repair:
+            return _CloudAccessPreparation()
+
+        if (
+            session.weave_refresh_token_encrypted is None
             or session.weave_refresh_token_expires_at is None
             or session.weave_refresh_token_expires_at <= now
         ):
@@ -139,9 +184,10 @@ async def _prepare_cloud_repair(
             )
             raise LocalSessionAuthenticationError(INVALID_LOCAL_STAFF_SESSION) from exc
 
-    if operation_id is None or refresh_token is None:
-        raise LocalSessionAuthenticationError(INVALID_LOCAL_STAFF_SESSION)
-    return operation_id, refresh_token
+        return _CloudAccessPreparation(
+            operation_id=operation_id,
+            refresh_token=refresh_token,
+        )
 
 
 async def _complete_cloud_repair(
@@ -149,7 +195,7 @@ async def _complete_cloud_repair(
     *,
     session_id: UUID,
     operation_id: UUID,
-    token_pair,
+    token_pair: WeaveActorTokenPair,
 ) -> str:
     now = datetime.now(UTC)
     access_expiry, refresh_expiry = LocalAuthService._validate_token_pair_times(
@@ -169,7 +215,9 @@ async def _complete_cloud_repair(
             raise LocalSessionAuthenticationError(INVALID_LOCAL_STAFF_SESSION)
 
         if refresh_expiry > session.expires_at + timedelta(seconds=2):
-            raise LocalSessionAuthenticationError(INVALID_LOCAL_STAFF_SESSION)
+            raise WeaveContractError(
+                "Weave attempted to extend the absolute CBT staff authorization lifetime."
+            )
         if refresh_expiry < session.expires_at:
             session.expires_at = refresh_expiry
 
