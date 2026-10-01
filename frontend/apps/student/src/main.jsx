@@ -5,6 +5,7 @@ import '../../../src/styles/global.css'
 import StudentApp from '../../../src/app/StudentApp.jsx'
 import '../../../src/app/theme/branding.css'
 import '../../../src/styles/product-shell.css'
+import '../../../src/styles/scrollbars.css'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
