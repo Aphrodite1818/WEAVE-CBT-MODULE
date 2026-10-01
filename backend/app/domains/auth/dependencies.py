@@ -57,31 +57,38 @@ async def get_current_local_context(
             detail="Access token belongs to another installation.",
         )
 
-    session = await AuthRepository.get_session_by_id(db, session_id)
-    if (
-        session is None
-        or session.revoked_at is not None
-        or session.expires_at <= datetime.now(UTC)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Local session is not active.",
-        )
+    # Authorization reads use the request-scoped AsyncSession, which means the
+    # first SELECT would otherwise leave SQLAlchemy's implicit transaction open
+    # for the rest of the route. Cloud-backed services intentionally open their
+    # own short transactions around credential inspection/rotation and must not
+    # inherit that read transaction. Keep the authorization lookup atomic and
+    # finish it before returning control to the route.
+    async with db.begin():
+        session = await AuthRepository.get_session_by_id(db, session_id)
+        if (
+            session is None
+            or session.revoked_at is not None
+            or session.expires_at <= datetime.now(UTC)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Local session is not active.",
+            )
 
-    actor = await AuthRepository.get_actor_by_id(db, session.actor_id)
-    if actor is None or not actor.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Local actor is not active.",
-        )
+        actor = await AuthRepository.get_actor_by_id(db, session.actor_id)
+        if actor is None or not actor.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Local actor is not active.",
+            )
 
-    if actor.weave_actor_id != str(payload.get("sub")) or actor.role != payload.get(
-        "role"
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Access token identity mismatch.",
-        )
+        if actor.weave_actor_id != str(payload.get("sub")) or actor.role != payload.get(
+            "role"
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Access token identity mismatch.",
+            )
 
     return LocalActorContext(actor=actor, session=session)
 
