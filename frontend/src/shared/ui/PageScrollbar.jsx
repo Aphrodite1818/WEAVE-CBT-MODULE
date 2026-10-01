@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-const MIN_THUMB_HEIGHT = 48
-const MAX_THUMB_HEIGHT = 72
+const MIN_THUMB_HEIGHT = 56
 
 export function PageScrollbar() {
   const trackRef = useRef(null)
@@ -27,9 +26,8 @@ export function PageScrollbar() {
         const scrollHeight = Math.max(root.scrollHeight, body?.scrollHeight || 0)
         const maxScroll = Math.max(0, scrollHeight - viewportHeight)
         const trackHeight = track.clientHeight
-        const proportionalHeight = (viewportHeight / Math.max(scrollHeight, viewportHeight)) * trackHeight
         const thumbHeight = maxScroll > 0
-          ? Math.min(MAX_THUMB_HEIGHT, Math.max(MIN_THUMB_HEIGHT, proportionalHeight))
+          ? Math.min(trackHeight, Math.max(MIN_THUMB_HEIGHT, (viewportHeight / scrollHeight) * trackHeight))
           : trackHeight
         const maxThumbTop = Math.max(0, trackHeight - thumbHeight)
         const scrollTop = Math.min(maxScroll, Math.max(0, window.scrollY || root.scrollTop || 0))
