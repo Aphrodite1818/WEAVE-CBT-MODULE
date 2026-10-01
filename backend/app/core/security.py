@@ -33,6 +33,7 @@ from app.core.settings import settings
 LOCAL_TOKEN_ISSUER = "weave-cbt"
 LOCAL_TOKEN_AUDIENCE = "weave-cbt-local"
 LOCAL_ACCESS_TOKEN_TYPE = "actor_access"
+LOCAL_JWT_ALGORITHM = "HS256"
 
 LOCAL_SIGNING_SECRET_FILENAME = "local_auth.secret"
 LOCAL_SIGNING_SECRET_BYTES = 64
@@ -392,7 +393,7 @@ def create_local_access_token(
     return jwt.encode(
         payload,
         get_local_signing_secret(),
-        algorithm=settings.LOCAL_JWT_ALGORITHM,
+        algorithm=LOCAL_JWT_ALGORITHM,
     )
 
 
@@ -406,7 +407,7 @@ def decode_local_access_token(token: str) -> dict[str, Any]:
         payload = jwt.decode(
             token,
             key=get_local_signing_secret(),
-            algorithms=[settings.LOCAL_JWT_ALGORITHM],
+            algorithms=[LOCAL_JWT_ALGORITHM],
             audience=LOCAL_TOKEN_AUDIENCE,
             issuer=LOCAL_TOKEN_ISSUER,
             options={
