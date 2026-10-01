@@ -102,13 +102,50 @@ class WeaveClient:
         server_credential: SecretStr,
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
+        request_headers = {
+            "Authorization": f"Bearer {server_credential.get_secret_value()}"
+        }
+        if headers:
+            request_headers.update(headers)
         return await self._request(
             method,
             path,
             json=json,
             params=params,
-            headers={"Authorization": f"Bearer {server_credential.get_secret_value()}"},
+            headers=request_headers,
+        )
+
+    async def request_actor_authenticated(
+        self,
+        method: str,
+        path: str,
+        *,
+        server_credential: SecretStr,
+        actor_access_token: str,
+        json: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Call a Weave route requiring both server and staff-actor authorization."""
+
+        actor_token = actor_access_token.strip()
+        if not actor_token:
+            raise WeaveContractError("Weave actor access token is missing.")
+
+        request_headers = {
+            "Authorization": f"Bearer {server_credential.get_secret_value()}",
+            "X-CBT-Actor-Authorization": actor_token,
+        }
+        if headers:
+            request_headers.update(headers)
+        return await self._request(
+            method,
+            path,
+            json=json,
+            params=params,
+            headers=request_headers,
         )
 
     def _build_url_path(self, path: str) -> str:
@@ -149,6 +186,10 @@ class WeaveClient:
         detail = payload.get("detail")
         if isinstance(detail, str) and detail.strip():
             return detail.strip()
+        if isinstance(detail, dict):
+            message = detail.get("message") or detail.get("detail")
+            if isinstance(message, str) and message.strip():
+                return message.strip()
         return "Weave rejected the request."
 
     @staticmethod
