@@ -7,7 +7,7 @@
 /* Compact nested scroll areas such as tables and drawers. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgb(var(--color-text-muted, 95 111 149) / .42) transparent;
+  scrollbar-color: rgb(80 87 102 / .48) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -22,12 +22,12 @@
 *::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: rgb(var(--color-text-muted, 95 111 149) / .44);
+  background: rgb(80 87 102 / .48);
   background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: rgb(var(--color-text-muted, 95 111 149) / .66);
+  background: rgb(62 69 84 / .68);
   background-clip: padding-box;
 }
 
@@ -57,29 +57,27 @@ body::-webkit-scrollbar {
 /* Weave page scrollbar                                                       */
 /* -------------------------------------------------------------------------- */
 
+/*
+ * The hit area is intentionally wider than the visible thumb. The reference
+ * Weave UI shows only the thumb itself; there is no visible full-height rail.
+ */
 .page-scrollbar {
   position: fixed;
-  top: 12px;
-  right: 3px;
-  bottom: 12px;
+  top: 0;
+  right: 0;
+  bottom: 0;
   z-index: 10000;
-  width: 10px;
+  width: 12px;
+  background: transparent;
   opacity: 0;
   pointer-events: none;
   touch-action: none;
-  transition: opacity 150ms ease;
+  transition: opacity 120ms ease;
 }
 
-.page-scrollbar::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 1px;
-  border-radius: 999px;
-  background: rgb(var(--color-primary, 196 18 62) / .13);
-  transform: translateX(-50%);
+/* Staff dashboards have a sticky 72px application header. */
+body:has(.teacher-shell) .page-scrollbar {
+  top: 72px;
 }
 
 .page-scrollbar.is-visible {
@@ -94,54 +92,35 @@ body::-webkit-scrollbar {
 .page-scrollbar__thumb {
   position: absolute;
   top: 0;
-  left: 3px;
-  width: 4px;
-  min-height: 48px;
-  max-height: 72px;
-  border-radius: 999px;
-  background:
-    linear-gradient(
-      180deg,
-      rgb(var(--color-primary, 196 18 62) / .78),
-      rgb(var(--color-primary, 196 18 62) / .58)
-    );
-  box-shadow:
-    0 2px 8px rgb(var(--color-primary, 196 18 62) / .18),
-    0 0 0 1px rgb(var(--color-surface, 255 255 255) / .58);
+  right: 0;
+  width: 7px;
+  min-height: 56px;
+  border-radius: 4px 0 0 4px;
+  background: rgb(54 60 74 / .82);
+  box-shadow: none;
   cursor: grab;
-  transition: left 140ms ease, width 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+  transition: width 120ms ease, background-color 120ms ease;
   will-change: transform;
 }
 
 .page-scrollbar:hover .page-scrollbar__thumb,
 .page-scrollbar:focus-visible .page-scrollbar__thumb {
-  left: 2px;
-  width: 6px;
-  box-shadow:
-    0 3px 10px rgb(var(--color-primary, 196 18 62) / .24),
-    0 0 0 1px rgb(var(--color-surface, 255 255 255) / .68);
+  width: 8px;
+  background: rgb(62 69 84 / .90);
 }
 
 .page-scrollbar__thumb:active {
-  left: 2px;
-  width: 6px;
+  width: 8px;
   cursor: grabbing;
-  background:
-    linear-gradient(
-      180deg,
-      rgb(var(--color-primary, 196 18 62) / .94),
-      rgb(var(--color-primary, 196 18 62) / .76)
-    );
+  background: rgb(45 51 64 / .96);
 }
 
 @media (pointer: coarse) {
   .page-scrollbar {
-    right: 1px;
-    width: 8px;
+    width: 10px;
   }
 
   .page-scrollbar__thumb {
-    left: 2px;
-    width: 4px;
+    width: 6px;
   }
 }
