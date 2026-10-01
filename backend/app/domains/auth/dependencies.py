@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
@@ -11,7 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.database import DbSession
 from app.core.security import InvalidLocalTokenError, decode_local_access_token
-from app.domains.auth.models import LocalActor
+from app.domains.auth.models import LocalActor, LocalActorSession
 from app.domains.auth.repository import AuthRepository
 from app.domains.node.exceptions import NodeIdentityNotFoundError
 from app.domains.node.identity_store import node_identity_store
@@ -19,10 +20,16 @@ from app.domains.node.identity_store import node_identity_store
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-async def get_current_local_actor(
+@dataclass(frozen=True)
+class LocalActorContext:
+    actor: LocalActor
+    session: LocalActorSession
+
+
+async def get_current_local_context(
     db: DbSession,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
-) -> LocalActor:
+) -> LocalActorContext:
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -76,37 +83,38 @@ async def get_current_local_actor(
             detail="Access token identity mismatch.",
         )
 
-    return actor
+    return LocalActorContext(actor=actor, session=session)
+
+
+async def get_current_local_actor(
+    context: Annotated[LocalActorContext, Depends(get_current_local_context)],
+) -> LocalActor:
+    return context.actor
 
 
 async def get_current_local_admin(
     actor: Annotated[LocalActor, Depends(get_current_local_actor)],
 ) -> LocalActor:
-    """Authorize the canonical local school-administrator role."""
-
     if actor.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="School administrator access required.",
         )
-
     return actor
 
 
 async def get_current_local_teacher(
     actor: Annotated[LocalActor, Depends(get_current_local_actor)],
 ) -> LocalActor:
-    """Authorize local teacher actors."""
-
     if actor.role != "teacher":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Teacher access required.",
         )
-
     return actor
 
 
+CurrentLocalContext = Annotated[LocalActorContext, Depends(get_current_local_context)]
 CurrentLocalActor = Annotated[LocalActor, Depends(get_current_local_actor)]
 CurrentLocalAdmin = Annotated[LocalActor, Depends(get_current_local_admin)]
 CurrentLocalTeacher = Annotated[LocalActor, Depends(get_current_local_teacher)]
