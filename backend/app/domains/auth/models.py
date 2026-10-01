@@ -15,6 +15,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -27,19 +28,17 @@ ACTOR_EMAIL_MAX_LENGTH = 255
 ACTOR_NAME_MAX_LENGTH = 255
 REFRESH_TOKEN_HASH_LENGTH = 64
 REVOCATION_REASON_MAX_LENGTH = 500
+WEAVE_AUTH_STATE_MAX_LENGTH = 32
+
+WEAVE_AUTH_STATE_LEGACY = "legacy"
+WEAVE_AUTH_STATE_SYNCED = "synced"
+WEAVE_AUTH_STATE_DEGRADED = "degraded"
+WEAVE_AUTH_STATE_REFRESH_PENDING = "refresh_pending"
+WEAVE_AUTH_STATE_REVOKED = "revoked"
 
 
 class LocalActor(Base):
-    """
-    Local representation of a teacher or tenant administrator authenticated
-    through Weave.
-
-    The CBT never stores the actor's Weave password.
-
-    After Weave successfully authenticates the user, the local CBT stores only
-    the identity information needed for local authorization and session
-    management.
-    """
+    """Local representation of Weave-authenticated staff."""
 
     __tablename__ = "local_actors"
 
@@ -47,41 +46,31 @@ class LocalActor(Base):
         String(WEAVE_ID_MAX_LENGTH),
         nullable=False,
     )
-
     weave_membership_id: Mapped[str | None] = mapped_column(
         String(WEAVE_ID_MAX_LENGTH),
         nullable=True,
         unique=True,
         index=True,
     )
-
     role: Mapped[str] = mapped_column(
         String(ACTOR_ROLE_MAX_LENGTH),
         nullable=False,
         index=True,
     )
-
     email: Mapped[str] = mapped_column(
         String(ACTOR_EMAIL_MAX_LENGTH),
         nullable=False,
         index=True,
     )
-
     display_name: Mapped[str] = mapped_column(
         String(ACTOR_NAME_MAX_LENGTH),
         nullable=False,
     )
-
-    is_active: Mapped[bool] = mapped_column(
-        nullable=False,
-        default=True,
-    )
-
+    is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
     last_weave_authenticated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
     )
-
     last_weave_revalidated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -110,42 +99,67 @@ class LocalActor(Base):
 
 
 class LocalActorSession(Base):
-    """
-    One local login session belonging to a LocalActor.
-
-    The database row ID is used as the JWT `sid` claim.
-
-    Access tokens are short-lived JWTs and are not stored in the database.
-
-    Refresh-token rotation, revocation, and reuse detection are handled through
-    LocalRefreshToken rows belonging to this session.
-    """
+    """One local CBT login session and its attached Weave authorization."""
 
     __tablename__ = "local_actor_sessions"
 
     actor_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "local_actors.id",
-            ondelete="RESTRICT",
-        ),
+        ForeignKey("local_actors.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
 
+    # Absolute trust boundary. For all new sessions this is copied directly
+    # from Weave's refresh_token_expires_at and never extended locally.
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         index=True,
     )
-
     last_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
     )
-
     last_refreshed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+    )
+
+    # Weave actor credentials are opaque and must be recoverable for cloud
+    # requests/rotation, so they are encrypted with the persistent CBT backend
+    # secret rather than hashed. Nullable supports pre-migration legacy sessions
+    # and secure clearing after revocation.
+    weave_access_token_encrypted: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    weave_access_token_issued_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    weave_access_token_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+    weave_refresh_token_encrypted: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    weave_refresh_token_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+    weave_auth_state: Mapped[str] = mapped_column(
+        String(WEAVE_AUTH_STATE_MAX_LENGTH),
+        nullable=False,
+        default=WEAVE_AUTH_STATE_SYNCED,
+        index=True,
+    )
+    weave_refresh_operation_id: Mapped[UUID | None] = mapped_column(
+        nullable=True,
+        index=True,
     )
 
     revoked_at: Mapped[datetime | None] = mapped_column(
@@ -153,7 +167,6 @@ class LocalActorSession(Base):
         nullable=True,
         index=True,
     )
-
     revocation_reason: Mapped[str | None] = mapped_column(
         String(REVOCATION_REASON_MAX_LENGTH),
         nullable=True,
@@ -167,6 +180,10 @@ class LocalActorSession(Base):
         CheckConstraint(
             "revoked_at IS NULL OR revoked_at >= created_at",
             name="ck_local_actor_sessions_valid_revocation",
+        ),
+        CheckConstraint(
+            "weave_auth_state IN ('legacy', 'synced', 'degraded', 'refresh_pending', 'revoked')",
+            name="ck_local_actor_sessions_weave_auth_state",
         ),
         Index(
             "ix_local_actor_sessions_actor_expiry",
@@ -182,65 +199,52 @@ class LocalActorSession(Base):
 
 
 class LocalRefreshToken(Base):
-    """
-    One issued opaque refresh token.
-
-    The raw refresh token is never stored.
-
-    Only its SHA-256 fingerprint is persisted.
-
-    Refresh tokens are rotated:
-        old token -> consumed
-        new token -> created
-
-    If an already consumed token is presented again, the auth service can
-    detect token reuse and revoke the entire LocalActorSession.
-    """
+    """One rotating opaque browser-side local refresh token."""
 
     __tablename__ = "local_refresh_tokens"
 
     session_id: Mapped[UUID] = mapped_column(
-        ForeignKey(
-            "local_actor_sessions.id",
-            ondelete="CASCADE",
-        ),
+        ForeignKey("local_actor_sessions.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-
     token_hash: Mapped[str] = mapped_column(
         String(REFRESH_TOKEN_HASH_LENGTH),
         nullable=False,
         unique=True,
         index=True,
     )
-
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         index=True,
     )
-
     consumed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
-
     revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
-
     reuse_detected_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
-
     replaced_by_token_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey(
-            "local_refresh_tokens.id",
-            ondelete="SET NULL",
-        ),
+        ForeignKey("local_refresh_tokens.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # Response-recovery metadata for Browser -> CBT refresh ambiguity. The
+    # replacement raw token is encrypted only so the same idempotent operation
+    # can receive the exact replacement again after a lost HTTP response.
+    refresh_operation_id: Mapped[UUID | None] = mapped_column(
+        nullable=True,
+        index=True,
+    )
+    replacement_token_encrypted: Mapped[str | None] = mapped_column(
+        Text,
         nullable=True,
     )
 
