@@ -26,7 +26,17 @@ async def get_current_student_session(
             detail="Student authentication required.",
         )
     try:
-        return await StudentAuthService.resolve_session(db, raw_token=raw_token)
+        context = await StudentAuthService.resolve_session(db, raw_token=raw_token)
+
+        # Student session resolution performs database reads and may update
+        # last_seen_at. When no touch is due, SQLAlchemy still leaves the
+        # implicit read transaction open on the request-scoped AsyncSession.
+        # Finish this dependency-owned unit of work before the route starts so
+        # downstream services remain free to open their own explicit transaction.
+        if db.in_transaction():
+            await db.commit()
+
+        return context
     except StudentAuthenticationError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
