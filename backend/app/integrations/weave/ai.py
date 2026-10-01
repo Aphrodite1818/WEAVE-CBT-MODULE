@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TypeVar
+from urllib.parse import quote
 from uuid import UUID
 
 from pydantic import BaseModel, SecretStr, ValidationError
@@ -281,9 +282,10 @@ class WeaveAIGateway:
         server_credential: SecretStr,
         actor_access_token: str,
     ) -> AIQuotaPurchaseResponse:
+        encoded_reference = quote(reference, safe="")
         return await self._request(
             "POST",
-            f"/admin/quota/purchases/{reference}/verify",
+            f"/admin/quota/purchases/{encoded_reference}/verify",
             response_model=AIQuotaPurchaseResponse,
             server_credential=server_credential,
             actor_access_token=actor_access_token,
