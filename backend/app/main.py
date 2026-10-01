@@ -13,6 +13,7 @@ from app.core.integration_errors import register_weave_integration_error_handler
 from app.core.redis import close_redis_client
 from app.core.settings import settings
 from app.domains.academics.router import router as academic_router
+from app.domains.ai.router import router as ai_router
 from app.domains.attempts.router import exam_router as exam_attempts_router
 from app.domains.attempts.router import operator_router as attempts_router
 from app.domains.attempts.router import student_router as student_attempts_router
@@ -109,6 +110,7 @@ for router in (
     branding_router,
     auth_router,
     student_auth_router,
+    ai_router,
     sync_router,
     media_router,
     academic_router,
