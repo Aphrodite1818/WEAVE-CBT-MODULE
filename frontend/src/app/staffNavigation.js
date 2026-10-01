@@ -1,4 +1,4 @@
-const teacherSections = new Set(['overview', 'question-banks', 'bank-detail', 'questions', 'create-question', 'edit-question', 'preview-question', 'exams', 'exam-history', 'create-exam'])
+const teacherSections = new Set(['overview', 'question-banks', 'bank-detail', 'questions', 'create-question', 'review-ai-questions', 'edit-question', 'preview-question', 'exams', 'exam-history', 'create-exam'])
 const adminSections = new Set(['dashboard', 'question-banks', 'create-bank', 'bank-detail', 'questions', 'create-question', 'edit-question', 'preview-question', 'exams', 'create-exam', 'exam-history', 'roster', 'roster-history', 'roster-detail', 'timetable', 'operations', 'operation-detail', 'results', 'result-detail', 'students', 'invigilators', 'reports', 'settings'])
 const examViews = { history: 'exam-history', edit: 'create-exam', roster: 'roster-detail', operations: 'operation-detail', results: 'result-detail' }
 
@@ -31,7 +31,8 @@ export function parseStaffPath(location) {
   const origin = url.searchParams.get('from')
   const questionPreviewOrigin = section === 'preview-question' && ['create-exam', 'bank-detail', 'questions'].includes(origin) ? origin : null
   if (questionPreviewOrigin === 'create-exam') selectedExamId = url.searchParams.get('exam')
-  return { view: 'staff', sessionType: 'staff', role, requiresAuth: true, staffSection: section, selectedQuestionId, selectedExamId, selectedBankId, questionPreviewOrigin, timetableLevelId }
+  const selectedAIDraftId = role === 'teacher' && section === 'review-ai-questions' ? url.searchParams.get('draft') : null
+  return { view: 'staff', sessionType: 'staff', role, requiresAuth: true, staffSection: section, selectedQuestionId, selectedExamId, selectedBankId, selectedAIDraftId, questionPreviewOrigin, timetableLevelId }
 }
 
 export function pathForStaffState(state) {
@@ -41,6 +42,7 @@ export function pathForStaffState(state) {
   const section = staffSectionForRole(role, staff.section === 'overview' && role === 'admin' ? 'dashboard' : staff.section)
   let path = `/${role}/${section}`
   const params = new URLSearchParams()
+  if (section === 'review-ai-questions' && staff.selectedAIDraftId) params.set('draft', staff.selectedAIDraftId)
   if (['edit-question', 'preview-question'].includes(section) && staff.selectedQuestionId) {
     path = `/${role}/questions/${encodeURIComponent(staff.selectedQuestionId)}/${section === 'edit-question' ? 'edit' : 'preview'}`
   } else if (section === 'bank-detail' && staff.selectedBankId) {
@@ -62,6 +64,7 @@ export function staffPatchFromRoute(route) {
   return {
     section: staffSectionForRole(route.role, route.staffSection),
     selectedQuestionId: route.selectedQuestionId || null,
+    selectedAIDraftId: route.selectedAIDraftId || null,
     selectedExamId: route.selectedExamId || null,
     selectedBankId: route.selectedBankId || null,
     questionPreviewOrigin: route.questionPreviewOrigin || null,

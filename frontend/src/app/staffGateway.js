@@ -1,4 +1,5 @@
 import * as academics from '../api/academics'
+import * as ai from '../api/ai'
 import * as branding from '../api/branding'
 import * as candidates from '../api/candidates'
 import * as exams from '../api/exams'
@@ -13,6 +14,7 @@ import * as sync from '../api/sync'
 import * as timetable from '../api/timetable'
 
 export const staffGateway = {
+  ai,
   installation,
   branding,
   auth: staffAuth,

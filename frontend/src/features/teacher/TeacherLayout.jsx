@@ -5,7 +5,7 @@ import { getLocalBrandLogoSrc } from '../../api/branding'
 
 function teacherNavActive(current, section) {
   if (section === 'question-banks') return current === 'question-banks' || current === 'bank-detail'
-  if (section === 'questions') return current === 'questions' || current === 'create-question' || current === 'edit-question' || current === 'preview-question'
+  if (section === 'questions') return ['questions', 'create-question', 'edit-question', 'preview-question', 'review-ai-questions'].includes(current)
   if (section === 'exams') return current === 'exams' || current === 'create-exam' || current === 'exam-history'
   return current === section
 }
@@ -36,7 +36,7 @@ export function TeacherLayout({ state, dispatch, signOut, children }) {
   }, [])
 
   return (
-    <main className={`teacher-shell${sidebarOpen ? '' : ' teacher-shell--collapsed'}`}>
+    <main className={`teacher-shell${sidebarOpen ? '' : ' teacher-shell--collapsed'}${state.staff.section === 'create-question' ? ' teacher-shell--authoring' : ''}`}>
       <aside className="teacher-sidebar">
         <div className="teacher-sidebar__header">
           <div className="school-card">

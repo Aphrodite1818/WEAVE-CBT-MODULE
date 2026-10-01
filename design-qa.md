@@ -107,3 +107,26 @@ Open the admin operations page at 1672px, 1366px, and 390px widths; compare to t
 - Focused JSX lint and the staff production build passed. Browser startup was retried and remains blocked by the Windows sandbox ACL error; no new visual acceptance claim is made.
 
 final result: blocked
+
+
+## 2026-10-01: Teacher AI workspace revision
+
+- Source visual truth: user-attached VS Code screenshot, 1344 x 744 pixels; right agent panel reference. The requested comparison concerns pane positioning, adjustable width, independent scrolling, bottom composer, and typography. Weave branding and the existing form are retained intentionally.
+- Implementation screenshot: unavailable. Browser runtime exited during connection attempts; no rendered capture or density normalization could be obtained.
+- Intended viewport: 1344 x 744 CSS pixels; also verify a narrow mobile viewport.
+- State: question editor with panel closed, panel open, divider dragged, and panel reopened with unsaved input.
+- Layout changes: replaced the inline assistant card with a workspace-level grid; introduced pointer and keyboard resizing; close restores the form width; compact existing Weave logo opens the assistant; mobile uses one pane at a time.
+- Typography and tokens: 14px conversation/composer text, 16px introductory heading, existing tenant colors and original form typography. No new raster assets are required for this panel; the existing WeaveMark and icon library are reused.
+- Full-view and focused-region visual comparison: blocked by browser runtime startup failure. Build/HTTP/component tests are not visual evidence.
+- Comparison history: original inline card was rejected by the user. The revised source addresses the layout mismatch; post-fix screenshot comparison is still required.
+- Implementation checklist: capture at the target viewport, compare the right panel and composer against the reference, drag the divider, close/reopen, inspect mobile and browser console.
+- final result: blocked
+
+
+## Teacher AI panel reference refinement (2026-10-01)
+
+- Source: user-provided VS Code assistant panel screenshot (1366 x 768); adapt panel structure with existing tenant colors.
+- Implemented: compact header and bank context, scrollable content, bottom composer with icon submit, expandable generation settings, quota popup above footer.
+- Implementation screenshot and viewport comparison: unavailable. Browser runtime failed twice before connection with "trusted Node process exited unexpectedly".
+- Browser interactions and console review: blocked; automated checks do not establish visual fidelity.
+- final result: blocked

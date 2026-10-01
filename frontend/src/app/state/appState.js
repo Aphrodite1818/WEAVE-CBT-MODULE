@@ -22,6 +22,7 @@ export const initialStaff = {
   selectedBankId: '',
   timetableLevelId: null,
   selectedQuestionId: null,
+  selectedAIDraftId: null,
   editingQuestion: null,
   teacher: {
     name: 'Teacher',

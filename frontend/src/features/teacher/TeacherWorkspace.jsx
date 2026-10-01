@@ -5,6 +5,7 @@ import { weaveGateway } from "../../app/gateway";
 import { TeacherLayout } from "./TeacherLayout";
 import { OverviewPage } from "./OverviewPage";
 import { BankDetailPage, QuestionBanksPage } from "./QuestionBanksPage";
+import { TeacherAIReviewPage } from "./TeacherAIReviewPage";
 import { QuestionBuilder } from "./QuestionBuilder";
 import { TeacherExamsPage } from "./TeacherExamsPage";
 import { ExamAuthoringPage } from "../../shared/exams/ExamAuthoringPage";
@@ -87,15 +88,17 @@ export function TeacherWorkspace({
           gateway={gateway}
         />
       )}
-      {state.staff.section === "create-question" && (
-        <QuestionBuilder
+      {["create-question", "review-ai-questions"].includes(state.staff.section) && (
+        <div className="teacher-question-create-host" hidden={state.staff.section !== "create-question"}><QuestionBuilder
+          enableAI
           mode="create"
           state={state}
           dispatch={workspaceDispatch}
           teacherData={teacherData}
           gateway={gateway}
-        />
+        /></div>
       )}
+      {state.staff.section === "review-ai-questions" && <TeacherAIReviewPage key={state.staff.selectedAIDraftId} state={state} dispatch={workspaceDispatch} teacherData={teacherData} gateway={gateway} />}
       {state.staff.section === "edit-question" && (
         <QuestionBuilder
           key={state.staff.selectedQuestionId || "teacher-question-editor"}

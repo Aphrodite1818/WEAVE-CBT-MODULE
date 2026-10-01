@@ -4,10 +4,10 @@ const DB_NAME = 'weave-cbt-ai-question-drafts'
 const DB_VERSION = 1
 const STORE_NAME = 'drafts'
 
-function openDraftDatabase(indexedDBImpl = globalThis.indexedDB) {
+function openDraftDatabase(indexedDBImpl = globalThis.indexedDB, scope = '') {
   if (!indexedDBImpl) throw new Error('IndexedDB is unavailable in this browser.')
   return new Promise((resolve, reject) => {
-    const request = indexedDBImpl.open(DB_NAME, DB_VERSION)
+    const request = indexedDBImpl.open(scope ? `${DB_NAME}:${scope}` : DB_NAME, DB_VERSION)
     request.onupgradeneeded = () => {
       const database = request.result
       if (!database.objectStoreNames.contains(STORE_NAME)) {
@@ -31,19 +31,28 @@ function transact(database, mode, action) {
       return
     }
     if (request) {
-      request.onsuccess = () => resolve(request.result)
+      transaction.oncomplete = () => resolve(request.result)
       request.onerror = () => reject(request.error || new Error('AI draft storage operation failed.'))
     } else {
       transaction.oncomplete = () => resolve(undefined)
     }
+    transaction.onabort = () => reject(transaction.error || new Error('AI draft storage transaction was aborted.'))
     transaction.onerror = () => reject(transaction.error || new Error('AI draft storage transaction failed.'))
   })
 }
 
-export function createQuestionAIDraftStore({ indexedDBImpl = globalThis.indexedDB } = {}) {
+export function createQuestionAIDraftStore({ indexedDBImpl = globalThis.indexedDB, scope = '' } = {}) {
   return {
+    async list() {
+      const database = await openDraftDatabase(indexedDBImpl, scope)
+      try {
+        return await transact(database, 'readonly', (store) => store.getAll())
+      } finally {
+        database.close()
+      }
+    },
     async put(draft) {
-      const database = await openDraftDatabase(indexedDBImpl)
+      const database = await openDraftDatabase(indexedDBImpl, scope)
       try {
         await transact(database, 'readwrite', (store) => store.put(draft))
       } finally {
@@ -52,7 +61,7 @@ export function createQuestionAIDraftStore({ indexedDBImpl = globalThis.indexedD
       return draft
     },
     async get(draftId) {
-      const database = await openDraftDatabase(indexedDBImpl)
+      const database = await openDraftDatabase(indexedDBImpl, scope)
       try {
         return await transact(database, 'readonly', (store) => store.get(draftId))
       } finally {
@@ -60,7 +69,7 @@ export function createQuestionAIDraftStore({ indexedDBImpl = globalThis.indexedD
       }
     },
     async delete(draftId) {
-      const database = await openDraftDatabase(indexedDBImpl)
+      const database = await openDraftDatabase(indexedDBImpl, scope)
       try {
         await transact(database, 'readwrite', (store) => store.delete(draftId))
       } finally {
@@ -122,7 +131,7 @@ export function createQuestionAIController({
       generation_charge: response.charge,
       updated_at: new Date().toISOString(),
     }
-    await draftStore.put(draft)
+    try { await draftStore.put(draft) } catch (error) { throw tagOperationError(error, operation_id) }
     return draft
   }
 
@@ -143,6 +152,7 @@ export function createQuestionAIController({
     if (!draft || draft.status !== 'review') {
       throw new Error('AI question draft was not found.')
     }
+    if (draft.pending_regeneration) throw new Error('Resolve the pending regeneration before editing this draft.')
     const updated = {
       ...draft,
       questions,
@@ -161,6 +171,9 @@ export function createQuestionAIController({
     const draft = await draftStore.get(draftId)
     if (!draft || draft.status !== 'review') {
       throw new Error('AI question draft was not found.')
+    }
+    if (draft.pending_regeneration && draft.pending_regeneration.operation_id !== operationId) {
+      throw new Error('Retry the pending regeneration before starting another.')
     }
     const existingQuestion = draft.questions?.[questionIndex]
     if (!existingQuestion) throw new Error('AI question draft item was not found.')
@@ -232,21 +245,33 @@ export function createQuestionAIController({
 
   async function save(draftId, questions = null) {
     let draft = await draftStore.get(draftId)
-    if (!draft || draft.status !== 'review') {
+    if (!draft || !['review', 'saving'].includes(draft.status)) {
       throw new Error('AI question draft was not found.')
     }
+    if (draft.pending_regeneration) throw new Error('Resolve the pending regeneration before adding questions.')
     if (questions !== null) {
       draft = await updateDraftQuestions(draftId, questions)
     }
 
-    const result = await questionsApi.saveAIQuestionDrafts(draft.bank_id, {
-      draft_id: draft.draft_id,
-      questions: draft.questions,
-    })
+    // Freeze the exact payload before sending: a lost response must replay it unchanged.
+    draft = { ...draft, status: 'saving' }
+    await draftStore.put(draft)
+    let result
+    try {
+      result = await questionsApi.saveAIQuestionDrafts(draft.bank_id, {
+        draft_id: draft.draft_id,
+        questions: draft.questions,
+      })
+    } catch (error) {
+      // Schema rejection happens before persistence, so these drafts remain editable.
+      if (error.status === 422) await draftStore.put({ ...draft, status: 'review' })
+      throw error
+    }
     // Keep the IndexedDB copy through every failure path. The CBT backend makes
     // draft_id persistence idempotent, so even a lost success response is safe
     // to retry. Clear browser state only after a confirmed/replayed success.
-    await draftStore.delete(draftId)
+    // Cleanup must not turn a confirmed server save into a reported failure.
+    try { await draftStore.delete(draftId) } catch { /* A replay remains idempotent. */ }
     return result
   }
 
@@ -257,6 +282,7 @@ export function createQuestionAIController({
     regenerateDraft,
     retryDraftRegeneration,
     regenerateStored,
+    listDrafts: () => draftStore.list(),
     getDraft: (draftId) => draftStore.get(draftId),
     discardDraft: (draftId) => draftStore.delete(draftId),
     save,

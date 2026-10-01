@@ -1,6 +1,7 @@
 import { weaveApi } from '../api'
 
 export const weaveGateway = {
+  ai: weaveApi.ai,
   installation: weaveApi.installation,
   branding: weaveApi.branding,
   auth: weaveApi.auth,

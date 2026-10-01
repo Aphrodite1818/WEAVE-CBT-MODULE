@@ -6,6 +6,9 @@ import { Notice, SelectControl, StatusBadge } from '../../shared/ui'
 import { FormattedText } from '../../shared/ui/FormattedText'
 import '../student/student.css'
 import './question-builder.css'
+import { TeacherAIComposer } from './TeacherAIComposer'
+import { QuestionAuthoringWorkspace } from './QuestionAuthoringWorkspace'
+import { QuestionAuthoringToolbar } from './QuestionAuthoringToolbar'
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
@@ -26,8 +29,9 @@ function initialOptions() {
   return [makeOption(), makeOption(), makeOption(), makeOption()]
 }
 
-export function QuestionBuilder({ mode = 'create', state, dispatch, teacherData, gateway }) {
+export function QuestionBuilder({ enableAI = false, mode = 'create', state, dispatch, teacherData, gateway }) {
   const editing = mode === 'edit'
+  const [aiOpen, setAIOpen] = useState(false)
   const questionId = state.staff.selectedQuestionId
   const initializedQuestionRef = useRef(null)
   const promptRef = useRef(null)
@@ -314,8 +318,9 @@ export function QuestionBuilder({ mode = 'create', state, dispatch, teacherData,
     )
   }
 
-  return (
+  const editor = (
     <div className="question-builder-page">
+      {enableAI && !editing ? <QuestionAuthoringToolbar aiOpen={aiOpen} onToggleAI={() => setAIOpen((open) => !open)} onBack={leaveEditor} onPreview={() => setPreviewOpen(true)} onSave={(createAnother) => save({ createAnother })} busy={saving || loading} /> : (
       <header className="question-builder-toolbar" aria-label="Question editor actions">
         <button className="question-builder-back" type="button" onClick={leaveEditor}><RiArrowLeftLine size={17} /> Questions</button>
         <div className="question-builder-header__actions">
@@ -330,6 +335,7 @@ export function QuestionBuilder({ mode = 'create', state, dispatch, teacherData,
           </button>
         </div>
       </header>
+      )}
 
       {error && <Notice tone="danger">{error}</Notice>}
       {loading ? <div className="question-builder-loading">Loading question…</div> : (
@@ -408,7 +414,7 @@ export function QuestionBuilder({ mode = 'create', state, dispatch, teacherData,
               <button className="question-builder-add-option" type="button" onClick={addOption}><RiAddLine size={19} /> Add option</button>
               <div className="question-builder-rule"><strong>{correctCount}</strong><span>option{correctCount === 1 ? '' : 's'} marked correct</span></div>
             </section>
-            <button className="question-preview-toggle" type="button" onClick={() => setPreviewOpen(true)}><RiEyeLine size={21} /> Preview question</button>
+            {!enableAI && <button className="question-preview-toggle" type="button" onClick={() => setPreviewOpen(true)}><RiEyeLine size={21} /> Preview question</button>}
           </div>
         </div>
       )}
@@ -440,6 +446,8 @@ export function QuestionBuilder({ mode = 'create', state, dispatch, teacherData,
       )}
     </div>
   )
+  if (!enableAI || editing) return editor
+  return <QuestionAuthoringWorkspace open={aiOpen} panel={state.staff.section !== 'review-ai-questions' ? <TeacherAIComposer bank={selectedBank} state={state} dispatch={dispatch} gateway={gateway} onClose={() => setAIOpen(false)} /> : null}>{editor}</QuestionAuthoringWorkspace>
 }
 
 function validateDraft({ prompt, questionType, options }) {
@@ -480,26 +488,26 @@ function RichTextToolbar({ textareaRef, value, onChange, onImage, hasImage = fal
   )
 }
 
-export function QuestionPreview({ gateway, questionId, selectedBank, questionType, prompt, instruction, questionImageFile, questionImageAssetId, removeQuestionImage, options, previewLabel = 'Unsaved preview', previewTone = 'info' }) {
+export function QuestionPreview({ gateway, questionId, selectedBank, questionType, prompt, instruction, questionImageSrc, questionImageFile, questionImageAssetId, removeQuestionImage, options, previewLabel = 'Unsaved preview', previewTone = 'info' }) {
   return (
     <aside className="question-preview-card question-preview-card--page" aria-label="Student question preview">
       <div className="question-preview-card__heading"><div><span>Student view</span><StatusBadge tone={previewTone}>{previewLabel}</StatusBadge></div><small>{selectedBank?.name || 'Question bank'}</small></div>
       <div className="premium-exam-content question-builder-student-preview">
         {instruction.trim() && <p className="question-preview-instruction"><FormattedText text={instruction} /></p>}
         <div className="premium-question-prompt"><FormattedText text={prompt} placeholder="Your question will appear here as you type." /></div>
-        {(questionImageFile || (questionImageAssetId && !removeQuestionImage)) && (
-          <div className="premium-question-media">{questionImageFile ? <LocalImage file={questionImageFile} alt="Question preview" /> : <QuestionMedia gateway={gateway} questionId={questionId} alt="Question preview" />}</div>
+        {(questionImageSrc || questionImageFile || (questionImageAssetId && !removeQuestionImage)) && (
+          <div className="premium-question-media">{questionImageSrc ? <img src={questionImageSrc} alt="Question illustration" /> : questionImageFile ? <LocalImage file={questionImageFile} alt="Question preview" /> : <QuestionMedia gateway={gateway} questionId={questionId} alt="Question preview" />}</div>
         )}
         <div className="premium-options-list">
           {options.map((option, index) => (
             <div className="premium-option" key={option.clientId}>
               <div className="premium-option-letter">{optionLetter(index)}</div>
               <div className="premium-option-content">
-                {option.text.trim() && <div className="premium-option-text">{option.text}</div>}
-                {(option.imageFile || (option.imageAssetId && !option.removeExistingImage)) && (
-                  <div className="premium-option-media">{option.imageFile ? <LocalImage file={option.imageFile} alt={`Option ${optionLetter(index)}`} /> : <QuestionMedia gateway={gateway} questionId={questionId} optionId={option.id} alt={`Option ${optionLetter(index)}`} />}</div>
+                {option.text.trim() && <div className="premium-option-text"><FormattedText text={option.text} /></div>}
+                {(option.imageSrc || option.imageFile || (option.imageAssetId && !option.removeExistingImage)) && (
+                  <div className="premium-option-media">{option.imageSrc ? <img src={option.imageSrc} alt={`Option ${optionLetter(index)}`} /> : option.imageFile ? <LocalImage file={option.imageFile} alt={`Option ${optionLetter(index)}`} /> : <QuestionMedia gateway={gateway} questionId={questionId} optionId={option.id} alt={`Option ${optionLetter(index)}`} />}</div>
                 )}
-                {!option.text.trim() && !option.imageFile && !(option.imageAssetId && !option.removeExistingImage) && <div className="premium-option-text question-preview-placeholder">Add answer text or an image</div>}
+                {!option.text.trim() && !option.imageSrc && !option.imageFile && !(option.imageAssetId && !option.removeExistingImage) && <div className="premium-option-text question-preview-placeholder">Add answer text or an image</div>}
               </div>
             </div>
           ))}
