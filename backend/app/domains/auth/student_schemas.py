@@ -36,6 +36,7 @@ class StudentLoginResponse(BaseModel):
     availability: StudentExamAvailability
     status_message: str
     is_makeup: bool = False
+    has_unfinished_attempt: bool = False
     scheduled_start_at: datetime | None = None
     activated_at: datetime | None = None
 

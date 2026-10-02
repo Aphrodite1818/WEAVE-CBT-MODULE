@@ -74,6 +74,39 @@ class StudentCompletedAttemptResolutionTests(unittest.IsolatedAsyncioTestCase):
             )
         return resolution, candidate_rows, get_attempt
 
+    async def test_unfinished_attempt_is_reported_for_resume_after_suspension(self) -> None:
+        for status in (AttemptStatus.IN_PROGRESS, AttemptStatus.INTERRUPTED):
+            with self.subTest(attempt_status=status):
+                candidate, exam = self.row(ExamStatus.SUSPENDED)
+                suspended, _, _ = await self.resolve_rows(
+                    [(candidate, exam)], {candidate.id: status}
+                )
+                self.assertTrue(suspended.has_unfinished_attempt)
+                self.assertEqual(suspended.availability, StudentExamAvailability.SUSPENDED)
+
+                exam.status = ExamStatus.ACTIVE
+                resumed, _, _ = await self.resolve_rows(
+                    [(candidate, exam)], {candidate.id: status}
+                )
+                self.assertTrue(resumed.has_unfinished_attempt)
+                self.assertEqual(resumed.availability, StudentExamAvailability.READY)
+                self.assertIn("ready to resume", resumed.status_message)
+                candidate.display_name = "Ada"
+                response = StudentAuthService._build_response(
+                    enrollment=self.enrollment, resolution=resumed
+                )
+                self.assertTrue(response.model_dump()["has_unfinished_attempt"])
+
+    async def test_unstarted_exam_does_not_offer_resume_after_suspension(self) -> None:
+        candidate, exam = self.row(ExamStatus.SUSPENDED)
+        suspended, _, _ = await self.resolve_rows([(candidate, exam)], {})
+        self.assertFalse(suspended.has_unfinished_attempt)
+        exam.status = ExamStatus.ACTIVE
+        ready, _, _ = await self.resolve_rows([(candidate, exam)], {})
+        self.assertFalse(ready.has_unfinished_attempt)
+        self.assertEqual(ready.availability, StudentExamAvailability.READY)
+        self.assertNotIn("resume", ready.status_message)
+
     async def test_submitted_active_exam_resolves_directly_to_completed(self) -> None:
         candidate, exam = self.row(ExamStatus.ACTIVE)
         resolution, candidate_rows, get_attempt = await self.resolve_rows(
@@ -86,6 +119,7 @@ class StudentCompletedAttemptResolutionTests(unittest.IsolatedAsyncioTestCase):
             StudentExamAvailability.COMPLETED,
         )
         self.assertEqual(resolution.status_message, COMPLETED_MESSAGE)
+        self.assertFalse(resolution.has_unfinished_attempt)
         self.assertIs(resolution.candidate, candidate)
         self.assertIs(resolution.exam, exam)
         self.assertEqual(

@@ -22,6 +22,7 @@ SUSPENDED_MESSAGE = (
     "This examination is temporarily paused. Please wait for an administrator "
     "to resume it. Your saved work and remaining time are protected."
 )
+RESUME_MESSAGE = "Your examination is ready to resume. Your saved answers are preserved."
 COMPLETED_MESSAGE = (
     "You have already completed this examination. Your score is ready to view."
 )
@@ -81,7 +82,7 @@ class StudentAuthService(_StudentAuthService):
                 "Multiple unfinished live examinations were found for this student"
             )
         if unfinished:
-            candidate, exam, _attempt = unfinished[0]
+            candidate, exam, attempt = unfinished[0]
             if exam.status == ExamStatus.SUSPENDED:
                 return StudentExamResolution(
                     candidate=candidate,
@@ -89,13 +90,15 @@ class StudentAuthService(_StudentAuthService):
                     makeup_authorization_id=None,
                     availability=StudentExamAvailability.SUSPENDED,
                     status_message=SUSPENDED_MESSAGE,
+                    has_unfinished_attempt=attempt is not None,
                 )
             return StudentExamResolution(
                 candidate=candidate,
                 exam=exam,
                 makeup_authorization_id=None,
                 availability=StudentExamAvailability.READY,
-                status_message=READY_MESSAGE,
+                status_message=RESUME_MESSAGE if attempt is not None else READY_MESSAGE,
+                has_unfinished_attempt=attempt is not None,
             )
 
         completed = [

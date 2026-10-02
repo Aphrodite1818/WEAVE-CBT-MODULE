@@ -67,6 +67,7 @@ class StudentExamResolution:
     makeup_authorization_id: UUID | None
     availability: StudentExamAvailability
     status_message: str
+    has_unfinished_attempt: bool = False
 
 
 @dataclass(frozen=True)
@@ -338,6 +339,7 @@ class StudentAuthService:
             ),
             availability=resolution.availability,
             status_message=resolution.status_message,
+            has_unfinished_attempt=resolution.has_unfinished_attempt,
             is_makeup=resolution.makeup_authorization_id is not None,
             scheduled_start_at=(exam.scheduled_start_at if exam is not None else None),
             activated_at=(exam.activated_at if exam is not None else None),
