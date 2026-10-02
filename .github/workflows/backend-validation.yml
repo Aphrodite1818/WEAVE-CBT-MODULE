@@ -1,6 +1,11 @@
 name: Backend validation
 
 on:
+  push:
+    branches: [implementing-services]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-validation.yml"
   pull_request:
     branches: [implementing-services]
     paths:
