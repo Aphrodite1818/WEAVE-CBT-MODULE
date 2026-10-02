@@ -10,6 +10,7 @@ export {
 
 export {
   interruptAttempt,
+  interruptAttempts,
   resumeAttempt,
   terminateAttempt,
 } from './staffAttempts'
