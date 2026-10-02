@@ -2,46 +2,19 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { DashboardSchoolIdentity, Notice, StatusBadge } from '../../shared/ui'
 import { FormattedText } from '../../shared/ui/FormattedText'
 import './student.css'
+import { StudentLogoutConfirmation } from './StudentLogoutConfirmation'
 import { getLocalBrandLogoSrc } from '../../api/branding'
 import { RiCheckboxCircleFill, RiFlagFill, RiLogoutBoxRLine, RiDatabase2Line } from '@remixicon/react'
 
 const HEARTBEAT_RETRY_MS = 10_000
 
 export function StudentWorkspace(props) {
-  const [logoutRequested, setLogoutRequested] = useState(false)
-  const dialogRef = useRef(null)
-
-  useEffect(() => {
-    if (logoutRequested) dialogRef.current?.showModal()
-  }, [logoutRequested])
-
   return (
-    <>
-      <StudentWorkspaceContent {...props} returnToSignIn={() => setLogoutRequested(true)} />
-      {logoutRequested && (
-        <dialog
-          ref={dialogRef}
-          className="student-logout-dialog"
-          aria-labelledby="student-logout-title"
-          aria-describedby="student-logout-description"
-          onCancel={() => setLogoutRequested(false)}
-          onClose={() => setLogoutRequested(false)}
-        >
-          <h2 id="student-logout-title">Confirm logout</h2>
-          <p id="student-logout-description">Are you sure you want to log out?</p>
-          <div className="student-logout-dialog__actions">
-            <button className="premium-btn-secondary" type="button" autoFocus onClick={() => setLogoutRequested(false)}>Cancel</button>
-            <button className="premium-btn-primary" type="button" onClick={() => {
-              setLogoutRequested(false)
-              props.returnToSignIn()
-            }}>OK</button>
-          </div>
-        </dialog>
-      )}
-    </>
+    <StudentLogoutConfirmation onLogout={props.returnToSignIn}>
+      {(requestLogout) => <StudentWorkspaceContent {...props} returnToSignIn={requestLogout} />}
+    </StudentLogoutConfirmation>
   )
 }
-
 function StudentWorkspaceContent({ exam, resolution, gateway, dispatch, returnToSignIn, branding, schoolName, serverName = 'Local CBT server', onExamSuspended }) {
   const [attempt, setAttempt] = useState(null)
   const [attemptError, setAttemptError] = useState('')

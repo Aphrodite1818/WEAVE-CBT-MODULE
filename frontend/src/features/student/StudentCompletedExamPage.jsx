@@ -2,11 +2,20 @@ import { useEffect, useState } from 'react'
 import { RiCheckboxCircleFill } from '@remixicon/react'
 import { Notice } from '../../shared/ui'
 import './student.css'
+import { StudentLogoutConfirmation } from './StudentLogoutConfirmation'
 
 const SCORE_RADIUS = 58
 const SCORE_CIRCUMFERENCE = 2 * Math.PI * SCORE_RADIUS
 
-export function StudentCompletedExamPage({ gateway, returnToSignIn }) {
+export function StudentCompletedExamPage(props) {
+  return (
+    <StudentLogoutConfirmation onLogout={props.returnToSignIn}>
+      {(requestLogout) => <StudentCompletedExamContent {...props} returnToSignIn={requestLogout} />}
+    </StudentLogoutConfirmation>
+  )
+}
+
+function StudentCompletedExamContent({ gateway, returnToSignIn }) {
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [refreshToken, setRefreshToken] = useState(0)
