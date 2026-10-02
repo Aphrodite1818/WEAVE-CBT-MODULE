@@ -106,7 +106,7 @@
 .weave-app .premium-exam-shell--session .premium-exam-sidebar .premium-exam-timer:not(.is-critical) .premium-exam-timer__value { color: rgb(var(--color-text)); }
 .weave-app .premium-exam-shell--session,
 .weave-app .premium-exam-shell--session .premium-exam-content { background: rgb(var(--color-background)); }
-.weave-app .premium-exam-shell--session .premium-exam-header--session { background: rgb(var(--color-primary)); border-color: transparent; }
+.weave-app .premium-exam-shell--session .premium-exam-header--session { border-color: transparent; }
 .weave-app .premium-exam-shell--session .premium-exam-header--session .premium-exam-session-title h1 { color: rgb(var(--color-on-primary)); }
 .weave-app .premium-exam-shell--session .premium-exam-header--session .premium-exam-session-eyebrow { color: rgb(var(--color-on-primary) / .7); }
 .weave-app .premium-exam-shell--session .premium-exam-header--session .premium-exam-header-account { background: rgb(var(--color-on-primary) / .08); border-color: rgb(var(--color-on-primary) / .2); }
@@ -115,7 +115,6 @@
 .weave-app .premium-exam-shell--session .premium-exam-header--session .premium-exam-header-account .premium-student-logout { color: rgb(var(--color-on-primary)); }
 .weave-app .premium-exam-shell--session .premium-exam-header--session .premium-exam-header-account .premium-student-logout:hover { background: rgb(var(--color-on-primary) / .16); }
 .weave-app .premium-exam-shell--session .premium-exam-header--session .premium-student-logout:focus-visible { outline-color: rgb(var(--color-on-primary)); }
-.weave-app .premium-exam-shell--session .premium-question-paper { background: rgb(var(--color-surface)); border-top: 3px solid rgb(var(--color-primary)); }
 .weave-app .premium-exam-shell--session .premium-question-eyebrow { color: rgb(var(--color-primary)); }
 .weave-app .premium-exam-shell--session .premium-option:hover { background: color-mix(in srgb, rgb(var(--color-primary)) 4%, rgb(var(--color-surface))); border-color: rgb(var(--color-primary) / .35); }
 .weave-app .premium-exam-shell--session .premium-option-letter { background: rgb(var(--color-primary) / .09); color: rgb(var(--color-primary)); }

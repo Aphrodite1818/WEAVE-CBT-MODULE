@@ -32,6 +32,7 @@ function toStudentResolution(session) {
       studentId: session.student_id,
     },
     isMakeup: session.is_makeup,
+    hasUnfinishedAttempt: session.has_unfinished_attempt === true,
   };
 }
 

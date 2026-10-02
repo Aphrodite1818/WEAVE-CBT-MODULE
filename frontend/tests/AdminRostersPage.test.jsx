@@ -1,7 +1,11 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { AdminRosterDetailPage } from '../src/features/admin/pages/AdminRostersPage'
 import { AdminCurrentRostersPage } from '../src/features/admin/pages/AdminRosterViews'
+
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
+})
 
 function makeSubject(overrides = {}) {
   return {
@@ -177,6 +181,29 @@ describe('Admin roster workspace', () => {
     expect(within(row).getByRole('button', { name: 'Resume' })).toBeInTheDocument()
   })
 
+  it('keeps lifecycle controls accessible for suspended exams and dismisses the operations menu', async () => {
+    const exam = makeExam({ status: 'suspended', statusLabel: 'Suspended' })
+    const onNavigate = vi.fn()
+    const gateway = { candidates: { listExamRoster: vi.fn().mockResolvedValue(rosterPayload(exam, [candidate()])) } }
+    render(<AdminRosterDetailPage state={{ staff: { selectedExamId: exam.id } }} adminData={makeAdminData([exam])} gateway={gateway} onNavigate={onNavigate} />)
+    await screen.findByText('Ada Okafor')
+    const trigger = screen.getByRole('button', { name: 'Open roster operations' })
+    fireEvent.click(trigger)
+    expect(screen.getByRole('menuitem', { name: /exam lifecycle controls/i })).toHaveFocus()
+    expect(screen.queryByRole('menuitem', { name: /interrupt active attempts/i })).not.toBeInTheDocument()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+
+    fireEvent.click(trigger)
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole('menuitem', { name: /exam lifecycle controls/i }))
+    expect(onNavigate).toHaveBeenCalledWith('operation-detail', { selectedExamId: exam.id })
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
   it('offers only state-valid active bulk actions and sends one shared reason', async () => {
     const exam = makeExam({ status: 'active', statusLabel: 'Active' })
     const writer = candidate({ attempt: { id: 'attempt-1', status: 'in_progress', started_at: '2026-09-19T09:00:00Z', ended_at: null, end_reason: null } })
@@ -191,7 +218,7 @@ describe('Admin roster workspace', () => {
 
     render(<AdminRosterDetailPage state={{ staff: { selectedExamId: exam.id } }} adminData={makeAdminData([exam])} gateway={gateway} onNavigate={vi.fn()} />)
     await screen.findByText('Ada Okafor')
-    fireEvent.click(screen.getByRole('button', { name: /open bulk candidate actions/i }))
+    fireEvent.click(screen.getByRole('button', { name: /open roster operations/i }))
     expect(screen.getByRole('menuitem', { name: /grant late-start access/i })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: /interrupt active attempts/i })).toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: /bulk block/i })).not.toBeInTheDocument()

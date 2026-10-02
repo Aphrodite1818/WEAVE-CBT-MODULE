@@ -17,6 +17,7 @@ import { AdminResultDetailPage, AdminResultsPage } from './pages/AdminResultsPag
 import { AdminRosterDetailPage } from './pages/AdminRostersPage'
 import { AdminCurrentRostersPage, AdminRosterHistoryPage } from './pages/AdminRosterViews'
 import { useAdminData } from './useAdminData'
+import { AdminAIPage } from './pages/AdminAIPage'
 import '../teacher/teacher-dashboard.css'
 import '../teacher/teacher-selects.css'
 import '../teacher/teacher-exams.css'
@@ -42,6 +43,7 @@ const examinationGroupViews = new Set([
 
 const adminNav = [
   { type: 'link', section: 'dashboard', icon: 'home', label: 'Dashboard' },
+  { type: 'link', section: 'ai-usage', icon: 'ai', label: 'AI Usage' },
   {
     type: 'group',
     id: 'questions',
@@ -124,6 +126,7 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
     if (section === 'roster') return rosterViews.has(workspaceView)
     if (section === 'operations') return operationViews.has(workspaceView)
     if (section === 'results') return resultViews.has(workspaceView)
+    if (section === 'ai-usage') return ['ai-usage', 'ai-credit-requests', 'ai-credit-purchases'].includes(workspaceView)
     return workspaceView === section
   }
 
@@ -143,7 +146,7 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
   }
 
   return (
-    <main className={`teacher-shell admin-shell${sidebarOpen ? '' : ' teacher-shell--collapsed admin-shell--collapsed'}`}>
+    <main className={`teacher-shell admin-shell${sidebarOpen ? '' : ' teacher-shell--collapsed admin-shell--collapsed'}${workspaceView === 'create-question' ? ' teacher-shell--authoring' : ''}`}>
       <aside className="teacher-sidebar admin-sidebar">
         <div className="teacher-sidebar__header">
           <div className="school-card">
@@ -227,6 +230,7 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
         </header>
         <div className="teacher-content admin-content">
           {workspaceView === 'dashboard' && <AdminOverview state={state} adminData={adminData} onNavigate={navigate} />}
+          {['ai-usage', 'ai-credit-requests', 'ai-credit-purchases'].includes(workspaceView) && <AdminAIPage api={gateway.ai} requestsPage={workspaceView === 'ai-credit-requests'} purchasesPage={workspaceView === 'ai-credit-purchases'} onNavigate={navigate} />}
           {(workspaceView === 'question-banks' || workspaceView === 'create-bank') && (
             <AdminQuestionBanksPage adminData={adminData} gateway={gateway} onNavigate={navigate} createRequested={workspaceView === 'create-bank'} onCreateHandled={() => navigate('question-banks')} />
           )}

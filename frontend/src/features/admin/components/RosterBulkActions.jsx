@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { RiAddLine, RiCloseLine } from '@remixicon/react'
+import { RiAddLine, RiCloseLine, RiForbidLine, RiTimeLine, RiPauseCircleLine, RiSettings3Line, RiArrowRightLine } from '@remixicon/react'
 import { Notice } from '../../../shared/ui'
 import '../admin-roster-bulk.css'
 
@@ -33,6 +33,7 @@ export function RosterBulkActions(props) {
     selectedTargets,
     onSelectedTargetsChange,
     onChanged,
+    onOpenOperations,
     disabled = false,
   } = props
   const [menuOpen, setMenuOpen] = useState(false)
@@ -43,12 +44,42 @@ export function RosterBulkActions(props) {
   const [busy, setBusy] = useState(false)
   const [selectingAll, setSelectingAll] = useState(false)
   const dialogRef = useRef(null)
+  const menuRef = useRef(null)
+  const triggerRef = useRef(null)
+  const menuId = useId()
 
   const options = bulkOptions(exam, payload)
 
   useEffect(() => {
     if (dialogOpen) dialogRef.current?.showModal()
   }, [dialogOpen])
+
+  useEffect(() => {
+    if (!menuOpen) return undefined
+    menuRef.current?.querySelector('[role="menuitem"]')?.focus()
+    const closeOutside = (event) => {
+      if (!menuRef.current?.contains(event.target)) setMenuOpen(false)
+    }
+    const closeOnEscape = (event) => {
+      const items = Array.from(menuRef.current?.querySelectorAll('[role="menuitem"]') || [])
+      const index = items.indexOf(document.activeElement)
+      if (index >= 0 && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+        event.preventDefault()
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+        items[next]?.focus()
+      }
+      if (event.key === 'Escape') {
+        setMenuOpen(false)
+        triggerRef.current?.focus()
+      }
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [menuOpen])
 
   const chooseAction = (nextAction) => {
     setMenuOpen(false)
@@ -198,13 +229,17 @@ export function RosterBulkActions(props) {
   }
 
   return (
-    <div className="admin-roster-bulk-menu-wrap">
-      <button type="button" className="admin-roster-bulk-add" aria-label="Open bulk candidate actions" aria-expanded={menuOpen} disabled={disabled} onClick={() => setMenuOpen((value) => !value)}><RiAddLine size={20} /></button>
+    <div ref={menuRef} className="admin-roster-bulk-menu-wrap">
+      <button ref={triggerRef} type="button" className="admin-roster-bulk-add" aria-label="Open roster operations" aria-haspopup="menu" aria-controls={menuOpen ? menuId : undefined} aria-expanded={menuOpen} disabled={disabled} onClick={() => setMenuOpen((value) => !value)}><RiAddLine size={18} aria-hidden="true" /><span>Operations</span></button>
       {menuOpen && (
-        <div className="admin-roster-bulk-menu" role="menu" aria-label="Bulk candidate actions">
-          <strong>Bulk actions</strong>
-          {options.map((option) => <button key={option.action} type="button" role="menuitem" onClick={() => chooseAction(option.action)}><span>{option.label}</span><small>{option.count} available</small></button>)}
-          {!options.length && <p>No bulk actions are available for the current exam state.</p>}
+        <div id={menuId} className="admin-roster-bulk-menu" role="menu" aria-label="Roster operations">
+          <strong>Roster operations</strong>
+          {onOpenOperations && <button className="admin-roster-bulk-menu__lifecycle" type="button" role="menuitem" onClick={() => { setMenuOpen(false); onOpenOperations() }}><span className="admin-roster-bulk-menu__icon"><RiSettings3Line size={20} aria-hidden="true" /></span><span className="admin-roster-bulk-menu__copy"><strong>Exam lifecycle controls</strong><small>Manage the current sitting.</small></span><RiArrowRightLine size={17} aria-hidden="true" /></button>}
+          {options.map((option) => {
+            const ActionIcon = option.action === 'block' ? RiForbidLine : option.action === 'interrupt' ? RiPauseCircleLine : RiTimeLine
+            return <button key={option.action} className={`admin-roster-bulk-menu__action is-${option.action}`} type="button" role="menuitem" onClick={() => chooseAction(option.action)}><span className="admin-roster-bulk-menu__icon"><ActionIcon size={20} aria-hidden="true" /></span><span className="admin-roster-bulk-menu__copy"><strong>{option.label}</strong><small>{bulkDescription(option.action)}</small></span><span className="admin-roster-bulk-menu__count" aria-label={`${option.count} available`}>{option.count}</span></button>
+          })}
+          {!options.length && <p>No candidate bulk actions are available for this exam state.</p>}
         </div>
       )}
     </div>

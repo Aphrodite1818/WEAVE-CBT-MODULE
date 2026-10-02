@@ -4,6 +4,8 @@ import './question-authoring-workspace.css'
 const WIDTH_KEY = 'weave.teacher.aiPanelWidth'
 const DEFAULT_WIDTH = 380
 const MIN_WIDTH = 300
+const MIN_EDITOR_WIDTH = 560
+const DIVIDER_WIDTH = 5
 
 function readWidth() {
   try {
@@ -18,7 +20,9 @@ export function QuestionAuthoringWorkspace({ children, panel, open }) {
   const [width, setWidth] = useState(readWidth)
   const [availableWidth, setAvailableWidth] = useState(1100)
   const [dragging, setDragging] = useState(false)
-  const maximum = Math.max(MIN_WIDTH, Math.min(640, availableWidth - 425))
+  // A remembered preference must still fit this shell, including its sidebar.
+  // Keep the form wider than the assistant and reserve usable editor space.
+  const maximum = Math.max(MIN_WIDTH, Math.floor(Math.min(640, availableWidth * .42, availableWidth - MIN_EDITOR_WIDTH - DIVIDER_WIDTH)))
   const actualWidth = Math.min(width, maximum)
 
   useEffect(() => {

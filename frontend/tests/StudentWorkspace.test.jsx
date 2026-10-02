@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, expect, it, vi } from 'vitest'
 import { StudentWorkspace } from '../src/features/student/StudentWorkspace'
+import { ToastHost } from '../src/shared/ui/ToastHost'
 
 beforeAll(() => {
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
 })
 
-function setup({ suspended = false, save, stage = 'active', availability = 'ready', onSuspended = vi.fn(), attemptOverride = {}, heartbeat, returnToSignIn = vi.fn() } = {}) {
+function setup({ suspended = false, save, stage = 'active', availability = 'ready', onSuspended = vi.fn(), attemptOverride = {}, heartbeat, load, submit, returnToSignIn = vi.fn() } = {}) {
   const question = { id: 'q1', prompt: 'First question', question_type: 'single_choice', selected_option_ids: ['a'], is_flagged: false, mutation_sequence: 1, options: [{ id: 'a', text: 'First answer' }, { id: 'b', text: 'Second answer' }] }
   const attempt = {
     id: 'attempt',
@@ -22,9 +23,9 @@ function setup({ suspended = false, save, stage = 'active', availability = 'read
   const gateway = {
     auth: { getStudentStatus: vi.fn().mockResolvedValue({ availability, exam_id: 'exam', status_message: 'Please wait for your invigilator.' }) },
     attempts: {
-      getCurrentAttempt: vi.fn().mockResolvedValue(attempt),
+      getCurrentAttempt: load || vi.fn().mockResolvedValue(attempt),
       startCurrentAttempt: vi.fn().mockResolvedValue(attempt),
-      submitCurrentAttempt: vi.fn().mockResolvedValue({}),
+      submitCurrentAttempt: submit || vi.fn().mockResolvedValue({}),
       heartbeatCurrentAttempt: heartbeat || vi.fn().mockResolvedValue({ status: attempt.status, remaining_seconds: attempt.remaining_seconds, exam_suspended: suspended, next_heartbeat_after_seconds: 20 }),
       saveCurrentAnswer: save || vi.fn(async (_id, payload) => ({ ...payload, remaining_seconds: 2699 })),
     },
@@ -38,6 +39,25 @@ function setup({ suspended = false, save, stage = 'active', availability = 'read
 }
 
 afterEach(() => vi.useRealTimers())
+
+it('keeps the shared CBT loader visible until the active exam opens, with retry on failure', async () => {
+  render(<ToastHost />)
+  let openAttempt
+  const load = vi.fn()
+    .mockRejectedValueOnce({ userMessage: 'The exam could not be loaded.' })
+    .mockImplementationOnce(() => new Promise((resolve) => { openAttempt = resolve }))
+  setup({ load })
+  expect(screen.getByRole('heading', { name: 'Starting Weave' })).toBeInTheDocument()
+  expect(screen.queryByText('Loading exam')).not.toBeInTheDocument()
+  expect(screen.queryByText('Weave is opening your active attempt.')).not.toBeInTheDocument()
+  await screen.findByText('The exam could not be loaded.')
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+  await waitFor(() => expect(load).toHaveBeenCalledTimes(2))
+  expect(screen.getByRole('heading', { name: 'Starting Weave' })).toBeInTheDocument()
+  await act(async () => openAttempt({ id: 'attempt', status: 'in_progress', remaining_seconds: 2700, time_limit_seconds: 2700, questions: [{ id: 'q1', prompt: 'Restored question', question_type: 'single_choice', selected_option_ids: [], options: [] }] }))
+  expect(await screen.findByText('Restored question')).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: 'Starting Weave' })).not.toBeInTheDocument()
+})
 
 it('warns about unanswered questions and only submits after confirmation', async () => {
   const { gateway } = setup()
@@ -173,10 +193,13 @@ it('shows an explicit paused state for interrupted attempts and removes answer c
 })
 
 it('automatically submits at zero without asking for candidate confirmation', async () => {
-  const { gateway } = setup({ attemptOverride: { remaining_seconds: 0 } })
+  let finishSubmission
+  const submit = vi.fn(() => new Promise((resolve) => { finishSubmission = resolve }))
+  const { gateway } = setup({ attemptOverride: { remaining_seconds: 0 }, submit })
   expect(await screen.findByRole('heading', { name: 'Time is up' })).toBeInTheDocument()
   expect(screen.queryByRole('dialog', { name: 'Confirm exam submission' })).not.toBeInTheDocument()
   await waitFor(() => expect(gateway.attempts.submitCurrentAttempt).toHaveBeenCalledOnce())
+  await act(async () => finishSubmission({}))
   expect(await screen.findByRole('heading', { name: 'Exam submitted' })).toBeInTheDocument()
 })
 

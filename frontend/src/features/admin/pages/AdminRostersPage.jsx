@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { RiArrowLeftLine, RiArrowRightLine, RiSearchLine } from '@remixicon/react'
+import { RiArrowLeftLine, RiArrowRightLine, RiSearchLine, RiTimeLine, RiEditLine, RiPauseCircleLine, RiCheckboxCircleLine } from '@remixicon/react'
 import { buildAcademicLevels, listSubjectsForLevel } from '../../../shared/academics/authoringScope'
 import { Icon } from '../../../shared/icons/Icon'
 import { Notice, SelectControl } from '../../../shared/ui'
@@ -241,7 +241,7 @@ export function AdminRosterDetailPage({ state, adminData, gateway, onNavigate })
         <div><div className="teacher-page-title-line"><span className="teacher-page-title-icon"><Icon name="roster" size={27} /></span><h1>{exam.title}</h1></div><p>{[exam.academicLevelName, exam.subjectName, exam.assessmentName, `Revision ${exam.revisionNumber || 1}`].filter(Boolean).join(' · ')}</p></div>
         <div className="admin-roster-detail__heading-actions">
           <RosterLifecycleState status={historical ? historyKind : exam.status} label={historical ? rosterHistoryLabel(historyKind) : exam.statusLabel} />
-          {!historical && <RosterBulkActions exam={exam} payload={payload} gateway={gateway} action={bulkAction} onActionChange={setBulkAction} selectedTargets={selectedTargets} onSelectedTargetsChange={setSelectedTargets} onChanged={() => setRefreshToken((value) => value + 1)} disabled={loading} />}
+          {!historical && <RosterBulkActions exam={exam} payload={payload} gateway={gateway} action={bulkAction} onActionChange={setBulkAction} selectedTargets={selectedTargets} onSelectedTargetsChange={setSelectedTargets} onChanged={() => setRefreshToken((value) => value + 1)} onOpenOperations={() => onNavigate('operation-detail', { selectedExamId: exam.id })} disabled={loading} />}
         </div>
       </div>
 
@@ -252,10 +252,10 @@ export function AdminRosterDetailPage({ state, adminData, gateway, onNavigate })
 
       {liveRoster && !historical ? (
         <div className="admin-roster-summary admin-roster-summary--live" aria-label="Live roster summary">
-          <SummaryItem label="Not started" value={String(payload?.eligible_not_started_count ?? '—')} hint="Eligible candidates without an attempt" />
-          <SummaryItem label="Writing" value={String(payload?.in_progress_count ?? '—')} hint="Active attempts" />
-          <SummaryItem label="Interrupted" value={String(payload?.interrupted_count ?? '—')} hint="Paused by an invigilator" />
-          <SummaryItem label="Submitted" value={String(payload?.submitted_count ?? '—')} hint={`${payload?.terminated_count || 0} terminated`} />
+          <SummaryItem icon={RiTimeLine} tone="neutral" label="Not started" value={String(payload?.eligible_not_started_count ?? '—')} hint="Eligible candidates without an attempt" />
+          <SummaryItem icon={RiEditLine} tone="primary" label="Writing" value={String(payload?.in_progress_count ?? '—')} hint="Active attempts" />
+          <SummaryItem icon={RiPauseCircleLine} tone="warning" label="Interrupted" value={String(payload?.interrupted_count ?? '—')} hint="Paused by an invigilator" />
+          <SummaryItem icon={RiCheckboxCircleLine} tone="success" label="Submitted" value={String(payload?.submitted_count ?? '—')} hint={`${payload?.terminated_count || 0} terminated`} />
         </div>
       ) : (
         <div className="admin-roster-summary" aria-label="Roster summary">
@@ -335,8 +335,8 @@ function AttemptState({ attempt, lateStartAuthorized }) {
   return <span className={`admin-attempt-state admin-attempt-state--${attempt.status}`}>{label}</span>
 }
 
-function SummaryItem({ label, value, hint }) {
-  return <div className="admin-roster-summary__item"><span>{label}</span><strong>{value}</strong><small>{hint}</small></div>
+function SummaryItem({ label, value, hint, icon: MetricIcon, tone = 'neutral' }) {
+  return <div className={`admin-roster-summary__item${MetricIcon ? ` admin-roster-summary__item--metric is-${tone}` : ''}`}><span>{label}</span>{MetricIcon && <div className="admin-roster-summary__icon"><MetricIcon size={21} aria-hidden="true" /></div>}<strong>{value}</strong><small>{hint}</small></div>
 }
 
 function RosterPagination({ page, pageCount, total, pageSize, label, onPrevious, onNext }) {

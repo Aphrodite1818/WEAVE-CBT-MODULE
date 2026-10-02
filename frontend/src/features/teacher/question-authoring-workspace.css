@@ -2,9 +2,9 @@
 .teacher-shell.teacher-shell--authoring { height: 100dvh; min-height: 0; overflow: hidden; }
 .teacher-shell--authoring .teacher-main { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .teacher-shell--authoring .teacher-topbar { flex-shrink: 0; }
-.teacher-shell--authoring .teacher-content { flex: 1; min-height: 0; width: 100% !important; max-width: none; padding: 0; margin: 0; overflow: auto; }
-.teacher-question-create-host:not([hidden]) { height: 100%; }
-.question-authoring-workspace { height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); overflow: hidden; background: rgb(var(--color-background)); }
+.teacher-shell--authoring .teacher-content { display: block; flex: 1 1 0; min-height: 0; width: 100% !important; max-width: none; padding: 0; margin: 0; overflow: hidden; }
+.teacher-question-create-host:not([hidden]) { container: authoring-shell / inline-size; height: 100%; min-height: 0; overflow: hidden; }
+.question-authoring-workspace { height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); overflow: hidden; background: rgb(var(--color-background)); }
 .question-authoring-workspace.is-panel-open { grid-template-columns: minmax(0, 1fr) 5px var(--ai-panel-width); }
 .question-authoring-editor { container: authoring-editor / inline-size; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .question-authoring-editor > .question-builder-page { padding: 0 24px 28px; gap: 24px; margin-top: 0; }
@@ -52,7 +52,7 @@
 .question-authoring-panel .teacher-ai-send { position: absolute; top: 4px; right: 10px; display: inline-grid; place-items: center; width: 34px; height: 34px; min-height: 34px; padding: 0; border-radius: 11px; color: rgb(var(--color-on-primary, 255 255 255)); }
 @container authoring-editor (max-width: 1050px) { .question-authoring-editor .question-builder-grid { grid-template-columns: minmax(0, 1fr); } }
 @container authoring-editor (max-width: 520px) { .question-authoring-editor > .question-builder-page { padding: 0 16px 24px; } .question-authoring-editor .question-builder-meta-fields { grid-template-columns: minmax(0, 1fr); } .question-authoring-editor .question-builder-header__actions { justify-content: flex-start; } }
-@media (max-width: 900px) {
+@container authoring-shell (max-width: 860px) {
   .question-authoring-workspace.is-panel-open { grid-template-columns: minmax(0, 1fr); }
   .question-authoring-workspace.is-panel-open > .question-authoring-editor { display: none; }
   .question-authoring-divider { display: none; }
@@ -64,7 +64,7 @@
 .teacher-ai-toggle:focus-visible { outline: 3px solid rgb(var(--color-primary) / .3); outline-offset: 2px; }
 .teacher-ai-toggle > svg { color: rgb(var(--color-text)); }
 
-.teacher-shell--authoring .teacher-question-create-host > .question-preview-page { padding: 24px; }
+.teacher-shell--authoring .teacher-question-create-host > .question-preview-page { height: 100%; overflow: auto; padding: 24px; }
 
 
 /* One stable action bar; the editor adapts to its pane, not the window. */

@@ -14,7 +14,8 @@ export function handlePromptKeyDown(event, disabled = false) {
 
 export function TeacherAIComposer({ bank, state, dispatch, gateway, onClose }) {
   const controller = useTeacherAIController(gateway, state.session?.actor?.id)
-  const quota = useTeacherAIQuota(gateway.ai)
+  const isAdmin = state.session?.role === 'admin'
+  const quota = useTeacherAIQuota(gateway.ai, { includeRequests: !isAdmin })
   const [prompt, setPrompt] = useState('')
   const [count, setCount] = useState(5)
   const [type, setType] = useState('single_choice')
@@ -131,7 +132,7 @@ export function TeacherAIComposer({ bank, state, dispatch, gateway, onClose }) {
         <strong className="teacher-ai-credit-balance">{quota.quota ? quota.quota.total_available_credits : '\u2014'}</strong>
         <span>AI credits</span>
         <RiArrowDownSLine className="teacher-ai-disclosure" size={16} />
-      </summary><TeacherAIQuota model={quota} api={gateway.ai} /></details>
+      </summary><TeacherAIQuota model={quota} api={gateway.ai} onManageCredits={isAdmin ? () => dispatch({ type: 'staff', patch: { section: 'ai-usage' } }) : undefined} /></details>
     <p className="teacher-ai-footnote">Check each answer before adding.</p>
     </div>
     </div>

@@ -170,8 +170,6 @@
   padding: 0 16px;
   border: 0;
   border-radius: 12px;
-  background: rgb(var(--color-primary));
-  color: rgb(var(--color-on-primary));
   font-size: 14px;
   font-weight: 750;
   letter-spacing: -.01em;
@@ -571,7 +569,8 @@
   padding-top: 16px;
   border-top: 1px solid rgb(var(--color-border));
 }
-.premium-exam-navigation button { min-height: 42px; padding: 10px 20px; }
+.premium-exam-navigation button { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 42px; padding: 10px 20px; font-weight: 600; }
+.premium-exam-navigation button svg { flex-shrink: 0; }
 
 .premium-exam-header--session {
   flex-shrink: 0;
@@ -588,12 +587,18 @@
 }
 .premium-btn-secondary:hover { background: rgb(var(--color-background)); }
 
+/* The session header and primary exam actions share one solid tenant shade. */
+.premium-exam-header--session,
+.premium-exam-rail-submit-btn,
+.premium-btn-primary {
+  background: rgb(var(--color-primary));
+  color: rgb(var(--color-on-primary));
+}
+
 .premium-btn-primary {
   padding: 12px 24px;
-  background: rgb(var(--color-primary));
   border: none;
   border-radius: 8px;
-  color: rgb(var(--color-on-primary));
   font-weight: 500;
   cursor: pointer;
 }

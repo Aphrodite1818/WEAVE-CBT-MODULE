@@ -1,12 +1,16 @@
 ﻿import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TeacherAIComposer } from '../src/features/teacher/TeacherAIComposer'
 import { TeacherAIReviewPage } from '../src/features/teacher/TeacherAIReviewPage'
 import { TeacherAIQuota } from '../src/features/teacher/TeacherAIQuota'
+import { AdminWorkspace } from '../src/features/admin/AdminWorkspace'
 import { isQuotaExhausted } from '../src/features/teacher/teacherAI'
 import { parseStaffPath, pathForStaffState, staffPatchFromRoute } from '../src/app/staffNavigation'
 
 const { rows } = vi.hoisted(() => ({ rows: new Map() }))
+vi.mock('../src/features/admin/useAdminData', () => ({
+  useAdminData: () => ({ banks: [{ id: 'bank-1', name: 'Mathematics · JSS 1', status: 'Ready', curriculumSubjectId: 'math' }], subjects: [{ id: 'math', name: 'Mathematics', academicLevelId: 'jss1', academicLevelName: 'JSS 1' }], questions: [], exams: [], refresh: vi.fn() }),
+}))
 vi.mock('../src/features/questions/questionAIController', async (importOriginal) => ({
   ...await importOriginal(),
   createQuestionAIDraftStore: ({ scope }) => ({
@@ -32,10 +36,46 @@ function makeGateway() {
     },
   }
 }
+beforeAll(() => { Element.prototype.scrollIntoView = vi.fn() })
 beforeEach(() => rows.clear())
 afterEach(cleanup)
 
 describe('Teacher AI authoring', () => {
+
+  it('renders the same review content and controls in the administrator workspace', async () => {
+    rows.set('teacher-1:draft-1', structuredClone(draft))
+    rows.set('admin-1:draft-1', structuredClone(draft))
+    const teacher = render(<TeacherAIReviewPage state={state} gateway={makeGateway()} dispatch={vi.fn()} teacherData={{ banks: [bank], refresh: vi.fn() }} />)
+    await screen.findByRole('heading', { name: question.prompt })
+    const teacherMarkup = teacher.container.querySelector('.teacher-ai-review').innerHTML
+    cleanup()
+    const adminState = { ...state, session: { role: 'admin', actor: { id: 'admin-1' } } }
+    const admin = render(<AdminWorkspace state={adminState} gateway={makeGateway()} dispatch={vi.fn()} signOut={vi.fn()} />)
+    await screen.findByRole('heading', { name: question.prompt })
+    expect(admin.container.querySelector('.teacher-ai-review').innerHTML).toBe(teacherMarkup)
+    expect(screen.getByRole('button', { name: 'Add all (2)' })).toBeEnabled()
+  })
+
+  it('gives administrators the same authoring layout and generator with credit management', async () => {
+    const gateway = makeGateway()
+    gateway.ai.getMyAIQuota.mockResolvedValue({ ...balance, actor_type: 'tenant_admin' })
+    const dispatch = vi.fn()
+    const adminState = { ...state, session: { role: 'admin', actor: { id: 'admin-1' } }, staff: { section: 'create-question', selectedBankId: bank.id } }
+    const { container } = render(<AdminWorkspace state={adminState} gateway={gateway} dispatch={dispatch} signOut={vi.fn()} />)
+    expect(container.querySelector('.admin-shell')).toHaveClass('teacher-shell--authoring')
+    fireEvent.click(screen.getByRole('button', { name: 'Open question generation' }))
+    const quotaSummary = await screen.findByLabelText('12 AI credits available')
+    fireEvent.click(quotaSummary)
+    expect(screen.getByRole('button', { name: 'Manage AI credits' })).toBeInTheDocument()
+    expect(gateway.ai.listMyAIQuotaRequests).not.toHaveBeenCalled()
+    fireEvent.click(quotaSummary)
+    fireEvent.change(screen.getByLabelText('Describe questions to generate'), { target: { value: 'Fractions' } })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Generate questions' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Generate questions' }))
+    await waitFor(() => expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'staff', patch: expect.objectContaining({ section: 'review-ai-questions' }) })))
+    expect(gateway.questions.generateAIQuestionDrafts).toHaveBeenCalledWith('bank-1', expect.objectContaining({ generation_prompt: 'Fractions', question_count: 5 }))
+    expect([...rows.keys()].some((key) => key.startsWith('admin-1:'))).toBe(true)
+  })
 
   it('dismisses credit usage with Escape or an outside click', async () => {
     render(<TeacherAIComposer bank={bank} state={state} gateway={makeGateway()} dispatch={vi.fn()} />)
@@ -128,7 +168,7 @@ describe('Teacher AI authoring', () => {
     expect(screen.getByLabelText('Question count')).toHaveValue(5)
     expect(screen.getByRole('slider', { name: 'Difficulty' })).toHaveValue('1')
     expect(screen.getByRole('combobox', { name: 'Answer type' })).toHaveTextContent('Single choice')
-    expect(screen.getByRole('combobox', { name: 'Question format' })).toHaveTextContent('Allow images')
+    expect(screen.getByRole('combobox', { name: 'Question format' })).toHaveTextContent('Text only')
     await screen.findByLabelText('12 AI credits available')
   })
 

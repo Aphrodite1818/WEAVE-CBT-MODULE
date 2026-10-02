@@ -101,7 +101,7 @@
 @media (max-width: 900px) { .teacher-ai-review__grid { grid-template-columns: minmax(0, 1fr); } .teacher-ai-composer { position: static; grid-row: 1; } .teacher-ai-conversation { max-height: 300px; } .teacher-ai-review__summary { position: static; } .teacher-ai-review__header { align-items: flex-start; flex-direction: column; } .teacher-ai-review__header > button { align-self: stretch; justify-content: center; } }
 @media (max-width: 540px) { .teacher-ai-question { padding: 16px; } .teacher-ai-question__actions { margin-left: 0; width: 100%; justify-content: flex-end; } .teacher-ai-answer-correct { font-size: 0; } .teacher-ai-answers li { padding: 10px; } }
 
-.teacher-ai-review { max-width: 1080px; margin-inline: auto; }
+.teacher-ai-review { width: 100%; min-width: 0; max-width: 1080px; margin-inline: auto; }
 .teacher-ai-review__navigation { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding-block: 8px; }
 .teacher-ai-review__position { font-size: 14px; color: rgb(var(--color-text-muted)); }
 .teacher-ai-review__position strong { font-weight: 600; color: rgb(var(--color-text)); }

@@ -1,5 +1,5 @@
 import { ToastHost } from '../src/shared/ui/ToastHost'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { StudentWorkspace } from '../src/features/student/StudentWorkspace'
@@ -30,6 +30,38 @@ function renderWaitingRoom(resolution) {
 }
 
 describe('student waiting room', () => {
+  it('offers resume only after a suspended unfinished attempt becomes ready', async () => {
+    const dispatch = vi.fn()
+    const localGateway = {
+      auth: { getStudentStatus: vi.fn().mockResolvedValue({ availability: 'ready', exam_id: 'exam' }) },
+      attempts: { startCurrentAttempt: vi.fn().mockResolvedValue({ id: 'existing-attempt', status: 'in_progress', exam_suspended: false }) },
+    }
+    const resolution = {
+      state: 'suspended',
+      exam: { id: 'exam', title: 'Mathematics' },
+      hasUnfinishedAttempt: true,
+    }
+    const workspace = (currentResolution) => (
+      <StudentWorkspace exam={baseExamState} resolution={currentResolution}
+        gateway={localGateway} dispatch={dispatch} returnToSignIn={vi.fn()} />
+    )
+    const view = render(workspace(resolution))
+    expect(screen.getByRole('button', { name: 'Waiting for exam to resume...' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Resume attempt' })).not.toBeInTheDocument()
+
+    view.rerender(workspace({ ...resolution, state: 'ready' }))
+    expect(screen.getByRole('button', { name: 'Resume attempt' })).toBeEnabled()
+    expect(screen.getByText('Ready to resume')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Resume attempt' }))
+    await waitFor(() => expect(dispatch).toHaveBeenCalledWith({ type: 'exam', patch: { stage: 'active', index: 0 } }))
+    expect(localGateway.attempts.startCurrentAttempt).toHaveBeenCalledOnce()
+
+    // An exam change must follow the new backend resolution, not remembered suspension.
+    view.rerender(workspace({ state: 'ready', exam: { id: 'new-exam', title: 'English' }, hasUnfinishedAttempt: false }))
+    expect(screen.getByRole('button', { name: 'Start Exam' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Resume attempt' })).not.toBeInTheDocument()
+  })
+
   it('keeps an authenticated student in the waiting room when no exam exists', () => {
     renderWaitingRoom({
       state: 'no_exam',

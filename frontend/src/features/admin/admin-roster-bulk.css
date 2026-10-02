@@ -1,6 +1,7 @@
 .admin-roster-bulk-menu-wrap {
   position: relative;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 .admin-roster-bulk-add,
@@ -15,6 +16,22 @@
   color: rgb(var(--color-text));
   cursor: pointer;
 }
+
+.admin-roster-bulk-add {
+  width: auto;
+  display: inline-flex;
+  gap: 7px;
+  padding: 0 12px;
+  border-color: rgb(var(--color-primary) / .24);
+  background: rgb(var(--color-primary) / .06);
+  color: rgb(var(--color-primary));
+  font-size: 12px;
+  font-weight: 700;
+}
+.admin-roster-bulk-add svg { transition: transform 150ms ease; }
+.admin-roster-bulk-add[aria-expanded="true"] svg { transform: rotate(45deg); }
+.admin-roster-bulk-add:focus-visible,
+.admin-roster-bulk-menu > button:focus-visible { outline: 2px solid rgb(var(--color-focus-ring)); outline-offset: 3px; }
 
 .admin-roster-bulk-add:hover:not(:disabled),
 .admin-roster-bulk-icon:hover:not(:disabled) {
@@ -34,14 +51,14 @@
   z-index: 30;
   top: calc(100% + 8px);
   right: 0;
-  width: min(310px, calc(100vw - 32px));
+  width: min(380px, calc(100vw - 32px));
   display: grid;
   gap: 6px;
   border: 1px solid rgb(var(--color-border));
-  border-radius: 11px;
-  background: rgb(var(--color-surface));
+  border-radius: 14px;
+  background: rgb(var(--color-surface-raised));
   box-shadow: 0 14px 32px rgb(15 23 42 / .14);
-  padding: 9px;
+  padding: 10px;
 }
 
 .admin-roster-bulk-menu > strong {
@@ -70,12 +87,16 @@
   background: rgb(var(--color-primary-soft));
 }
 
-.admin-roster-bulk-menu > button span {
-  font-size: 12.5px;
-  font-weight: 680;
-}
+.admin-roster-bulk-menu__copy { display: grid; flex: 1; min-width: 0; gap: 4px; }
+.admin-roster-bulk-menu__copy strong { font-size: 12.5px; font-weight: 700; line-height: 1.4; }
+.admin-roster-bulk-menu__copy small { color: rgb(var(--color-text-muted)); font-size: 11px; line-height: 1.45; }
+.admin-roster-bulk-menu__icon { display: grid; place-items: center; flex: 0 0 36px; width: 36px; height: 36px; border-radius: 10px; background: rgb(var(--color-primary) / .08); color: rgb(var(--color-primary)); }
+.admin-roster-bulk-menu__count { align-self: flex-start; min-width: 24px; padding: 4px 6px; border-radius: 6px; background: rgb(var(--color-surface-muted)); color: rgb(var(--color-text-soft)); font-size: 11px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+.admin-roster-bulk-menu__action.is-block .admin-roster-bulk-menu__icon { background: #fef2f2; color: #b42323; }
+.admin-roster-bulk-menu__action.is-interrupt .admin-roster-bulk-menu__icon { background: #fff4df; color: #955807; }
+.admin-roster-bulk-menu > .admin-roster-bulk-menu__lifecycle { background: rgb(var(--color-primary) / .04); border: 1px solid rgb(var(--color-primary) / .12); margin-bottom: 4px; }
+.admin-roster-bulk-menu > p { color: rgb(var(--color-text-muted)); font-size: 11px; }
 
-.admin-roster-bulk-menu > button small,
 .admin-roster-bulk-menu > p {
   color: rgb(var(--color-text-muted));
   font-size: 11px;

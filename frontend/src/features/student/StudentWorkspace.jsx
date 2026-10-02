@@ -3,8 +3,9 @@ import { DashboardSchoolIdentity, Notice, StatusBadge } from '../../shared/ui'
 import { FormattedText } from '../../shared/ui/FormattedText'
 import './student.css'
 import { StudentLogoutConfirmation } from './StudentLogoutConfirmation'
+import { ProductLoadingScreen } from '../../app/ProductLoadingScreen'
 import { getLocalBrandLogoSrc } from '../../api/branding'
-import { RiCheckboxCircleFill, RiFlagFill, RiLogoutBoxRLine, RiDatabase2Line } from '@remixicon/react'
+import { RiCheckboxCircleFill, RiFlagFill, RiLogoutBoxRLine, RiDatabase2Line, RiArrowLeftLine, RiArrowRightLine } from '@remixicon/react'
 
 const HEARTBEAT_RETRY_MS = 10_000
 const TIMEOUT_RETRY_MS = 3_000
@@ -20,6 +21,7 @@ export function StudentWorkspace(props) {
 function StudentWorkspaceContent({ exam, resolution, gateway, dispatch, returnToSignIn, requestLogout, branding, schoolName, serverName = 'Local CBT server', onExamSuspended }) {
   const [attempt, setAttempt] = useState(null)
   const [attemptError, setAttemptError] = useState('')
+  const [attemptLoadVersion, setAttemptLoadVersion] = useState(0)
   const [savingByQuestion, setSavingByQuestion] = useState({})
   const [submitted, setSubmitted] = useState(null)
   const [submissionRequested, setSubmissionRequested] = useState(false)
@@ -101,7 +103,7 @@ function StudentWorkspaceContent({ exam, resolution, gateway, dispatch, returnTo
         setAttemptError(error?.userMessage || 'Weave could not reopen this active attempt.')
       })
     return () => { cancelled = true }
-  }, [exam.stage, gateway, returnToSignIn])
+  }, [exam.stage, gateway, returnToSignIn, attemptLoadVersion])
 
   useEffect(() => {
     if (exam.stage !== 'active' || !attempt?.id || submitted || isSuspended) return undefined
@@ -223,10 +225,12 @@ function StudentWorkspaceContent({ exam, resolution, gateway, dispatch, returnTo
   if (exam.stage === 'active') {
     if (!attempt || !current) {
       return (
-        <main className="premium-exam-shell">
-          <StudentExamHeader title={resolution?.exam?.title || 'Current examination'} branding={branding} schoolName={schoolName} serverName={serverName} candidateName={candidateName} candidateInitial={candidateInitial} onLogout={() => requestLogout({ timerContinues: true })} />
-          <section className="premium-lobby-card"><h2>Loading exam</h2><p>Weave is opening your active attempt.</p>{attemptError && <Notice tone="danger">{attemptError}</Notice>}</section>
-        </main>
+        <ProductLoadingScreen
+          title="Starting Weave"
+          copy="Checking the local CBT server and installation state."
+          error={attemptError}
+          onRetry={() => { setAttemptError(''); setAttemptLoadVersion((value) => value + 1) }}
+        />
       )
     }
 
@@ -282,8 +286,8 @@ function StudentWorkspaceContent({ exam, resolution, gateway, dispatch, returnTo
                 <span className="premium-answer-status" role="status">{savingByQuestion[current.id] === 'Saving...' ? 'Saving answer...' : savingByQuestion[current.id] === 'Not saved' ? 'Answer not saved' : current.selected_option_ids.length > 0 ? 'Answer saved' : 'No answer selected'}</span>
                 {attemptError && <div className="premium-exam-content__notice"><Notice tone="danger">{attemptError}</Notice></div>}
                 <nav className="premium-exam-navigation" aria-label="Question navigation">
-                  <button className="premium-btn-secondary" onClick={() => dispatch({ type: 'exam', patch: { index: Math.max(0, exam.index - 1) } })} disabled={exam.index === 0}>Previous</button>
-                  {exam.index < questions.length - 1 ? <button className="premium-btn-primary" onClick={() => dispatch({ type: 'exam', patch: { index: exam.index + 1 } })}>Save and next</button> : <button className="premium-btn-primary" disabled={isSaving || submitting} onClick={() => setSubmissionRequested(true)}>Submit exam</button>}
+                  <button className="premium-btn-secondary" onClick={() => dispatch({ type: 'exam', patch: { index: Math.max(0, exam.index - 1) } })} disabled={exam.index === 0}><RiArrowLeftLine size={18} aria-hidden="true" /><span>Previous</span></button>
+                  {exam.index < questions.length - 1 ? <button className="premium-btn-primary" onClick={() => dispatch({ type: 'exam', patch: { index: exam.index + 1 } })}><span>Save and next</span><RiArrowRightLine size={18} aria-hidden="true" /></button> : <button className="premium-btn-primary" disabled={isSaving || submitting} onClick={() => setSubmissionRequested(true)}>Submit exam</button>}
                 </nav>
               </section>
             </div>
@@ -305,9 +309,10 @@ function StudentWorkspaceContent({ exam, resolution, gateway, dispatch, returnTo
   const waiting = state === 'waiting_for_activation'
   const suspended = state === 'suspended'
   const unavailable = noExam || waiting || suspended
+  const canResume = resolution?.hasUnfinishedAttempt === true
   const ready = state === 'ready' || state === 'makeup'
   const title = noExam ? 'No exam available yet' : resolution?.exam?.title || 'Current examination'
-  const statusLabel = noExam ? 'Waiting room' : waiting ? 'Waiting for activation' : suspended ? 'Exam suspended' : state === 'makeup' ? 'Makeup exam ready' : 'Exam ready'
+  const statusLabel = noExam ? 'Waiting room' : waiting ? 'Waiting for activation' : suspended ? 'Exam suspended' : canResume ? 'Ready to resume' : state === 'makeup' ? 'Makeup exam ready' : 'Exam ready'
 
   return (
     <main className="premium-exam-shell" style={{ justifyContent: 'center', alignItems: 'center' }}>
@@ -318,7 +323,7 @@ function StudentWorkspaceContent({ exam, resolution, gateway, dispatch, returnTo
         {unavailable && <Notice>Weave is checking the local CBT server automatically. You do not need to sign in again.</Notice>}
         {ready && <Notice>Your examination has been resolved from the local CBT server and is ready to open.</Notice>}
         {attemptError && <Notice tone="danger">{attemptError}</Notice>}
-        <button className="premium-btn-primary" style={{ width: '100%', marginTop: '24px' }} disabled={unavailable || starting} onClick={() => startAttempt({ gateway, setAttempt, dispatch, setAttemptError, setStarting, onExamSuspended, startPending, expectedExamId: resolution?.exam?.id })}>{starting ? 'Checking exam status...' : noExam ? 'Waiting for an exam...' : waiting ? 'Waiting for activation...' : suspended ? 'Waiting for exam to resume...' : 'Start Exam'}</button>
+        <button className="premium-btn-primary" style={{ width: '100%', marginTop: '24px' }} disabled={unavailable || starting} onClick={() => startAttempt({ gateway, setAttempt, dispatch, setAttemptError, setStarting, onExamSuspended, startPending, expectedExamId: resolution?.exam?.id })}>{starting ? 'Checking exam status...' : noExam ? 'Waiting for an exam...' : waiting ? 'Waiting for activation...' : suspended ? 'Waiting for exam to resume...' : canResume ? 'Resume attempt' : 'Start Exam'}</button>
         <button className="premium-btn-secondary" type="button" onClick={() => requestLogout()} style={{ width: '100%', marginTop: '12px' }}>Logout</button>
       </section>
     </main>

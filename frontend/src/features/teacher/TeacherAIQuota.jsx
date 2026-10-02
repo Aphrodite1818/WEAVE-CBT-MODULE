@@ -2,7 +2,7 @@
 import { RiRefreshLine } from '@remixicon/react'
 import { isQuotaExhausted } from './teacherAI'
 
-export function TeacherAIQuota({ model, api }) {
+export function TeacherAIQuota({ model, api, onManageCredits }) {
   const [requestOpen, setRequestOpen] = useState(false)
   const [credits, setCredits] = useState(20)
   const [sending, setSending] = useState(false)
@@ -35,6 +35,7 @@ export function TeacherAIQuota({ model, api }) {
       <progress aria-label="Weekly credits used" value={quota.weekly.used_credits} max={Math.max(1, quota.weekly.credit_limit)} />
       <div className="teacher-ai-quota__details"><span>{quota.weekly.used_credits} / {quota.weekly.credit_limit} weekly used</span><span>{quota.extra.available_credits} extra available</span></div>
       {reserved > 0 && <p>{reserved} credits reserved for ongoing requests.</p>}
+      {onManageCredits && <button className="text-button" type="button" onClick={onManageCredits}>Manage AI credits</button>}
       {requests?.length > 0 && <p>Credit request pending · {requests.reduce((sum, item) => sum + item.requested_credits, 0)} credits requested</p>}
       {exhausted && requests?.length === 0 && !requestOpen && <button className="text-button" type="button" disabled={sending} onClick={() => setRequestOpen(true)}>Request more credits</button>}
       {exhausted && requests?.length === 0 && requestOpen && <form onSubmit={submit} className="teacher-ai-quota__request"><label>Credits to request<input type="number" min="1" max="100000" required value={credits} onChange={(event) => setCredits(event.target.value)} /></label><button type="submit" className="teacher-secondary-action" disabled={sending}>{sending ? 'Sending…' : 'Send request'}</button></form>}
