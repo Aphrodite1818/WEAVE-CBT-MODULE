@@ -1,5 +1,17 @@
 import { queryString, weaveRequest } from './client'
 
+const DEFAULT_NORMAL_ENTRY_GRACE_MS = 10 * 60 * 1000
+
+function withDefaultNormalEntryDeadline(payload) {
+  if (!payload?.scheduled_start_at || payload.latest_normal_start_at !== undefined) return payload
+  const scheduled = new Date(payload.scheduled_start_at)
+  if (Number.isNaN(scheduled.getTime())) return payload
+  return {
+    ...payload,
+    latest_normal_start_at: new Date(scheduled.getTime() + DEFAULT_NORMAL_ENTRY_GRACE_MS).toISOString(),
+  }
+}
+
 export function listExams(params = {}, options = {}) {
   return weaveRequest(`/exams${queryString(params)}`, options)
 }
@@ -27,7 +39,7 @@ export function assignExamLead(examId, leadTeacherId, expectedAuthoringVersion) 
 export function createExam(payload) {
   return weaveRequest('/exams', {
     method: 'POST',
-    body: payload,
+    body: withDefaultNormalEntryDeadline(payload),
     successMessage: 'Examination draft created.',
   })
 }
@@ -35,7 +47,7 @@ export function createExam(payload) {
 export function updateExam(examId, payload) {
   return weaveRequest(`/exams/${examId}`, {
     method: 'PATCH',
-    body: payload,
+    body: withDefaultNormalEntryDeadline(payload),
     successMessage: 'Examination changes saved.',
   })
 }
@@ -146,10 +158,7 @@ export function listManualQuestions(examId, options = {}) {
 export function addManualQuestions(examId, questionIds, expectedAuthoringVersion = 1) {
   return weaveRequest(`/exams/${examId}/manual-questions`, {
     method: 'POST',
-    body: {
-      question_ids: questionIds,
-      expected_authoring_version: expectedAuthoringVersion,
-    },
+    body: { question_ids: questionIds, expected_authoring_version: expectedAuthoringVersion },
     successMessage: 'Questions added to the examination.',
   })
 }
@@ -157,10 +166,7 @@ export function addManualQuestions(examId, questionIds, expectedAuthoringVersion
 export function removeManualQuestion(examId, questionId, expectedAuthoringVersion = 1) {
   return weaveRequest(`/exams/${examId}/manual-questions/remove`, {
     method: 'POST',
-    body: {
-      question_id: questionId,
-      expected_authoring_version: expectedAuthoringVersion,
-    },
+    body: { question_id: questionId, expected_authoring_version: expectedAuthoringVersion },
     successMessage: 'Question removed from the examination.',
   })
 }
@@ -168,10 +174,7 @@ export function removeManualQuestion(examId, questionId, expectedAuthoringVersio
 export function reorderManualQuestions(examId, questionIds, expectedAuthoringVersion = 1) {
   return weaveRequest(`/exams/${examId}/manual-questions/reorder`, {
     method: 'POST',
-    body: {
-      question_ids: questionIds,
-      expected_authoring_version: expectedAuthoringVersion,
-    },
+    body: { question_ids: questionIds, expected_authoring_version: expectedAuthoringVersion },
     successMessage: 'Examination question order updated.',
   })
 }
