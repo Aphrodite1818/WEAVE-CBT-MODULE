@@ -4,10 +4,19 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.domains.attempts.models import AttemptEndReason, AttemptStatus
 from app.domains.candidates.models import CandidateStatus
 from app.domains.exams.models import ExamRosterStatus
+
+CandidateAttemptStateFilter = Literal[
+    "not_started",
+    "in_progress",
+    "interrupted",
+    "submitted",
+    "terminated",
+]
 
 
 class InputBase(BaseModel):
@@ -38,6 +47,28 @@ class CandidateLateStartRevocationPayload(InputBase):
     reason: str = Field(min_length=1)
 
 
+class CandidateBulkActionPayload(InputBase):
+    candidate_ids: list[UUID] = Field(min_length=1, max_length=5000)
+    reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("candidate_ids")
+    @classmethod
+    def unique_candidate_ids(cls, value: list[UUID]) -> list[UUID]:
+        if len(value) != len(set(value)):
+            raise ValueError("candidate_ids cannot contain duplicates")
+        return value
+
+
+class CandidateBulkLateStartGrantPayload(CandidateBulkActionPayload):
+    expires_at: datetime | None = None
+
+
+class CandidateBulkActionResponse(OutputBase):
+    action: Literal["block", "late_start"]
+    updated_count: int
+    candidate_ids: list[UUID]
+
+
 class CandidateMakeupApprovalPayload(InputBase):
     reason: str = Field(
         min_length=1,
@@ -50,6 +81,14 @@ class CandidateMakeupRevocationPayload(InputBase):
         min_length=1,
         max_length=500,
     )
+
+
+class CandidateAttemptSummaryResponse(OutputBase):
+    id: UUID
+    status: AttemptStatus
+    started_at: datetime
+    ended_at: datetime | None
+    end_reason: AttemptEndReason | None
 
 
 class CandidateResponse(OutputBase):
@@ -69,6 +108,10 @@ class CandidateResponse(OutputBase):
 
     roster_version: int
 
+    attempt: CandidateAttemptSummaryResponse | None = None
+    late_start_authorized: bool = False
+    late_start_required: bool = False
+
     created_at: datetime
     updated_at: datetime
 
@@ -85,6 +128,12 @@ class CandidateRosterResponse(OutputBase):
     roster_version: int
 
     roster_candidate_count: int
+    eligible_not_started_count: int = 0
+    in_progress_count: int = 0
+    interrupted_count: int = 0
+    submitted_count: int = 0
+    terminated_count: int = 0
+    late_start_required_count: int = 0
 
     offset: int
     limit: int
