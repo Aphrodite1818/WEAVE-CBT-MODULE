@@ -3,6 +3,7 @@ import { Icon } from '../../../shared/icons/Icon'
 import { Panel, SelectControl, StatusBadge } from '../../../shared/ui'
 import { useToast } from '../../../shared/ui/useToast'
 import { AI_PAGE_SIZE, useAdminAIData } from '../useAdminAIData'
+import { useAIPaymentConfirmation } from '../useAIPaymentConfirmation'
 import '../admin-ai.css'
 
 const date = (value) => new Date(value).toLocaleString()
@@ -21,6 +22,9 @@ export function AdminAIPage({ api, requestsPage = false, purchasesPage = false, 
   const model = useAdminAIData(api, status, requestPage, purchasePage, requestsPage ? 'requests' : purchasesPage ? 'purchases' : 'usage')
   const { showSuccess, showError, showInfo } = useToast()
   const { summary, actors, requests, purchases, loading, errors, refresh } = model
+  const paymentPhase = useAIPaymentConfirmation(api, purchases, refresh)
+  const weeklyUsed = actors?.items.reduce((sum, actor) => sum + actor.weekly_used_credits, 0)
+  const weeklyAvailable = actors?.items.reduce((sum, actor) => sum + actor.weekly_available_credits, 0)
 
   // Empty pages can occur when the last pending row is reviewed elsewhere.
   if (!loading && requests && requestPage > 0 && requestPage * AI_PAGE_SIZE >= requests.total) setRequestPage(Math.max(0, Math.ceil(requests.total / AI_PAGE_SIZE) - 1))
@@ -70,11 +74,12 @@ export function AdminAIPage({ api, requestsPage = false, purchasesPage = false, 
   const openDialog = (kind, item) => { setActionError(''); setDialog({ kind, item }) }
   return <div className="teacher-reference-page admin-ai-page" aria-busy={loading || busy}>
     <div className="teacher-page-heading">
-      <div><div className="teacher-page-title-line"><span className="teacher-page-title-icon"><Icon name="bolt" size={27} /></span><h1>{requestsPage ? 'Credit Requests' : purchasesPage ? 'AI Credit Purchases' : 'AI Usage'}</h1></div><p>{requestsPage ? 'Review staff requests and allocate credits from the tenant reserve.' : purchasesPage ? 'Top up your tenant reserve and keep track of payments.' : 'Find your staff, check their usage, and keep their next idea moving.'}</p></div>
+      <div><div className="teacher-page-title-line"><span className="teacher-page-title-icon"><Icon name="ai" size={27} /></span><h1>{requestsPage ? 'Credit Requests' : purchasesPage ? 'AI Credit Purchases' : 'AI Usage'}</h1></div><p>{requestsPage ? 'Review staff requests and allocate credits from the school balance.' : purchasesPage ? 'Purchase credits for your school and track payments.' : 'Monitor staff usage and allocate AI credits.'}</p></div>
       <div className="admin-ai-actions">
         <button className="teacher-secondary-action" disabled={loading || busy} onClick={() => void refresh()}><Icon name="sync" size={16} />Refresh</button>
         {requestsPage || purchasesPage ? <button className="teacher-secondary-action" disabled={busy} onClick={() => onNavigate('ai-usage')}><Icon name="back" size={16} />Back to AI Usage</button> : <button className="teacher-secondary-action" disabled={busy} onClick={() => onNavigate('ai-credit-requests')}>Credit Requests <span className="admin-ai-count">{loading ? '…' : summary?.pending_request_count ?? '—'}</span></button>}
-        <button className="teacher-primary-action" disabled={busy} onClick={() => purchasesPage ? openDialog('purchase') : onNavigate('ai-credit-purchases')}><Icon name="plus" size={16} />Purchase Credits</button>
+        {!purchasesPage && <button className="teacher-secondary-action" disabled={busy} onClick={() => onNavigate('ai-credit-purchases')}>Purchase history</button>}
+        <button className="teacher-primary-action" disabled={busy} onClick={() => openDialog('purchase')}><Icon name="plus" size={16} />Purchase Credits</button>
       </div>
     </div>
     {actionError && <p role="alert" className="admin-ai-error">{actionError}</p>}
@@ -82,16 +87,16 @@ export function AdminAIPage({ api, requestsPage = false, purchasesPage = false, 
     {loading && <p role="status">Loading AI credits…</p>}
     {!loading && summary && <section className={`admin-ai-summary${requestsPage || purchasesPage ? ' admin-ai-summary--compact' : ''}`} aria-label="Tenant AI credit summary">
       <div className="admin-ai-reserve">
-        <span className="admin-ai-reserve__icon"><Icon name="bolt" size={24} /></span>
-        <div><span>Tenant reserve</span><strong>{summary.tenant_reserve_credits}</strong><p>Credits ready to allocate</p></div>
-        {!requestsPage && !purchasesPage && <span className="admin-ai-reserve__note">A little fuel for the next great question.</span>}
+        <span className="admin-ai-reserve__icon"><Icon name="credits" size={24} /></span>
+        <div><span>School credit balance</span><strong>{summary.tenant_reserve_credits.toLocaleString()}</strong><p>Available to allocate to staff</p></div>
         {requestsPage && <span className="admin-ai-reserve__note" role="status">{summary.pending_request_count} pending credit requests</span>}
       </div>
-      {!requestsPage && !purchasesPage && <div className="admin-ai-weekly-summary">
-        <div className="admin-ai-section-heading"><div><span className="admin-ai-eyebrow">THIS WEEK</span><h2>Ideas in motion</h2></div><span className="admin-ai-count">{summary.quota_actor_count} staff accounts</span></div>
-        {actors && <CreditMeter label="Weekly credits used vs available" used={actors.items.reduce((sum, actor) => sum + actor.weekly_used_credits, 0)} available={actors.items.reduce((sum, actor) => sum + actor.weekly_available_credits, 0)} />}
-        <p className="admin-ai-summary-note"><strong>{summary.personal_extra_balance_total}</strong> extra credits held by staff <span>· {summary.personal_extra_reserved_total} reserved for ongoing work</span></p>
-      </div>}
+      {!requestsPage && !purchasesPage && <dl className="admin-ai-summary-stats">
+        <div><dt>Weekly credits used</dt><dd>{weeklyUsed?.toLocaleString() ?? '—'}</dd><span>Across {summary.quota_actor_count} staff accounts</span></div>
+        <div><dt>Staff extra balance</dt><dd>{summary.personal_extra_balance_total.toLocaleString()}</dd><span>{summary.personal_extra_reserved_total.toLocaleString()} reserved for ongoing work</span></div>
+        <div><dt>Weekly credits left</dt><dd>{weeklyAvailable?.toLocaleString() ?? '—'}</dd><span>Available to staff this week</span></div>
+      </dl>}
+      {!requestsPage && !purchasesPage && actors && <div className="admin-ai-summary-meter"><CreditMeter label="Staff weekly usage" used={weeklyUsed} available={weeklyAvailable} compact /></div>}
     </section>}
     {requestsPage ? <Panel title="Credit requests" action={<SelectControl label="Request status" value={status} options={['pending', 'approved', 'rejected', 'cancelled', 'all'].map((value) => ({ value, label: value === 'all' ? 'All statuses' : value[0].toUpperCase() + value.slice(1) }))} onChange={(value) => { setStatus(value); setRequestPage(0) }} />}>
       {!loading && requests && <>
@@ -101,26 +106,27 @@ export function AdminAIPage({ api, requestsPage = false, purchasesPage = false, 
         <Pagination page={requestPage} total={requests.total} onChange={setRequestPage} disabled={busy} />
       </>}
     </Panel> : purchasesPage ? <Panel title="Payment history">
-        <p>Complete payment in the secure checkout, then verify it here to confirm your credits.</p>
+        <p>Complete payment in the secure checkout. Your school balance updates after payment is confirmed.</p>
+        {paymentPhase !== 'idle' && <p className="admin-ai-payment-status" role="status">{paymentPhase === 'paused' ? 'Payment is still awaiting confirmation. Return after completing checkout to resume automatic checks, or check its status below.' : paymentPhase === 'unavailable' ? 'Automatic confirmation is unavailable for this payment. Refresh the history or check its status below.' : 'Checking pending payments automatically. You can continue using the dashboard.'}</p>}
         {!loading && purchases && <>
           <DataTable label="Credit purchases" headings={['Date', 'Credits', 'Amount', 'Reference', 'Status', 'Actions']} empty={!purchases.items.length}>
-            {purchases.items.map((item) => <tr key={item.id}><td>{date(item.created_at)}</td><td>{item.credits}</td><td>{money(item.amount_kobo)}</td><td>{item.reference}</td><td><StatusBadge tone={statusTone(item.status)}>{item.status}</StatusBadge></td><td>{item.status === 'pending' && <button className="teacher-secondary-action" disabled={busy} onClick={() => void verify(item)}>Verify payment</button>}</td></tr>)}
+            {purchases.items.map((item) => <tr key={item.id}><td>{date(item.created_at)}</td><td>{item.credits}</td><td>{money(item.amount_kobo)}</td><td>{item.reference}</td><td><StatusBadge tone={statusTone(item.status)}>{item.status}</StatusBadge></td><td>{item.status === 'pending' && <button className="teacher-secondary-action" disabled={busy || paymentPhase === 'checking'} onClick={() => void verify(item)}>Check status</button>}</td></tr>)}
           </DataTable>
           <Pagination page={purchasePage} total={purchases.total} onChange={setPurchasePage} disabled={busy} />
         </>}
       </Panel> : actors && <StaffCreditDirectory actors={actors.items} busy={busy || loading || !summary} onAllocate={(item) => openDialog('allocate', item)} />}
-    {dialog && (dialog.kind === 'purchase' ? <PurchaseDialog api={api} onClose={() => setDialog(null)} mutate={mutate} busy={busy} /> : <ReviewDialog selection={dialog} reserve={summary?.tenant_reserve_credits} busy={busy} onClose={() => setDialog(null)} onSubmit={review} />)}
+    {dialog && (dialog.kind === 'purchase' ? <PurchaseDialog api={api} onClose={() => setDialog(null)} onCheckout={() => { setDialog(null); setPurchasePage(0); if (!purchasesPage) onNavigate('ai-credit-purchases') }} mutate={mutate} busy={busy} /> : <ReviewDialog selection={dialog} reserve={summary?.tenant_reserve_credits} busy={busy} onClose={() => setDialog(null)} onSubmit={review} />)}
   </div>
 }
 
-function CreditMeter({ label, used, available }) {
+function CreditMeter({ label, used, available, compact = false }) {
   // Actor balances expose used and available amounts, not the full weekly cap
   // or reserved weekly credits. Show that known split without inventing a cap.
   const knownCredits = used + available
   return <div className="admin-ai-meter">
-    <div><span>{label}</span><strong>{available} available</strong></div>
+    <div><span>{label}</span><strong>{compact ? `${used.toLocaleString()} used · ${available.toLocaleString()} left` : `${available} available`}</strong></div>
     <progress aria-label={label} aria-valuetext={`${used} used; ${available} available`} value={used} max={Math.max(1, knownCredits)} />
-    <div className="admin-ai-meter__legend"><span><i />{used} used</span><span>{knownCredits === 0 ? 'No weekly credits available' : `${available} left this week`}</span></div>
+    {!compact && <div className="admin-ai-meter__legend"><span><i />{used} used</span><span>{knownCredits === 0 ? 'No weekly credits available' : `${available} left this week`}</span></div>}
   </div>
 }
 
@@ -135,9 +141,9 @@ function StaffCreditDirectory({ actors, busy, onAllocate }) {
       <label className="teacher-search-control"><Icon name="search" size={18} /><input type="search" aria-label="Search staff" placeholder="Search by name or email…" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
       <SelectControl label="Staff role" value={role} onChange={setRole} options={[{ value: 'all', label: 'All staff' }, { value: 'teacher', label: 'Teachers' }, { value: 'tenant_admin', label: 'Administrators' }]} />
     </div>
-    {filtered.length ? <div className="admin-ai-staff-grid">{filtered.map((actor) => <article className="admin-ai-staff-card" key={actor.quota_account_id} aria-label={`${actor.display_name} credits`}>
+    {filtered.length ? <div className="admin-ai-staff-list">{filtered.map((actor) => <article className="admin-ai-staff-row" key={actor.quota_account_id} aria-label={`${actor.display_name} credits`}>
       <header><span className="admin-ai-avatar">{(actor.display_name || actor.email || '?').trim().slice(0, 1).toUpperCase()}</span><div><h3>{actor.display_name || actor.email}</h3>{actor.email !== actor.display_name && <p>{actor.email}</p>}<span className="admin-ai-staff-role">{actor.actor_type === 'tenant_admin' ? 'Administrator' : 'Teacher'}</span></div></header>
-      <CreditMeter label={`${actor.display_name} weekly usage`} used={actor.weekly_used_credits} available={actor.weekly_available_credits} />
+      <CreditMeter label="Weekly usage" used={actor.weekly_used_credits} available={actor.weekly_available_credits} />
       <div className="admin-ai-staff-totals"><div><span>Extra available</span><strong>{actor.extra_available_credits}</strong></div><div><span>Total available</span><strong>{actor.total_available_credits}</strong></div></div>
       <button className="teacher-secondary-action" disabled={busy} onClick={() => onAllocate(actor)} aria-label={`Allocate credits to ${actor.display_name}`}><Icon name="plus" size={16} />Allocate credits</button>
     </article>)}</div> : <div className="teacher-reference-empty"><Icon name="users" size={28} /><div><strong>{actors.length ? 'No matching staff' : 'No staff credit accounts yet'}</strong><p>{actors.length ? 'Try another name, email, or role.' : 'Staff balances will appear when their AI credit accounts are available.'}</p></div>{actors.length > 0 && <button className="teacher-secondary-action" onClick={() => { setSearch(''); setRole('all') }}>Clear filters</button>}</div>}
@@ -181,7 +187,7 @@ function ReviewDialog({ selection, reserve, busy, onClose, onSubmit }) {
   </form></AIDialog>
 }
 
-function PurchaseDialog({ api, busy, mutate, onClose }) {
+function PurchaseDialog({ api, busy, mutate, onClose, onCheckout }) {
   const [credits, setCredits] = useState('')
   const [quote, setQuote] = useState(null)
   const [checkout, setCheckout] = useState(null)
@@ -214,8 +220,8 @@ function PurchaseDialog({ api, busy, mutate, onClose }) {
   return <AIDialog title="Purchase Credits" busy={busy} onClose={onClose}><form onSubmit={submit}>
     {!checkout && <label className="admin-modal-field"><span>Credits to purchase</span><input type="number" min="1" step="1" required disabled={busy} value={credits} onChange={(event) => { setCredits(event.target.value); setQuote(null) }} /></label>}
     {quote && <p>{quote.credits} credits · {money(quote.amount_kobo, quote.currency)} ({money(quote.unit_price_kobo, quote.currency)} per credit)</p>}
-    {checkout?.purchase && <><p>Payment reference: {checkout.purchase.reference}. Credits are added after payment verification.</p><a className="teacher-primary-action" href={checkout.authorization_url} target="_blank" rel="noopener noreferrer">Open secure checkout</a></>}
+    {checkout?.purchase && <><p>Payment reference: {checkout.purchase.reference}. We’ll confirm your payment automatically and update your school balance.</p><a className="teacher-primary-action" href={checkout.authorization_url} target="_blank" rel="noopener noreferrer" onClick={onCheckout}>Open secure checkout</a></>}
     {error && <p role="alert" className="admin-ai-error">{error}</p>}
-    <div className="admin-modal-actions"><button type="button" className="teacher-secondary-action" disabled={busy} onClick={onClose}>{checkout ? 'Done' : 'Cancel'}</button>{!checkout && <button className="teacher-primary-action" disabled={busy}>{busy ? 'Please wait…' : quote ? 'Create checkout' : 'Get purchase quote'}</button>}</div>
+    <div className="admin-modal-actions"><button type="button" className="teacher-secondary-action" disabled={busy} onClick={checkout?.purchase ? onCheckout : onClose}>{checkout ? 'Done' : 'Cancel'}</button>{!checkout && <button className="teacher-primary-action" disabled={busy}>{busy ? 'Please wait…' : quote ? 'Create checkout' : 'Get purchase quote'}</button>}</div>
   </form></AIDialog>
 }

@@ -29,10 +29,6 @@ export function AdminCurrentRostersPage({ adminData, onNavigate }) {
   )
   const presentation = useMemo(() => partitionRosterExams(adminData.exams), [adminData.exams])
   const currentRosters = presentation.current
-  const historicalRosterCount = presentation.historyGroups.reduce(
-    (total, group) => total + group.entries.length,
-    0,
-  )
 
   const refreshExams = adminData.refreshExams
   useEffect(() => {
@@ -82,7 +78,6 @@ export function AdminCurrentRostersPage({ adminData, onNavigate }) {
           onClick={() => onNavigate('roster-history')}
         >
           View roster history
-          {historicalRosterCount > 0 && <span>{historicalRosterCount}</span>}
           <RiArrowRightLine size={17} aria-hidden="true" />
         </button>
       </div>

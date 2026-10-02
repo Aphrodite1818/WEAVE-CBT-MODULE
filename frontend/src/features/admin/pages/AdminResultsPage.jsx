@@ -7,6 +7,7 @@ import {
   RiCloseCircleLine,
   RiRefreshLine,
   RiSearchLine,
+  RiTimeLine,
 } from '@remixicon/react'
 import { buildAcademicLevels, listSubjectsForLevel } from '../../../shared/academics/authoringScope'
 import { Icon } from '../../../shared/icons/Icon'
@@ -118,7 +119,7 @@ export function AdminResultsPage({ adminData, gateway, onNavigate }) {
         <ResultMetric label="Pending review" value={metrics.pending} copy="Awaiting an administrator decision" tone="pending" />
         <ResultMetric label="Approved" value={metrics.approved} copy="Authorized for Weave synchronization" tone="approved" />
         <ResultMetric label="Voided" value={metrics.voided} copy="Kept out of academic synchronization" tone="voided" />
-        <ResultMetric label="Sync issues" value={metrics.issues} copy="Approved sets with failed deliveries" tone={metrics.issues ? 'issue' : ''} />
+        <ResultMetric label="Sync issues" value={metrics.issues} copy="Approved sets with failed deliveries" tone="issue" />
       </section>
 
       <div className="admin-results-filters">
@@ -144,6 +145,11 @@ export function AdminResultsPage({ adminData, gateway, onNavigate }) {
       </div>
 
       <section className="admin-results-table-shell" aria-label="Examination result sets" aria-busy={loading || adminData.loading}>
+        <div className="admin-results-list-heading">
+          <h2>Examination results</h2>
+          <span>{filtered.length} result {filtered.length === 1 ? 'set' : 'sets'}</span>
+        </div>
+        <div className="admin-results-table-scroll" role="region" aria-label="Scrollable examination results" tabIndex={0}>
         <table className="admin-results-overview-table">
           <thead>
             <tr>
@@ -152,7 +158,7 @@ export function AdminResultsPage({ adminData, gateway, onNavigate }) {
               <th>Decision</th>
               <th>Synchronization</th>
               <th>Completed</th>
-              <th aria-label="Actions" />
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -181,6 +187,7 @@ export function AdminResultsPage({ adminData, gateway, onNavigate }) {
             )}
           </tbody>
         </table>
+        </div>
         <div className="admin-results-table-footer">
           <span>{filtered.length === 0 ? '0 result sets' : `Showing ${(page - 1) * OVERVIEW_PAGE_SIZE + 1}–${Math.min(page * OVERVIEW_PAGE_SIZE, filtered.length)} of ${filtered.length} result sets`}</span>
           <div>
@@ -355,6 +362,7 @@ export function AdminResultDetailPage({ state, adminData, gateway, onNavigate })
       </div>
 
       <section className="admin-results-table-shell" aria-label={`Candidate results for ${exam.title}`} aria-busy={loading}>
+        <div className="admin-results-table-scroll" role="region" aria-label="Scrollable candidate results" tabIndex={0}>
         <table className="admin-results-candidate-table">
           <thead>
             <tr>
@@ -383,6 +391,7 @@ export function AdminResultDetailPage({ state, adminData, gateway, onNavigate })
             )}
           </tbody>
         </table>
+        </div>
         <div className="admin-results-table-footer">
           <span>{total ? `Showing ${(page - 1) * RESULT_PAGE_SIZE + 1}–${Math.min(page * RESULT_PAGE_SIZE, total)} of ${total} results` : '0 results'}</span>
           <div>
@@ -410,7 +419,15 @@ export function AdminResultDetailPage({ state, adminData, gateway, onNavigate })
 }
 
 function ResultMetric({ label, value, copy, tone }) {
-  return <article className={`admin-result-metric${tone ? ` admin-result-metric--${tone}` : ''}`}><span>{label}</span><strong>{value}</strong><small>{copy}</small></article>
+  const MetricIcon = tone === 'pending' ? RiTimeLine : tone === 'approved' ? RiCheckLine : tone === 'voided' ? RiCloseCircleLine : RiRefreshLine
+  return (
+    <article className={`admin-result-metric${tone ? ` admin-result-metric--${tone}` : ''}`}>
+      <span>{label}</span>
+      <div className="admin-result-metric__icon"><MetricIcon size={21} aria-hidden="true" /></div>
+      <strong>{value}</strong>
+      <small>{copy}</small>
+    </article>
+  )
 }
 
 function ResultSummaryItem({ label, value, hint }) {

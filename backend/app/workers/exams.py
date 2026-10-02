@@ -84,24 +84,25 @@ async def finalize_expired_attempts(ctx: dict) -> dict[str, int]:
     """
 
     now = datetime.now(UTC)
+    possible_expired_ids: list[UUID] = []
     async with async_session_factory() as db:
         attempts = await AttemptRepository.list_attempts(
             db,
             statuses=[AttemptStatus.IN_PROGRESS],
             limit=EXPIRED_ATTEMPT_SCAN_LIMIT,
         )
+        # Rollback expires ORM attributes, so read timing fields and retain only
+        # plain IDs before ending the scan transaction.
+        for attempt in attempts:
+            if attempt.active_since is None:
+                continue
+            uncheckpointed_allowance = max(
+                0,
+                attempt.time_limit_seconds - attempt.elapsed_seconds,
+            )
+            if attempt.active_since + timedelta(seconds=uncheckpointed_allowance) <= now:
+                possible_expired_ids.append(attempt.id)
         await db.rollback()
-
-    possible_expired_ids: list[UUID] = []
-    for attempt in attempts:
-        if attempt.active_since is None:
-            continue
-        uncheckpointed_allowance = max(
-            0,
-            attempt.time_limit_seconds - attempt.elapsed_seconds,
-        )
-        if attempt.active_since + timedelta(seconds=uncheckpointed_allowance) <= now:
-            possible_expired_ids.append(attempt.id)
 
     finalized = 0
     affected_exam_ids: set[UUID] = set()

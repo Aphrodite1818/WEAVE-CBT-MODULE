@@ -36,4 +36,18 @@ describe('tenant branding adapter', () => {
     expect(branding.light_tokens['--color-primary']).toBe(DEFAULT_LIGHT_TOKENS['--color-primary'])
     expect(branding.light_tokens['--evil']).toBeUndefined()
   })
+
+  it('fills missing theme surfaces with cool neutrals while retaining custom school colors', () => {
+    const style = buildBrandingThemeStyle({
+      light_tokens: {
+        '--color-primary': '132 24 145',
+        '--color-surface': '250 247 252',
+      },
+    })
+
+    expect(style['--color-background']).toBe('248 250 252')
+    expect(style['--color-surface-muted']).toBe('248 250 252')
+    expect(style['--color-primary']).toBe('132 24 145')
+    expect(style['--color-surface']).toBe('250 247 252')
+  })
 })

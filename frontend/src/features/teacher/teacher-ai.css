@@ -14,8 +14,8 @@
 .teacher-ai-message strong { font-size: 14px; }
 .teacher-ai-message p { margin: 8px 0 0; color: rgb(var(--color-text-muted)); }
 .teacher-ai-message--user { margin-left: 25px; border-color: rgb(var(--color-primary) / .15); border-radius: 16px 4px 16px 16px; background: rgb(var(--color-primary) / .07); white-space: pre-wrap; }
-.teacher-ai-suggestions { display: flex; flex-wrap: wrap; gap: 7px; }
-.teacher-ai-suggestions button { cursor: pointer; padding: 7px 10px; border: 1px solid rgb(var(--color-border)); border-radius: 20px; background: transparent; color: rgb(var(--color-text-muted)); font-size: 11px; }
+.teacher-ai-welcome { display: grid; place-items: center; min-height: 180px; }
+.teacher-ai-welcome .teacher-ai-watermark { display: block; width: 72px; height: 72px; color: rgb(var(--color-primary) / .28); background: transparent; pointer-events: none; }
 .teacher-ai-prompt { margin: 0 16px; border: 1px solid rgb(var(--color-primary) / .28); border-radius: 15px; background: rgb(var(--color-surface)); box-shadow: 0 5px 18px rgb(var(--color-primary) / .045); }
 .teacher-ai-prompt:focus-within { outline: 3px solid rgb(var(--color-primary) / .1); border-color: rgb(var(--color-primary) / .6); }
 .teacher-ai-prompt textarea { display: block; width: 100%; resize: vertical; min-height: 100px; padding: 14px; border: 0; background: transparent; color: rgb(var(--color-text)); font: inherit; font-size: 13px; line-height: 1.6; box-sizing: border-box; outline: none; }

@@ -322,23 +322,6 @@
   color: #b42323;
 }
 
-.admin-roster-summary--live {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.admin-roster-detail__filters--live {
-  grid-template-columns: minmax(260px, 1.5fr) repeat(3, minmax(155px, .7fr));
-}
-
-.admin-roster-table.has-bulk-selection th:nth-child(1) { width: 5%; }
-.admin-roster-table.has-bulk-selection th:nth-child(2) { width: 22%; }
-.admin-roster-table.has-bulk-selection th:nth-child(3) { width: 15%; }
-.admin-roster-table.has-bulk-selection th:nth-child(4) { width: 13%; }
-.admin-roster-table.has-bulk-selection th:nth-child(5) { width: 12%; }
-.admin-roster-table.has-bulk-selection th:nth-child(6) { width: 13%; }
-.admin-roster-table.has-bulk-selection th:nth-child(7) { width: 10%; }
-.admin-roster-table.has-bulk-selection th:nth-child(8) { width: 10%; }
-
 @media (max-width: 900px) {
   .admin-roster-bulk-toolbar {
     align-items: flex-start;
@@ -350,11 +333,4 @@
     flex-wrap: wrap;
   }
 
-  .admin-roster-summary--live {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .admin-roster-detail__filters--live {
-    grid-template-columns: 1fr;
-  }
 }

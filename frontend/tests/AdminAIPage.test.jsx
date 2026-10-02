@@ -43,8 +43,11 @@ describe('Admin AI management', () => {
     expect(onNavigate).toHaveBeenCalledWith('ai-credit-requests')
     const metrics = screen.getByRole('region', { name: 'Tenant AI credit summary' })
     expect(within(metrics).getByText('100')).toBeInTheDocument()
-    expect(within(metrics).getByRole('progressbar')).toHaveAttribute('value', '7')
-    expect(within(metrics).getByRole('progressbar')).toHaveAttribute('max', '10')
+    expect(within(metrics).getByText('Weekly credits used')).toBeInTheDocument()
+    expect(within(metrics).getByText('7')).toBeInTheDocument()
+    expect(within(metrics).getByText('Weekly credits left')).toBeInTheDocument()
+    expect(within(metrics).getByText('3')).toBeInTheDocument()
+    expect(within(metrics).queryByText('Ideas in motion')).not.toBeInTheDocument()
   })
 
   it('approves a custom amount once and refreshes every affected resource', async () => {
@@ -110,13 +113,18 @@ describe('Admin AI management', () => {
     expect(screen.getByText('100')).toBeInTheDocument()
   })
 
-  it('verifies pending payments and supports direct staff allocations', async () => {
+  it('automatically confirms pending payments and supports direct staff allocations', async () => {
     const api = makeAPI()
-    api.listAICreditPurchases.mockResolvedValue({ items: [{ id: 'purchase-1', reference: 'ref-1', credits: 50, amount_kobo: 5000, status: 'pending', created_at: request.created_at }], total: 1 })
+    const purchase = { id: 'purchase-1', reference: 'ref-1', credits: 50, amount_kobo: 5000, status: 'pending', created_at: request.created_at }
+    api.listAICreditPurchases.mockResolvedValue({ items: [purchase], total: 1 })
+    api.verifyAICreditPurchase.mockImplementation(async () => {
+      purchase.status = 'success'
+      return purchase
+    })
     const { rerender } = render(<AdminAIPage api={api} purchasesPage onNavigate={vi.fn()} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Verify payment' }))
     await waitFor(() => expect(api.getAIQuotaSummary).toHaveBeenCalledTimes(2))
-    expect(api.verifyAICreditPurchase).toHaveBeenCalledWith('ref-1')
+    expect(api.verifyAICreditPurchase).toHaveBeenCalledWith('ref-1', expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(await screen.findByText('success')).toBeInTheDocument()
     rerender(<AdminAIPage api={api} onNavigate={vi.fn()} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Allocate credits to Ada' }))
     fireEvent.change(screen.getByLabelText('Credits to allocate'), { target: { value: '5' } })
@@ -174,16 +182,35 @@ describe('Admin AI management', () => {
     expect(result.current.summary.tenant_reserve_credits).toBe(200)
   })
 
-  it('keeps payment history off the overview and navigates to purchases', async () => {
+  it('opens purchases immediately and keeps history as a separate destination', async () => {
     const api = makeAPI()
     const onNavigate = vi.fn()
     render(<AdminAIPage api={api} onNavigate={onNavigate} />)
     await screen.findByRole('button', { name: 'Allocate credits to Ada' })
     fireEvent.click(screen.getByRole('button', { name: 'Purchase Credits' }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByLabelText('Credits to purchase')).toBeInTheDocument()
+    expect(onNavigate).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Purchase history' }))
     expect(onNavigate).toHaveBeenCalledWith('ai-credit-purchases')
     expect(screen.queryByRole('heading', { name: 'Payment history' })).not.toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(api.listAICreditPurchases).not.toHaveBeenCalled()
+  })
+
+  it('opens payment history when checkout is launched from usage', async () => {
+    const api = makeAPI()
+    const onNavigate = vi.fn()
+    render(<AdminAIPage api={api} onNavigate={onNavigate} />)
+    await screen.findByRole('button', { name: 'Allocate credits to Ada' })
+    fireEvent.click(screen.getByRole('button', { name: 'Purchase Credits' }))
+    fireEvent.change(screen.getByLabelText('Credits to purchase'), { target: { value: '50' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Get purchase quote' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Create checkout' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Open secure checkout' }))
+    expect(onNavigate).toHaveBeenCalledWith('ai-credit-purchases')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('searches names and emails, filters roles, and allocates to the selected staff account', async () => {

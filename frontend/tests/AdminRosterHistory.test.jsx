@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { expect, it, vi } from 'vitest'
+import { ToastHost } from '../src/shared/ui/ToastHost'
 import { AdminRosterDetailPage } from '../src/features/admin/pages/AdminRostersPage'
 import { AdminCurrentRostersPage, AdminRosterHistoryPage } from '../src/features/admin/pages/AdminRosterViews'
 
@@ -102,7 +103,9 @@ it('keeps the main roster page operational-only and links to roster history', ()
   expect(within(current).queryByRole('button', { name: /revision 2/i })).not.toBeInTheDocument()
   expect(screen.queryByRole('heading', { name: /^roster history$/i })).not.toBeInTheDocument()
 
-  fireEvent.click(screen.getByRole('button', { name: /view roster history/i }))
+  const historyButton = screen.getByRole('button', { name: /view roster history/i })
+  expect(historyButton).toHaveTextContent(/^View roster history$/)
+  fireEvent.click(historyButton)
   expect(onNavigate).toHaveBeenCalledWith('roster-history')
 })
 
@@ -233,24 +236,26 @@ it('keeps historical candidate lists accessible while making the snapshot read-o
   }
 
   render(
-    <AdminRosterDetailPage
-      state={{ staff: { selectedExamId: revision1.id } }}
-      adminData={makeAdminData([revision1, revision2])}
-      gateway={gateway}
-      onNavigate={vi.fn()}
-    />,
+    <>
+      <ToastHost />
+      <AdminRosterDetailPage
+        state={{ staff: { selectedExamId: revision1.id } }}
+        adminData={makeAdminData([revision1, revision2])}
+        gateway={gateway}
+        onNavigate={vi.fn()}
+      />
+    </>,
   )
 
   await waitFor(() => expect(listExamRoster).toHaveBeenCalledWith('english-r1', {
     offset: 0,
     limit: 50,
-    status: 'eligible',
   }))
 
   expect(await screen.findByText('Ada Okafor')).toBeInTheDocument()
   expect(screen.getByText('JSS1/001')).toBeInTheDocument()
   expect(screen.getByText('Read only')).toBeInTheDocument()
-  expect(screen.getByText(/preserved for audit and is read-only/i)).toBeInTheDocument()
+  expect(screen.getByText(/candidate records remain fully available below, but this roster is read-only/i)).toBeInTheDocument()
   expect(screen.getAllByText('Revision 1').length).toBeGreaterThan(0)
   expect(screen.getByText('v2')).toBeInTheDocument()
 })

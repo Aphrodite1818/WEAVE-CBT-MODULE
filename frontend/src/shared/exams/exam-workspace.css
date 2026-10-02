@@ -1,7 +1,4 @@
 /* Compact exam workspace. All product accents follow tenant theme tokens. */
-.teacher-main:has(.exam-authoring-page),
-.teacher-main:has(.teacher-exams-page) { background: #f8fafc; }
-
 .teacher-content:has(.exam-authoring-page),
 .teacher-content:has(.teacher-exams-page) {
   container-type: inline-size;
@@ -10,8 +7,6 @@
 
 .exam-authoring-page,
 .teacher-exams-page {
-  --color-surface: 255 255 255;
-  --color-surface-muted: 248 250 252;
   min-width: 0;
 }
 

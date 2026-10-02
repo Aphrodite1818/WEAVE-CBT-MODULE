@@ -2,12 +2,47 @@
  * Shared staff dashboard shell polish.
  *
  * This file loads after the dashboard feature styles and owns only the shared
- * staff shell chrome: sidebar density, collapsed rail, topbar layout and the
- * administrator nested-navigation hierarchy.
+ * staff shell and text hierarchy: sidebar density, collapsed rail, topbar,
+ * page headings and administrator navigation. Feature pages own their layout.
  */
 
 .teacher-shell {
   grid-template-columns: 220px minmax(0, 1fr);
+  --staff-title-size: clamp(24px, 2.3vw, 28px);
+  --staff-section-size: 16px;
+  --staff-body-size: 14px;
+}
+
+.teacher-shell .teacher-content {
+  font-size: var(--staff-body-size);
+  line-height: 1.55;
+}
+
+.teacher-shell .teacher-content h1 {
+  font-size: var(--staff-title-size);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -.025em;
+}
+
+.teacher-shell .teacher-content :is(h2, h3) {
+  font-size: var(--staff-section-size);
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.teacher-shell .teacher-content :is(
+  .teacher-page-heading,
+  .teacher-overview-heading,
+  .teacher-exam-builder-header,
+  .question-builder-header,
+  .question-preview-page__header,
+  .teacher-ai-review__header,
+  .page-title
+) p {
+  font-size: var(--staff-body-size);
+  font-weight: 400;
+  line-height: 1.55;
 }
 
 .teacher-shell--collapsed {

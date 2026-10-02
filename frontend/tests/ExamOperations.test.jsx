@@ -89,8 +89,10 @@ describe('Admin exam operations workspace', () => {
 
     render(<ExamOperations adminData={data} onNavigate={vi.fn()} />)
 
-    expect(within(screen.getByRole('region', { name: 'Operations timeline' })).getByText('English CA 1')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Operations timeline' })).getByRole('button', { name: /^English CA 1/ })).toBeInTheDocument()
     expect(screen.queryByText('Submitted English Paper')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Today 1$/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Ready 1$/ })).toBeInTheDocument()
     expect(screen.getByText('Scheduled today')).toBeInTheDocument()
     expect(screen.getByText('Ready to start')).toBeInTheDocument()
   })
@@ -119,7 +121,7 @@ describe('Admin exam operations workspace', () => {
 
     expect(subjectFilter).toBeEnabled()
     expect(screen.queryByText('English CA 1')).not.toBeInTheDocument()
-    expect(within(screen.getByRole('region', { name: 'Operations timeline' })).getByText('JSS2 Mathematics CA 1')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Operations timeline' })).getByRole('button', { name: /^JSS2 Mathematics CA 1/ })).toBeInTheDocument()
   })
 
 
@@ -146,7 +148,7 @@ describe('Admin exam operations workspace', () => {
     fireEvent.click(within(readiness).getByRole('button', { name: /open controls/i }))
     expect(onNavigate).toHaveBeenCalledWith('operation-detail', { selectedExamId: 'tomorrow' })
     fireEvent.click(within(screen.getByRole('navigation', { name: 'Operation views' })).getByRole('button', { name: /^Ready/ }))
-    expect(within(screen.getByRole('region', { name: 'Operations timeline' })).queryByText('Stale sitting')).not.toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Operations timeline' })).queryByRole('button', { name: /^Stale sitting/ })).not.toBeInTheDocument()
   })
 
   it('shows heartbeat-based activity and routes connection checks to the selected roster', async () => {
@@ -160,6 +162,10 @@ describe('Admin exam operations workspace', () => {
     render(<ExamOperations adminData={data} gateway={gateway} onNavigate={onNavigate} />)
     expect(await screen.findByText('Ada Example')).toBeInTheDocument()
     expect(screen.getByText('Bola Example')).toBeInTheDocument()
+    const activity = screen.getByText('Candidate activity').closest('details')
+    expect(activity).not.toHaveAttribute('open')
+    fireEvent.click(within(activity).getByText('Candidate activity'))
+    expect(activity).toHaveAttribute('open')
     expect(screen.getByText('1 candidate needs a connection check')).toBeInTheDocument()
     fireEvent.click(within(screen.getByRole('region', { name: 'Attention queue' })).getByRole('button', { name: 'Review' }))
     expect(onNavigate).toHaveBeenCalledWith('roster-detail', { selectedExamId: 'exam-1' })
@@ -246,7 +252,7 @@ it('dismisses operations quick actions with Escape and outside clicks', () => {
   fireEvent.pointerDown(document.body)
   expect(screen.queryByRole('menu')).not.toBeInTheDocument()
 })
-it('scopes every timeline tab, KPI, and live monitor to the selected date', () => {
+it('scopes every timeline tab, sitting count, and live monitor to the selected date', () => {
   const yesterday = new Date()
   yesterday.setDate(yesterday.getDate() - 1)
   const tomorrow = new Date()
@@ -266,17 +272,23 @@ it('scopes every timeline tab, KPI, and live monitor to the selected date', () =
     expect(timeline.queryByText('Past closed paper')).not.toBeInTheDocument()
     expect(timeline.queryByText('Future paper')).not.toBeInTheDocument()
   }
-  expect(timeline.getByText('Selected day paper')).toBeInTheDocument()
+  expect(timeline.getByRole('button', { name: /^Selected day paper/ })).toBeInTheDocument()
+  expect(tabs.getByRole('button', { name: /^Live 0$/ })).toBeInTheDocument()
+  expect(tabs.getByRole('button', { name: /^Today 1$/ })).toBeInTheDocument()
   expect(screen.getByText('Live examinations').closest('article').querySelector('strong')).toHaveTextContent('0')
   expect(screen.getByText('Scheduled today').closest('article').querySelector('strong')).toHaveTextContent('1')
+  expect(within(screen.getByRole('region', { name: 'Live exam status' })).getByText('No live examinations')).toBeInTheDocument()
   expect(screen.queryByText('Past live paper')).not.toBeInTheDocument()
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
   HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); this.dispatchEvent(new Event('close')) }
   fireEvent.click(screen.getByRole('button', { name: /^Operations date:/ }))
   if (yesterday.getMonth() !== new Date().getMonth()) fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
   fireEvent.click(screen.getByRole('button', { name: yesterday.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }) }))
-  expect(timeline.getByText('Past live paper')).toBeInTheDocument()
-  expect(timeline.getByText('Past closed paper')).toBeInTheDocument()
+  expect(timeline.getByRole('button', { name: /^Past live paper/ })).toBeInTheDocument()
+  expect(timeline.getByRole('button', { name: /^Past closed paper/ })).toBeInTheDocument()
   expect(timeline.queryByText('Selected day paper')).not.toBeInTheDocument()
+  expect(tabs.getByRole('button', { name: /^Live 1$/ })).toBeInTheDocument()
   expect(screen.getByText('Live examinations').closest('article').querySelector('strong')).toHaveTextContent('1')
+  expect(tabs.getByRole('button', { name: /^Selected day 2$/ })).toBeInTheDocument()
+  expect(within(screen.getByRole('region', { name: 'Live exam status' })).getByText('Past live paper')).toBeInTheDocument()
 })

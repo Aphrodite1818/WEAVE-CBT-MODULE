@@ -1,4 +1,4 @@
-import { RiSparkling2Line } from '@remixicon/react'
+import { RiCoinsLine, RiSparkling2Line } from '@remixicon/react'
 
 const paths = {
   dashboard: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
@@ -59,5 +59,6 @@ const paths = {
 
 export function Icon({ name, size = 20 }) {
   if (name === 'ai') return <RiSparkling2Line className="icon" size={size} aria-hidden="true" />
+  if (name === 'credits') return <RiCoinsLine className="icon" size={size} aria-hidden="true" />
   return <svg className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
 }

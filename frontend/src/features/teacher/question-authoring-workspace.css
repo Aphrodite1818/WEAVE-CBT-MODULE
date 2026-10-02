@@ -4,7 +4,7 @@
 .teacher-shell--authoring .teacher-topbar { flex-shrink: 0; }
 .teacher-shell--authoring .teacher-content { display: block; flex: 1 1 0; min-height: 0; width: 100% !important; max-width: none; padding: 0; margin: 0; overflow: hidden; }
 .teacher-question-create-host:not([hidden]) { container: authoring-shell / inline-size; height: 100%; min-height: 0; overflow: hidden; }
-.question-authoring-workspace { height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); overflow: hidden; background: rgb(var(--color-background)); }
+.question-authoring-workspace { height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); overflow: hidden; }
 .question-authoring-workspace.is-panel-open { grid-template-columns: minmax(0, 1fr) 5px var(--ai-panel-width); }
 .question-authoring-editor { container: authoring-editor / inline-size; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .question-authoring-editor > .question-builder-page { padding: 0 24px 28px; gap: 24px; margin-top: 0; }
@@ -29,10 +29,7 @@
 .question-authoring-panel .teacher-ai-message strong { font-size: 22px; line-height: 1.3; letter-spacing: -.035em; font-weight: 600; }
 .question-authoring-panel .teacher-ai-message p { font-size: 14px; line-height: 1.75; }
 .question-authoring-panel .teacher-ai-message--user { padding: 12px 14px; border-radius: 12px; margin: 0 0 0 20px; background: rgb(var(--color-background)); }
-.question-authoring-panel .teacher-ai-suggestions { gap: 8px; padding: 0; }
-.question-authoring-panel .teacher-ai-welcome { display: grid; gap: 20px; margin-block: auto; padding: 24px 4px; }
-.question-authoring-panel .teacher-ai-suggestions button { font-size: 13px; line-height: 1.5; padding: 9px 12px; border-radius: 9px; color: rgb(var(--color-text)); background: rgb(var(--color-surface)); }
-.question-authoring-panel .teacher-ai-suggestions button:hover { background: rgb(var(--color-background)); border-color: rgb(var(--color-primary) / .35); }
+.question-authoring-panel .teacher-ai-welcome { flex: 1; margin-block: auto; padding: 24px 4px; }
 .teacher-ai-bottom { flex-shrink: 0; display: grid; gap: 8px; padding: 8px 12px 12px; max-height: 65%; min-height: 0; grid-template-rows: minmax(0, 1fr) auto; overflow: visible; box-sizing: border-box; }
 .question-authoring-panel .teacher-ai-prompt { min-height: 0; overflow: visible; margin: 0; border: 1px solid rgb(var(--color-border)); border-radius: 16px; box-shadow: 0 3px 12px rgb(0 0 0 / .035); background: rgb(var(--color-surface)); }
 .question-authoring-panel .teacher-ai-prompt textarea { min-height: 80px; max-height: 160px; resize: vertical; font-size: 14px; padding: 14px 14px 8px; border: 0; border-radius: 16px 16px 0 0; box-shadow: none; }

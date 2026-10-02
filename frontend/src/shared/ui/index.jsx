@@ -2,10 +2,19 @@ import { Children, useEffect, useId, useRef, useState } from 'react'
 import { Icon } from '../icons/Icon'
 import { toastBus } from './useToast'
 
-export function WeaveMark({ className = '' }) {
+export function WeaveMark({ className = '', monochrome = false }) {
   const rawId = useId().replace(/:/g, '')
   const blueId = `${rawId}-weave-blue`
   const goldId = `${rawId}-weave-gold`
+
+  if (monochrome) return (
+    <svg className={`weave-mark weave-mark--monochrome ${className}`.trim()} viewBox="0 0 512 512" fill="none" aria-hidden="true">
+      <g stroke="currentColor" strokeWidth="24" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M72 174c76 0 82 164 184 164s108-164 184-164" />
+        <path d="M72 338c76 0 82-164 184-164s108 164 184 164" />
+      </g>
+    </svg>
+  )
 
   return (
     <svg className={`weave-mark ${className}`.trim()} viewBox="0 0 512 512" fill="none" aria-hidden="true">

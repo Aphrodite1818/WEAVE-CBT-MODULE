@@ -1,7 +1,7 @@
 :root {
-  --bg: #faf8f2;
-  --surface: #fffefa;
-  --surface-soft: #f7f4ec;
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-soft: #f8fafc;
   --ink: #081b4a;
   --muted: #5f6f95;
   --line: #dce5f1;
@@ -114,6 +114,7 @@ select, input {
 }
 .weave-logo.large .weave-mark { width: clamp(52px, 4.6vw, 72px); height: clamp(52px, 4.6vw, 72px); }
 .weave-mark path { fill: currentColor; }
+.weave-mark.weave-mark--monochrome path { fill: none; }
 .weave-logo { display: inline-flex; align-items: center; gap: 2px; color: rgb(var(--color-text)); font-size: 19px; }
 .weave-logo img { display: block; width: 148px; height: 46px; object-fit: contain; }
 .weave-logo > span { border-left: 1px solid rgb(var(--color-primary) / .4); padding-left: 12px; }
@@ -1471,7 +1472,7 @@ tbody tr:hover { background: var(--surface-soft); }
   .review-jump-grid { grid-template-columns: repeat(5, 1fr); }
 }
 
-/* Role dashboard shell */
+/* Shared teacher/admin canvas. Feature pages inherit this themed background. */
 .teacher-shell {
   min-height: 100vh;
   display: grid;

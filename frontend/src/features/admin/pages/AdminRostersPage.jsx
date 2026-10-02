@@ -235,13 +235,11 @@ export function AdminRosterDetailPage({ state, adminData, gateway, onNavigate })
 
   return (
     <div className="teacher-reference-page admin-roster-detail">
-      <button className="admin-roster-back" type="button" onClick={() => onNavigate('roster')}><RiArrowLeftLine size={17} /> Back to roster</button>
-
       <div className="teacher-page-heading admin-roster-detail__heading">
         <div><div className="teacher-page-title-line"><span className="teacher-page-title-icon"><Icon name="roster" size={27} /></span><h1>{exam.title}</h1></div><p>{[exam.academicLevelName, exam.subjectName, exam.assessmentName, `Revision ${exam.revisionNumber || 1}`].filter(Boolean).join(' · ')}</p></div>
         <div className="admin-roster-detail__heading-actions">
           <RosterLifecycleState status={historical ? historyKind : exam.status} label={historical ? rosterHistoryLabel(historyKind) : exam.statusLabel} />
-          {!historical && <RosterBulkActions exam={exam} payload={payload} gateway={gateway} action={bulkAction} onActionChange={setBulkAction} selectedTargets={selectedTargets} onSelectedTargetsChange={setSelectedTargets} onChanged={() => setRefreshToken((value) => value + 1)} onOpenOperations={() => onNavigate('operation-detail', { selectedExamId: exam.id })} disabled={loading} />}
+          <button className="admin-roster-back" type="button" onClick={() => onNavigate('roster')}><RiArrowLeftLine size={17} /> Back to roster</button>
         </div>
       </div>
 
@@ -265,15 +263,29 @@ export function AdminRosterDetailPage({ state, adminData, gateway, onNavigate })
         </div>
       )}
 
+      <div className="admin-roster-detail__toolbar">
       <div className={`admin-roster-detail__filters${liveRoster ? ' admin-roster-detail__filters--live' : ''}`}>
         <label className="teacher-search-control teacher-search-control--grow"><RiSearchLine size={18} aria-hidden="true" /><input aria-label="Search candidates" type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1) }} placeholder="Search candidate name or admission number..." /></label>
         <SelectControl label="Candidate class filter" value={classId} options={classOptions} onChange={(value) => { setClassId(value); setPage(1) }} />
         <SelectControl label="Candidate eligibility filter" value={status} options={statusOptions} onChange={(value) => { setStatus(value); setPage(1) }} />
         {liveRoster && <SelectControl label="Candidate exam state filter" value={attemptState} options={attemptOptions} onChange={(value) => { setAttemptState(value); setPage(1) }} />}
       </div>
+      {!historical && <RosterBulkActions exam={exam} payload={payload} gateway={gateway} action={bulkAction} onActionChange={setBulkAction} selectedTargets={selectedTargets} onSelectedTargetsChange={setSelectedTargets} onChanged={() => setRefreshToken((value) => value + 1)} onOpenOperations={() => onNavigate('operation-detail', { selectedExamId: exam.id })} disabled={loading} />}
+      </div>
 
       <div className="admin-roster-table-shell" aria-busy={loading}>
+        <div className="admin-roster-table-scroll">
         <table className={`admin-roster-table${bulkAction ? ' has-bulk-selection' : ''}`}>
+          <colgroup>
+            {bulkAction && <col className="admin-roster-column--selection" />}
+            <col className="admin-roster-column--candidate" />
+            <col className="admin-roster-column--admission" />
+            <col className="admin-roster-column--class" />
+            <col className="admin-roster-column--eligibility" />
+            <col className="admin-roster-column--state" />
+            <col className="admin-roster-column--reason" />
+            <col className="admin-roster-column--actions" />
+          </colgroup>
           <thead>
             <tr>
               {bulkAction && <th className="admin-roster-selection-cell"><input type="checkbox" aria-label="Select all eligible candidates on this page" checked={allVisibleSelected} disabled={!visibleTargets.length} onChange={toggleVisibleTargets} /></th>}
@@ -300,6 +312,7 @@ export function AdminRosterDetailPage({ state, adminData, gateway, onNavigate })
             {!loading && !error && (payload?.candidates || []).length === 0 && <tr><td colSpan={bulkAction ? 8 : 7}><div className="admin-roster-table-state"><strong>No candidates match these filters</strong><span>Try a different class, status, exam state, or search term.</span></div></td></tr>}
           </tbody>
         </table>
+        </div>
         <div className="admin-roster-table-footer"><span>{payload?.total ? `Showing ${(page - 1) * ROSTER_PAGE_SIZE + 1}–${Math.min(page * ROSTER_PAGE_SIZE, payload.total)} of ${payload.total} candidates` : '0 candidates'}</span><div><button type="button" aria-label="Previous candidate page" disabled={page === 1 || loading} onClick={() => setPage(page - 1)}>‹</button><span>{page} / {pageCount}</span><button type="button" aria-label="Next candidate page" disabled={page === pageCount || loading} onClick={() => setPage(page + 1)}>›</button></div></div>
       </div>
     </div>

@@ -181,7 +181,7 @@ export function RosterBulkActions(props) {
   }
 
   // AdminRosterDetailPage deliberately keeps the compact launcher in the page
-  // heading and the selection toolbar in the content flow. Once an action is
+  // filter toolbar and the selection toolbar in the content flow. Once an action is
   // chosen, only the content instance should render the toolbar.
   if (action && launcherInstance) return null
 

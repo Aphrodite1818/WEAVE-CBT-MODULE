@@ -1,6 +1,7 @@
 import './teacher-ai.css'
 import { useEffect, useRef, useState } from 'react'
 import { RiArrowDownSLine, RiCornerDownLeftLine, RiCloseLine, RiWallet3Line, RiFileList3Line } from '@remixicon/react'
+import { WeaveMark } from '../../shared/ui'
 import { TeacherGenerationOptions } from './TeacherGenerationOptions'
 import { TeacherGenerationStatus } from './TeacherGenerationStatus'
 import { TeacherAIQuota } from './TeacherAIQuota'
@@ -112,9 +113,8 @@ export function TeacherAIComposer({ bank, state, dispatch, gateway, onClose }) {
     <header className="teacher-ai-composer__heading"><RiFileList3Line size={18} /><h2>Generate questions</h2>{onClose && <button type="button" className="teacher-ai-icon-button" aria-label="Close question generation" onClick={onClose}><RiCloseLine size={19} /></button>}</header>
     <div className="teacher-ai-bank"><span>Question bank</span><strong>{bank?.name || 'Choose a question bank in the editor'}</strong></div>
     <div className="teacher-ai-conversation" aria-live="polite">
-      {!sentPrompt && !busy && <div className="teacher-ai-welcome">
-      <div className="teacher-ai-message"><strong>Start with a topic.</strong><p>Describe what students should know. Review the questions before adding them to your bank.</p></div>
-      {!sentPrompt && <div className="teacher-ai-suggestions">{['Check understanding of…', 'Apply knowledge of…'].map((text) => <button type="button" key={text} disabled={busy} onClick={() => { setPrompt(text.replace('…', ' ')); promptInput.current?.focus() }}>{text}</button>)}</div>}
+      {!sentPrompt && !busy && !drafts.length && !error && <div className="teacher-ai-welcome" aria-hidden="true">
+        <WeaveMark monochrome className="teacher-ai-watermark" />
       </div>}
       {sentPrompt && <p className="teacher-ai-message teacher-ai-message--user">{sentPrompt}</p>}
       {busy && <TeacherGenerationStatus title="Creating your questions" detail="Preparing questions and answer choices for your review." />}
