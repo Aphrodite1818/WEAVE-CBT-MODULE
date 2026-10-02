@@ -7,7 +7,9 @@ from uuid import UUID
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domains.attempts.models import AttemptStatus, ExamAttempt
 from app.domains.candidates.models import CandidateStatus, ExamCandidate
+from app.domains.candidates.schemas import CandidateAttemptStateFilter
 
 
 class CandidateRosterQueryRepository:
@@ -20,12 +22,17 @@ class CandidateRosterQueryRepository:
         status: CandidateStatus | None,
         class_id: UUID | None,
         search: str | None,
+        attempt_state: CandidateAttemptStateFilter | None,
     ) -> list:
         filters: list = [ExamCandidate.exam_id == exam_id]
         if status is not None:
             filters.append(ExamCandidate.status == status)
         if class_id is not None:
             filters.append(ExamCandidate.class_id == class_id)
+        if attempt_state == "not_started":
+            filters.append(ExamAttempt.id.is_(None))
+        elif attempt_state is not None:
+            filters.append(ExamAttempt.status == AttemptStatus(attempt_state))
 
         needle = (search or "").strip()
         if needle:
@@ -47,17 +54,23 @@ class CandidateRosterQueryRepository:
         status: CandidateStatus | None = None,
         class_id: UUID | None = None,
         search: str | None = None,
+        attempt_state: CandidateAttemptStateFilter | None = None,
         offset: int = 0,
         limit: int = 100,
     ) -> list[ExamCandidate]:
         query = (
             select(ExamCandidate)
+            .outerjoin(
+                ExamAttempt,
+                ExamAttempt.candidate_id == ExamCandidate.id,
+            )
             .where(
                 *cls._filters(
                     exam_id=exam_id,
                     status=status,
                     class_id=class_id,
                     search=search,
+                    attempt_state=attempt_state,
                 )
             )
             .order_by(
@@ -79,16 +92,22 @@ class CandidateRosterQueryRepository:
         status: CandidateStatus | None = None,
         class_id: UUID | None = None,
         search: str | None = None,
+        attempt_state: CandidateAttemptStateFilter | None = None,
     ) -> int:
         query = (
             select(func.count())
             .select_from(ExamCandidate)
+            .outerjoin(
+                ExamAttempt,
+                ExamAttempt.candidate_id == ExamCandidate.id,
+            )
             .where(
                 *cls._filters(
                     exam_id=exam_id,
                     status=status,
                     class_id=class_id,
                     search=search,
+                    attempt_state=attempt_state,
                 )
             )
         )
