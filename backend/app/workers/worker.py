@@ -14,6 +14,7 @@ from app.workers.exams import (
     evaluate_exam_completion,
     finalize_exam_cancellation,
     finalize_exam_close,
+    finalize_expired_attempts,
 )
 from app.workers.maintenance import recover_background_work
 from app.workers.results import sync_exam_results
@@ -42,6 +43,7 @@ class WorkerSettings:
         evaluate_exam_completion,
         finalize_exam_close,
         finalize_exam_cancellation,
+        finalize_expired_attempts,
         sync_exam_results,
     ]
 
