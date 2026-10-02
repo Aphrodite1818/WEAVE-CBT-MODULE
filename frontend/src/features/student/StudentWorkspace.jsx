@@ -7,11 +7,50 @@ import { RiCheckboxCircleFill, RiFlagFill, RiLogoutBoxRLine, RiDatabase2Line } f
 
 const HEARTBEAT_RETRY_MS = 10_000
 
-export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnToSignIn, branding, schoolName, serverName = 'Local CBT server', onExamSuspended }) {
+export function StudentWorkspace(props) {
+  const [logoutRequested, setLogoutRequested] = useState(false)
+  const dialogRef = useRef(null)
+
+  useEffect(() => {
+    if (logoutRequested) dialogRef.current?.showModal()
+  }, [logoutRequested])
+
+  return (
+    <>
+      <StudentWorkspaceContent {...props} returnToSignIn={() => setLogoutRequested(true)} />
+      {logoutRequested && (
+        <dialog
+          ref={dialogRef}
+          className="student-logout-dialog"
+          aria-labelledby="student-logout-title"
+          aria-describedby="student-logout-description"
+          onCancel={() => setLogoutRequested(false)}
+          onClose={() => setLogoutRequested(false)}
+        >
+          <h2 id="student-logout-title">Confirm logout</h2>
+          <p id="student-logout-description">Are you sure you want to log out?</p>
+          <div className="student-logout-dialog__actions">
+            <button className="premium-btn-secondary" type="button" autoFocus onClick={() => setLogoutRequested(false)}>Cancel</button>
+            <button className="premium-btn-primary" type="button" onClick={() => {
+              setLogoutRequested(false)
+              props.returnToSignIn()
+            }}>OK</button>
+          </div>
+        </dialog>
+      )}
+    </>
+  )
+}
+
+function StudentWorkspaceContent({ exam, resolution, gateway, dispatch, returnToSignIn, branding, schoolName, serverName = 'Local CBT server', onExamSuspended }) {
   const [attempt, setAttempt] = useState(null)
   const [attemptError, setAttemptError] = useState('')
   const [savingByQuestion, setSavingByQuestion] = useState({})
   const [submitted, setSubmitted] = useState(null)
+  const [submissionRequested, setSubmissionRequested] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const submissionDialogRef = useRef(null)
+  const submissionPending = useRef(false)
   const [starting, setStarting] = useState(false)
   const [suspension, setSuspension] = useState(null)
   const suspensionHandled = useRef(false)
@@ -29,6 +68,22 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
   }, [exam.stage, attempt?.id, submitted, isSuspended])
   const questions = useMemo(() => attempt?.questions || [], [attempt])
   const current = questions[exam.index] || questions[0]
+  useEffect(() => {
+    if (submissionRequested && !isSuspended) submissionDialogRef.current?.showModal()
+  }, [submissionRequested, isSuspended])
+
+  const confirmSubmission = async () => {
+    if (submissionPending.current || pendingSaves.current.size > 0) return
+    submissionPending.current = true
+    setSubmitting(true)
+    setSubmissionRequested(false)
+    try {
+      await submitAttempt({ gateway, setSubmitted, dispatch, setAttemptError })
+    } finally {
+      submissionPending.current = false
+      setSubmitting(false)
+    }
+  }
   const candidateName = resolution?.candidate?.name?.trim() || 'Student'
   const candidateInitial = Array.from(candidateName)[0].toLocaleUpperCase()
   useEffect(() => {
@@ -150,6 +205,10 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
             <div className="premium-exam-rail-timer">
               <ExamCountdownTimer remaining={remaining} totalSeconds={attempt.time_limit_seconds} />
             </div>
+            <div className="premium-exam-progress">
+              <div><strong>{answeredCount}<span> / {questions.length}</span></strong><span>Answered</span></div>
+              <progress aria-label="Questions answered" value={answeredCount} max={questions.length} />
+            </div>
             <div className="premium-question-nav">
               <div className="premium-question-nav__head">
                 <h3>Questions</h3>
@@ -173,8 +232,8 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
               <button
                 type="button"
                 className="premium-exam-rail-submit-btn"
-                disabled={isSaving}
-                onClick={() => submitAttempt({ gateway, setSubmitted, dispatch, setAttemptError })}
+                disabled={isSaving || submitting}
+                onClick={() => setSubmissionRequested(true)}
               >
                 Submit exam
               </button>
@@ -195,9 +254,9 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
               layout="session"
             />
             <div className="premium-exam-content">
-            <div className="premium-exam-content__scroll">
+            <section className="premium-question-paper" aria-labelledby="candidate-question-heading">
             <div className="premium-question-header">
-              <h2>Question {exam.index + 1} of {questions.length}</h2>
+              <div className="premium-question-heading"><span className="premium-question-eyebrow">{current.question_type === 'multiple_choice' ? 'Multiple choice' : 'Single choice'}</span><h2 id="candidate-question-heading">Question {exam.index + 1}<span> of {questions.length}</span></h2></div>
               <div className="premium-question-toolbar">
                 {current.selected_option_ids.length > 0 && (
                   <button
@@ -226,7 +285,9 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
                   <label key={option.id} className={`premium-option ${selected ? 'selected' : ''}`}>
                     <input
                       type={current.question_type === 'multiple_choice' ? 'checkbox' : 'radio'}
-                      style={{display: 'none'}}
+                      className="premium-option-input"
+                      name={`question-${current.id}`}
+                      aria-label={`Option ${optionLetter(index)}: ${option.text || 'Image answer'}`}
                       checked={selected}
                       disabled={savingByQuestion[current.id] === 'Saving...'}
                       onChange={() => saveAnswer({ question: current, optionId: option.id, gateway, setAttempt, setSavingByQuestion, setAttemptError, pendingSaves })}
@@ -240,23 +301,46 @@ export function StudentWorkspace({ exam, resolution, gateway, dispatch, returnTo
                         </div>
                       )}
                     </div>
+                    <span className={`premium-option-indicator${current.question_type === 'multiple_choice' ? ' is-multiple' : ''}`} aria-hidden="true">{selected && <RiCheckboxCircleFill size={22} />}</span>
                   </label>
                 )
               })}
             </div>
+              <span className="premium-answer-status" role="status">{savingByQuestion[current.id] === 'Saving...' ? 'Saving answer...' : savingByQuestion[current.id] === 'Not saved' ? 'Answer not saved' : current.selected_option_ids.length > 0 ? 'Answer saved' : 'No answer selected'}</span>
             {attemptError && <div className="premium-exam-content__notice"><Notice tone="danger">{attemptError}</Notice></div>}
-            </div>
-            <div className="premium-exam-footer premium-exam-footer--dock">
+            <nav className="premium-exam-navigation" aria-label="Question navigation">
               <button className="premium-btn-secondary" onClick={() => dispatch({ type: 'exam', patch: { index: Math.max(0, exam.index - 1) } })} disabled={exam.index === 0}>Previous</button>
               {exam.index < questions.length - 1 ? (
                 <button className="premium-btn-primary" onClick={() => dispatch({ type: 'exam', patch: { index: exam.index + 1 } })}>Save and next</button>
               ) : (
-                <button className="premium-btn-primary" disabled={isSaving} onClick={() => submitAttempt({ gateway, setSubmitted, dispatch, setAttemptError })}>Submit exam</button>
+                <button className="premium-btn-primary" disabled={isSaving || submitting} onClick={() => setSubmissionRequested(true)}>Submit exam</button>
               )}
-            </div>
+            </nav>
+            </section>
           </div>
           </div>
         </div>
+        {submissionRequested && (
+          <dialog
+            ref={submissionDialogRef}
+            className="student-logout-dialog"
+            aria-labelledby="student-submit-title"
+            aria-describedby="student-submit-description"
+            onCancel={() => setSubmissionRequested(false)}
+            onClose={() => setSubmissionRequested(false)}
+          >
+            <h2 id="student-submit-title">Confirm exam submission</h2>
+            <p id="student-submit-description">
+              {unansweredCount > 0
+                ? `You have not answered ${unansweredCount} question${unansweredCount === 1 ? '' : 's'}. Are you sure you want to submit anyway?`
+                : 'You have answered all questions. Are you sure you want to submit?'}
+            </p>
+            <div className="student-logout-dialog__actions">
+              <button className="premium-btn-secondary" type="button" autoFocus onClick={() => setSubmissionRequested(false)}>Cancel</button>
+              <button className="premium-btn-primary" type="button" disabled={isSaving || submitting} onClick={confirmSubmission}>Confirm submission</button>
+            </div>
+          </dialog>
+        )}
       </main>
     )
   }
@@ -346,10 +430,10 @@ function StudentExamHeader({ title, branding, schoolName, serverName, candidateN
             </div>
           )}
         </div>
-        <div className="premium-exam-server" title={serverName}>
+        {!session && <div className="premium-exam-server" title={serverName}>
           <span><RiDatabase2Line size={18} aria-hidden="true" /></span>
           <div><small>CBT server</small><strong>{serverName}</strong></div>
-        </div>
+        </div>}
         <div className="premium-exam-header-right">
           {session ? (
             <div className="premium-exam-header-account">

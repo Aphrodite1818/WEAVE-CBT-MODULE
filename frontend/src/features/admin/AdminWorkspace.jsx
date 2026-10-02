@@ -4,6 +4,7 @@ import { getLocalBrandLogoSrc } from '../../api/branding'
 import { Icon } from '../../shared/icons/Icon'
 import { DashboardAccountMenu, DashboardSchoolIdentity } from '../../shared/ui'
 import { QuestionBuilder } from '../teacher/QuestionBuilder'
+import { TeacherAIReviewPage } from '../teacher/TeacherAIReviewPage'
 import { ExamAuthoringPage } from '../../shared/exams/ExamAuthoringPage'
 import { TeacherQuestionPreviewPage } from '../teacher/TeacherQuestionPreviewPage'
 import { AdminExamsPage } from './pages/AdminExamsPage'
@@ -22,7 +23,7 @@ import '../teacher/teacher-exams.css'
 import './admin.css'
 import './admin-sidebar.css'
 
-const bankViews = new Set(['question-banks', 'create-bank', 'bank-detail', 'questions', 'create-question', 'edit-question', 'preview-question'])
+const bankViews = new Set(['question-banks', 'create-bank', 'bank-detail', 'questions', 'create-question', 'review-ai-questions', 'edit-question', 'preview-question'])
 const examViews = new Set(['exams', 'create-exam', 'exam-history'])
 const rosterViews = new Set(['roster', 'roster-history', 'roster-detail'])
 const operationViews = new Set(['operations', 'operation-detail'])
@@ -118,7 +119,7 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
 
   const navActive = (section) => {
     if (section === 'question-banks') return workspaceView === 'question-banks' || workspaceView === 'create-bank' || workspaceView === 'bank-detail'
-    if (section === 'questions') return workspaceView === 'questions' || workspaceView === 'create-question' || workspaceView === 'edit-question' || workspaceView === 'preview-question'
+    if (section === 'questions') return workspaceView === 'questions' || workspaceView === 'create-question' || workspaceView === 'review-ai-questions' || workspaceView === 'edit-question' || workspaceView === 'preview-question'
     if (section === 'exams') return examViews.has(workspaceView)
     if (section === 'roster') return rosterViews.has(workspaceView)
     if (section === 'operations') return operationViews.has(workspaceView)
@@ -232,7 +233,12 @@ export function AdminWorkspace({ state, dispatch, signOut, gateway }) {
           {workspaceView === 'bank-detail' && <AdminBankDetailPage state={state} adminData={adminData} onNavigate={navigate} />}
           {workspaceView === 'questions' && <AdminQuestionsPage state={state} dispatch={workspaceDispatch} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
           {workspaceView === 'preview-question' && <TeacherQuestionPreviewPage state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
-          {workspaceView === 'create-question' && <QuestionBuilder mode="create" state={state} dispatch={workspaceDispatch} teacherData={activeAuthoringData} gateway={gateway} />}
+          {['create-question', 'review-ai-questions'].includes(workspaceView) && (
+            <div className="teacher-question-create-host" hidden={workspaceView !== 'create-question'}>
+              <QuestionBuilder enableAI mode="create" state={state} dispatch={workspaceDispatch} teacherData={activeAuthoringData} gateway={gateway} />
+            </div>
+          )}
+          {workspaceView === 'review-ai-questions' && <TeacherAIReviewPage key={state.staff.selectedAIDraftId} state={state} dispatch={workspaceDispatch} teacherData={activeAuthoringData} gateway={gateway} />}
           {workspaceView === 'edit-question' && <QuestionBuilder key={state.staff.selectedQuestionId || 'admin-question-editor'} mode="edit" state={state} dispatch={workspaceDispatch} teacherData={adminData} gateway={gateway} />}
           {workspaceView === 'exams' && <AdminExamsPage state={state} adminData={adminData} gateway={gateway} onNavigate={navigate} />}
           {workspaceView === 'timetable' && <AdminTimetablePage adminData={adminData} levelId={state.staff.timetableLevelId} onSelectLevel={(timetableLevelId) => navigate('timetable', { timetableLevelId })} />}

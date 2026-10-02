@@ -1,5 +1,5 @@
 const teacherSections = new Set(['overview', 'question-banks', 'bank-detail', 'questions', 'create-question', 'review-ai-questions', 'edit-question', 'preview-question', 'exams', 'exam-history', 'create-exam'])
-const adminSections = new Set(['dashboard', 'question-banks', 'create-bank', 'bank-detail', 'questions', 'create-question', 'edit-question', 'preview-question', 'exams', 'create-exam', 'exam-history', 'roster', 'roster-history', 'roster-detail', 'timetable', 'operations', 'operation-detail', 'results', 'result-detail', 'students', 'invigilators', 'reports', 'settings'])
+const adminSections = new Set(['dashboard', 'question-banks', 'create-bank', 'bank-detail', 'questions', 'create-question', 'review-ai-questions', 'edit-question', 'preview-question', 'exams', 'create-exam', 'exam-history', 'roster', 'roster-history', 'roster-detail', 'timetable', 'operations', 'operation-detail', 'results', 'result-detail', 'students', 'invigilators', 'reports', 'settings'])
 const examViews = { history: 'exam-history', edit: 'create-exam', roster: 'roster-detail', operations: 'operation-detail', results: 'result-detail' }
 
 export function staffSectionForRole(role, section) {
@@ -31,7 +31,7 @@ export function parseStaffPath(location) {
   const origin = url.searchParams.get('from')
   const questionPreviewOrigin = section === 'preview-question' && ['create-exam', 'bank-detail', 'questions'].includes(origin) ? origin : null
   if (questionPreviewOrigin === 'create-exam') selectedExamId = url.searchParams.get('exam')
-  const selectedAIDraftId = role === 'teacher' && section === 'review-ai-questions' ? url.searchParams.get('draft') : null
+  const selectedAIDraftId = section === 'review-ai-questions' ? url.searchParams.get('draft') : null
   return { view: 'staff', sessionType: 'staff', role, requiresAuth: true, staffSection: section, selectedQuestionId, selectedExamId, selectedBankId, selectedAIDraftId, questionPreviewOrigin, timetableLevelId }
 }
 

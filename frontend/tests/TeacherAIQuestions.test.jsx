@@ -282,10 +282,12 @@ describe('Teacher AI quota and routing', () => {
     await waitFor(() => expect(refresh).toHaveBeenCalled())
     expect(api.requestAICredits).not.toHaveBeenCalled()
   })
-  it('restores the draft route and keeps it teacher-only', () => {
+  it('restores draft routes for teachers and admins', () => {
     const path = pathForStaffState(state)
     expect(path).toBe('/teacher/review-ai-questions?draft=draft-1')
     expect(staffPatchFromRoute(parseStaffPath(path)).selectedAIDraftId).toBe('draft-1')
-    expect(parseStaffPath('/admin/review-ai-questions?draft=draft-1').staffSection).toBe('dashboard')
+    const adminPath = pathForStaffState({ ...state, session: { ...state.session, role: 'admin' } })
+    expect(adminPath).toBe('/admin/review-ai-questions?draft=draft-1')
+    expect(parseStaffPath(adminPath)).toMatchObject({ staffSection: 'review-ai-questions', selectedAIDraftId: 'draft-1' })
   })
 })

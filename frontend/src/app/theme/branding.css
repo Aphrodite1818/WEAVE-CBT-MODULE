@@ -61,7 +61,7 @@
 .weave-app .premium-exam-header-left .weave-logo,
 .weave-app .premium-exam-sidebar,
 .weave-app .premium-exam-content,
-.weave-app .premium-exam-footer { border-color: rgb(var(--color-border)); }
+.weave-app .premium-exam-navigation { border-color: rgb(var(--color-border)); }
 .weave-app .student-avatar,
 .weave-app .nav-btn.answered { background: rgb(var(--color-primary-soft)); color: rgb(var(--color-primary)); }
 .weave-app .nav-btn.answered { border-color: color-mix(in srgb, rgb(var(--color-primary)) 30%, rgb(var(--color-border))); }
@@ -121,24 +121,36 @@
   box-shadow: 0 0 0 3px rgb(var(--color-focus-ring) / .10);
 }
 
-/* The exam navigator provides the dominant school color; the paper stays quiet. */
-.weave-app .premium-exam-sidebar { background: rgb(var(--color-primary)); border-color: rgb(var(--color-primary)); color: rgb(var(--color-on-primary)); }
-.weave-app .premium-exam-rail-brand .dashboard-school-identity strong { color: rgb(var(--color-on-primary)); }
-.weave-app .premium-exam-rail-brand .dashboard-school-identity__mark {
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-}
-.weave-app .premium-exam-sidebar .premium-question-nav h3,
-.weave-app .premium-exam-sidebar .premium-question-nav__meta,
-.weave-app .premium-exam-sidebar .premium-exam-timer__label,
-.weave-app .premium-exam-sidebar .premium-exam-timer__value { color: rgb(var(--color-on-primary)); }
-.weave-app .premium-exam-shell--session { background: rgb(var(--color-background)); }
-.weave-app .premium-exam-header--session { background: rgb(var(--color-surface)); border-color: rgb(var(--color-border)); }
-.weave-app .premium-exam-rail-submit-btn { background: rgb(var(--color-on-primary)); color: rgb(var(--color-primary)); }
-.weave-app .premium-exam-rail-submit-note { color: rgb(var(--color-on-primary) / .82); }
-.weave-app .premium-exam-sidebar .nav-btn { background: rgb(var(--color-primary)); color: rgb(var(--color-on-primary)); border-color: rgb(var(--color-on-primary) / .45); }
-.weave-app .premium-exam-sidebar .nav-btn:hover { background: rgb(var(--color-on-primary) / .16); }
-.weave-app .premium-exam-sidebar .nav-btn.answered { background: rgb(var(--color-on-primary) / .2); color: rgb(var(--color-on-primary)); border-color: rgb(var(--color-on-primary) / .65); }
-.weave-app .premium-exam-sidebar .nav-btn.current { background: rgb(var(--color-on-primary)); color: rgb(var(--color-primary)); border-color: rgb(var(--color-on-primary)); box-shadow: 0 3px 10px rgb(0 0 0 / .12); }
-.weave-app .premium-exam-sidebar .nav-btn.flagged { border-color: #f4c95d; }
+/* Exam colour hierarchy: a strong branded header, a muted navigator, and light paper. */
+.weave-app .premium-exam-shell--session .premium-exam-sidebar { background: color-mix(in srgb, rgb(var(--color-primary)) 7%, #e9edf2); border-color: color-mix(in srgb, rgb(var(--color-primary)) 14%, #d8dee8); color: rgb(var(--color-text)); }
+.weave-app .premium-exam-shell--session .premium-exam-rail-brand .dashboard-school-identity strong { color: rgb(var(--color-text)); }
+.weave-app .premium-exam-shell--session .premium-exam-rail-brand .dashboard-school-identity__mark { background: transparent; border: 0; box-shadow: none; }
+.weave-app .premium-exam-shell--session .premium-exam-sidebar .premium-question-nav h3 { color: rgb(var(--color-text)); }
+.weave-app .premium-exam-shell--session .premium-exam-sidebar .premium-question-nav__meta,
+.weave-app .premium-exam-shell--session .premium-exam-sidebar .premium-exam-timer__label { color: rgb(var(--color-text-muted)); }
+.weave-app .premium-exam-shell--session .premium-exam-sidebar .premium-exam-timer__value { color: rgb(var(--color-text)); }
+.weave-app .premium-exam-shell--session,
+.weave-app .premium-exam-shell--session .premium-exam-content { background: #f5f6f8; }
+.weave-app .premium-exam-shell--session .premium-exam-header--session { background: rgb(var(--color-primary)); border-color: transparent; }
+.weave-app .premium-exam-shell--session .premium-exam-header--session .premium-exam-session-title h1 { color: rgb(var(--color-on-primary)); }
+.weave-app .premium-exam-shell--session .premium-exam-header--session .premium-exam-session-eyebrow { color: rgb(var(--color-on-primary) / .7); }
+.weave-app .premium-exam-shell--session .premium-exam-header--session .premium-exam-header-account { background: rgb(var(--color-on-primary) / .08); border-color: rgb(var(--color-on-primary) / .2); }
+.weave-app .premium-exam-shell--session .premium-exam-header--session .premium-exam-header-account .student-avatar { background: rgb(var(--color-on-primary) / .16); color: rgb(var(--color-on-primary)); }
+.weave-app .premium-exam-shell--session .premium-exam-header--session .premium-exam-header-account .premium-student-name { color: rgb(var(--color-on-primary)); border-color: rgb(var(--color-on-primary) / .2); }
+.weave-app .premium-exam-shell--session .premium-exam-header--session .premium-exam-header-account .premium-student-logout { color: rgb(var(--color-on-primary)); }
+.weave-app .premium-exam-shell--session .premium-exam-header--session .premium-exam-header-account .premium-student-logout:hover { background: rgb(var(--color-on-primary) / .16); }
+.weave-app .premium-exam-shell--session .premium-exam-header--session .premium-student-logout:focus-visible { outline-color: rgb(var(--color-on-primary)); }
+.weave-app .premium-exam-shell--session .premium-question-paper { background: #fff; border-top: 3px solid rgb(var(--color-primary)); }
+.weave-app .premium-exam-shell--session .premium-question-eyebrow { color: rgb(var(--color-primary)); }
+.weave-app .premium-exam-shell--session .premium-option { background: #fff; }
+.weave-app .premium-exam-shell--session .premium-option:hover { background: rgb(var(--color-primary) / .04); border-color: rgb(var(--color-primary) / .35); }
+.weave-app .premium-exam-shell--session .premium-option-letter { background: rgb(var(--color-primary) / .09); color: rgb(var(--color-primary)); }
+.weave-app .premium-exam-shell--session .premium-option.selected { background: rgb(var(--color-primary) / .1); border-color: rgb(var(--color-primary)); }
+.weave-app .premium-exam-shell--session .premium-option.selected .premium-option-letter { background: rgb(var(--color-primary)); color: rgb(var(--color-on-primary)); }
+.weave-app .premium-exam-rail-submit-btn { background: rgb(var(--color-primary)); color: rgb(var(--color-on-primary)); }
+.weave-app .premium-exam-rail-submit-note { color: rgb(var(--color-text-muted)); }
+.weave-app .premium-exam-shell--session .premium-exam-sidebar .nav-btn { background: rgb(var(--color-surface)); color: rgb(var(--color-text-muted)); border-color: rgb(var(--color-border)); }
+.weave-app .premium-exam-shell--session .premium-exam-sidebar .nav-btn:hover { background: rgb(var(--color-primary) / .06); border-color: rgb(var(--color-primary) / .4); }
+.weave-app .premium-exam-shell--session .premium-exam-sidebar .nav-btn.answered { background: rgb(var(--color-primary) / .08); color: rgb(var(--color-primary)); border-color: rgb(var(--color-primary) / .2); }
+.weave-app .premium-exam-shell--session .premium-exam-sidebar .nav-btn.current { background: rgb(var(--color-primary)); color: rgb(var(--color-on-primary)); border-color: rgb(var(--color-primary)); box-shadow: 0 0 0 3px rgb(var(--color-primary) / .12); }
+.weave-app .premium-exam-shell--session .premium-exam-sidebar .nav-btn.flagged { border-color: #b77915; }

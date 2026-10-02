@@ -1,7 +1,11 @@
 import { useState } from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, expect, it, vi } from 'vitest'
 import { StudentWorkspace } from '../src/features/student/StudentWorkspace'
+
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
+})
 
 function setup({ suspended = false, save, stage = 'active', availability = 'ready', onSuspended = vi.fn() } = {}) {
   const question = { id: 'q1', prompt: 'First question', question_type: 'single_choice', selected_option_ids: ['a'], is_flagged: false, mutation_sequence: 1, options: [{ id: 'a', text: 'First answer' }, { id: 'b', text: 'Second answer' }] }
@@ -9,6 +13,7 @@ function setup({ suspended = false, save, stage = 'active', availability = 'read
   const gateway = { auth: { getStudentStatus: vi.fn().mockResolvedValue({ availability, exam_id: 'exam', status_message: 'Please wait for your invigilator.' }) }, attempts: {
     getCurrentAttempt: vi.fn().mockResolvedValue(attempt),
     startCurrentAttempt: vi.fn().mockResolvedValue(attempt),
+    submitCurrentAttempt: vi.fn().mockResolvedValue({}),
     heartbeatCurrentAttempt: vi.fn().mockResolvedValue({ status: 'in_progress', remaining_seconds: 2700, exam_suspended: suspended, next_heartbeat_after_seconds: 20 }),
     saveCurrentAnswer: save || vi.fn(async (_id, payload) => ({ ...payload, remaining_seconds: 2699 })),
   } }
@@ -22,11 +27,41 @@ function setup({ suspended = false, save, stage = 'active', availability = 'read
 
 afterEach(() => vi.useRealTimers())
 
+it('warns about unanswered questions and only submits after confirmation', async () => {
+  const gateway = setup()
+  await screen.findByText('First question')
+  fireEvent.click(screen.getByRole('button', { name: 'Submit exam' }))
+  expect(screen.getByRole('dialog', { name: 'Confirm exam submission' })).toHaveTextContent('You have not answered 1 question.')
+  expect(gateway.attempts.submitCurrentAttempt).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(gateway.attempts.submitCurrentAttempt).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Save and next' }))
+  fireEvent.click(screen.getAllByRole('button', { name: 'Submit exam' })[1])
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm submission' }))
+  await screen.findByRole('heading', { name: 'Exam submitted' })
+  expect(gateway.attempts.submitCurrentAttempt).toHaveBeenCalledOnce()
+})
+
+it('still asks for confirmation when every question is answered', async () => {
+  const gateway = setup()
+  await screen.findByText('First question')
+  fireEvent.click(screen.getByRole('button', { name: 'Save and next' }))
+  fireEvent.click(screen.getByRole('radio', { name: 'Option A: First answer' }))
+  await waitFor(() => expect(screen.getByRole('radio', { name: 'Option A: First answer' })).not.toBeDisabled())
+  fireEvent.click(screen.getAllByRole('button', { name: 'Submit exam' })[0])
+  expect(screen.getByRole('dialog')).toHaveTextContent('You have answered all questions. Are you sure you want to submit?')
+  expect(gateway.attempts.submitCurrentAttempt).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm submission' }))
+  await screen.findByRole('heading', { name: 'Exam submitted' })
+  expect(gateway.attempts.submitCurrentAttempt).toHaveBeenCalledOnce()
+})
+
 it('uses school branding and clean navigation labels', async () => {
   setup()
   await screen.findByText('First question')
   expect(screen.getByText('Debright college')).toBeInTheDocument()
-  expect(screen.getByText('Debright hall server 1')).toBeInTheDocument()
+  expect(screen.queryByText('Debright hall server 1')).not.toBeInTheDocument()
   expect(screen.getByRole('heading', { level: 1, name: 'English exam' })).toBeInTheDocument()
   expect(document.querySelector('.student-avatar')).toHaveTextContent('A')
   expect(screen.queryByText('(AD)')).not.toBeInTheDocument()
