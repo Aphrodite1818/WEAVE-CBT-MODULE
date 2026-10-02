@@ -119,14 +119,7 @@ async def _recover_stale_result_batches(*, now: datetime) -> set[UUID]:
 
 
 async def _list_roster_exam_ids_needing_recovery() -> tuple[list[UUID], list[UUID]]:
-    """Return durable preparation and reconciliation work for current rosters.
-
-    PENDING means the initial materialization still needs to run. STALE means
-    synchronized enrollment truth changed after a READY roster was prepared and
-    the existing candidate identities must be reconciled in place. Superseded
-    revisions are historical evidence and are never reconstructed. FAILED is
-    intentionally left for operator review instead of being retried forever.
-    """
+    """Return durable preparation and reconciliation work for current rosters."""
 
     async with async_session_factory() as db:
         pending = list(
@@ -275,6 +268,13 @@ async def recover_background_work(ctx: dict[str, Any]) -> dict[str, int]:
     result_exam_ids = set(await _list_result_exam_ids_needing_recovery(now=now))
     result_exam_ids.update(await _filter_approved_exam_ids(stale_result_exam_ids))
 
+    # One global sweep covers normal and makeup attempts. The stable job ID
+    # prevents overlapping timeout scans when one maintenance pass runs long.
+    timeout_job = await redis.enqueue_job(
+        "finalize_expired_attempts",
+        _job_id="exam-timeout-sweep",
+    )
+
     for exam_id in pending_roster_ids:
         await redis.enqueue_job("prepare_exam_roster", str(exam_id))
     for exam_id in stale_roster_ids:
@@ -288,6 +288,7 @@ async def recover_background_work(ctx: dict[str, Any]) -> dict[str, int]:
     for exam_id in sorted(result_exam_ids, key=str):
         await redis.enqueue_job("sync_exam_results", str(exam_id))
 
+    timeout_jobs_enqueued = 1 if timeout_job is not None else 0
     total = (
         len(pending_roster_ids)
         + len(stale_roster_ids)
@@ -295,11 +296,13 @@ async def recover_background_work(ctx: dict[str, Any]) -> dict[str, int]:
         + len(cancelling_ids)
         + len(active_ids)
         + len(result_exam_ids)
+        + timeout_jobs_enqueued
     )
     if total:
         logger.info(
-            "Maintenance enqueued roster_prepare=%s roster_reconcile=%s closing=%s "
-            "cancelling=%s completion=%s results=%s",
+            "Maintenance enqueued timeout=%s roster_prepare=%s roster_reconcile=%s "
+            "closing=%s cancelling=%s completion=%s results=%s",
+            timeout_jobs_enqueued,
             len(pending_roster_ids),
             len(stale_roster_ids),
             len(closing_ids),
@@ -309,6 +312,7 @@ async def recover_background_work(ctx: dict[str, Any]) -> dict[str, int]:
         )
 
     return {
+        "timeout_jobs_enqueued": timeout_jobs_enqueued,
         "roster_jobs_enqueued": len(pending_roster_ids),
         "roster_reconcile_jobs_enqueued": len(stale_roster_ids),
         "closing_jobs_enqueued": len(closing_ids),
