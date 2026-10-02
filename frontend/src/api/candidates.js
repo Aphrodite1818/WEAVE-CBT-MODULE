@@ -23,6 +23,14 @@ export function blockCandidate(candidateId, reason) {
   })
 }
 
+export function bulkBlockCandidates(examId, candidateIds, reason) {
+  return weaveRequest(`/exams/${examId}/candidates/bulk-block`, {
+    method: 'POST',
+    body: { candidate_ids: candidateIds, reason },
+    successMessage: ({ updated_count: count } = {}) => `${count || candidateIds.length} candidates blocked.`,
+  })
+}
+
 export function unblockCandidate(candidateId) {
   return weaveRequest(`/candidates/${candidateId}/unblock`, {
     method: 'POST',
@@ -35,6 +43,14 @@ export function grantLateStart(candidateId, payload) {
     method: 'POST',
     body: payload,
     successMessage: 'Late-start authorization granted.',
+  })
+}
+
+export function bulkGrantLateStart(examId, payload) {
+  return weaveRequest(`/exams/${examId}/candidates/bulk-late-start`, {
+    method: 'POST',
+    body: payload,
+    successMessage: ({ updated_count: count } = {}) => `${count || payload.candidate_ids?.length || 0} late-start authorizations granted.`,
   })
 }
 
