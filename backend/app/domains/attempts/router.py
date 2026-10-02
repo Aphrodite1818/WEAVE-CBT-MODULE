@@ -16,6 +16,8 @@ from app.domains.attempts.repository import AttemptRepository
 from app.domains.attempts.schemas import (
     AttemptAnswerMutation,
     AttemptAnswerResponse,
+    AttemptBulkInterruptPayload,
+    AttemptBulkOperatorResponse,
     AttemptHeartbeatResponse,
     AttemptOperatorResponse,
     AttemptReasonPayload,
@@ -257,6 +259,34 @@ async def list_exam_attempts(
     return AttemptMonitorListResponse(
         exam_id=exam_id, offset=offset, limit=limit, total=total, attempts=rows
     )
+
+
+@exam_router.post(
+    "/{exam_id}/attempts/bulk-interrupt",
+    response_model=AttemptBulkOperatorResponse,
+)
+async def bulk_interrupt_attempts(
+    exam_id: UUID,
+    payload: AttemptBulkInterruptPayload,
+    db: DbSession,
+    actor: CurrentLocalActor,
+) -> AttemptBulkOperatorResponse:
+    try:
+        return await AttemptService.bulk_interrupt_attempts(
+            db,
+            actor=actor,
+            exam_id=exam_id,
+            attempt_ids=payload.attempt_ids,
+            reason=payload.reason,
+        )
+    except (
+        AcademicAuthorizationError,
+        AttemptStateError,
+        ExamNotFound,
+        ExamStateError,
+        ValueError,
+    ) as exc:
+        raise _http_error(exc) from exc
 
 
 @operator_router.post("/{attempt_id}/interrupt", response_model=AttemptOperatorResponse)
