@@ -22,17 +22,19 @@ export function bulkTargetId(action, candidate) {
   return null
 }
 
-export function RosterBulkActions({
-  exam,
-  payload,
-  gateway,
-  action,
-  onActionChange,
-  selectedTargets,
-  onSelectedTargetsChange,
-  onChanged,
-  disabled = false,
-}) {
+export function RosterBulkActions(props) {
+  const launcherInstance = Object.prototype.hasOwnProperty.call(props, 'disabled')
+  const {
+    exam,
+    payload,
+    gateway,
+    action,
+    onActionChange,
+    selectedTargets,
+    onSelectedTargetsChange,
+    onChanged,
+    disabled = false,
+  } = props
   const [menuOpen, setMenuOpen] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [reason, setReason] = useState('')
@@ -147,6 +149,11 @@ export function RosterBulkActions({
     }
   }
 
+  // AdminRosterDetailPage deliberately keeps the compact launcher in the page
+  // heading and the selection toolbar in the content flow. Once an action is
+  // chosen, only the content instance should render the toolbar.
+  if (action && launcherInstance) return null
+
   if (action) {
     return (
       <>
@@ -157,7 +164,7 @@ export function RosterBulkActions({
           </div>
           <div className="admin-roster-bulk-toolbar__actions">
             <button type="button" className="admin-roster-bulk-secondary" disabled={selectingAll || busy} onClick={() => void selectAll()}>
-              {selectingAll ? 'Selecting…' : 'Select all eligible'}
+              {selectingAll ? 'Selecting…' : selectAllLabel(action)}
             </button>
             <button type="button" className="admin-roster-bulk-secondary" disabled={!selectedTargets.size || busy} onClick={() => onSelectedTargetsChange(new Set())}>Clear</button>
             <button type="button" className="admin-roster-bulk-primary" disabled={!selectedTargets.size || busy} onClick={() => { setError(''); setDialogOpen(true) }}>
@@ -218,6 +225,12 @@ function bulkOptions(exam, payload) {
     return options
   }
   return []
+}
+
+function selectAllLabel(action) {
+  if (action === 'interrupt') return 'Select all writing'
+  if (action === 'late-start') return 'Select all requiring access'
+  return 'Select all eligible'
 }
 
 function bulkLabel(action) {
