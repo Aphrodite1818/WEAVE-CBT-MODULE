@@ -30,6 +30,8 @@ export function ExamDateTimePicker({ label, value, onChange, min = '', disabled 
   const [month, setMonth] = useState(() => new Date())
   const [opened, setOpened] = useState(false)
   const [now, setNow] = useState(() => Date.now())
+  const entryDeadline = label === 'Latest normal start'
+  const displayLabel = entryDeadline ? 'Normal entry deadline' : label
   const currentMinimum = nextLocalMinute()
   const effectiveMin = min && min > currentMinimum ? min : currentMinimum
   const selectedDate = draft.slice(0, 10)
@@ -61,11 +63,11 @@ export function ExamDateTimePicker({ label, value, onChange, min = '', disabled 
 
   return (
     <div className="teacher-exam-field exam-datetime">
-      <span>{label} <small>(optional)</small></span>
+      <span>{displayLabel} <small>(optional)</small></span>
       <button
         type="button"
         className={`exam-datetime__trigger${value ? ' has-value' : ''}${valueElapsed ? ' is-overdue' : ''}`}
-        aria-label={label}
+        aria-label={displayLabel}
         aria-haspopup="dialog"
         aria-describedby={valueElapsed ? elapsedHelpId : undefined}
         disabled={disabled}
@@ -74,6 +76,7 @@ export function ExamDateTimePicker({ label, value, onChange, min = '', disabled 
         <RiCalendarLine size={18} aria-hidden="true" />
         <span>{value ? new Date(value).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Choose date & time'}</span>
       </button>
+      {entryDeadline && !valueElapsed && <p className="exam-datetime__hint">Students can start normally until this time. After it passes, an administrator must grant late-start access.</p>}
       {valueElapsed && (
         <p id={elapsedHelpId} className="exam-datetime__elapsed" role="alert">
           This time has elapsed. Choose a new future time before saving or moving this examination forward.
@@ -86,7 +89,7 @@ export function ExamDateTimePicker({ label, value, onChange, min = '', disabled 
       }}>
         {opened && <>
           <header className="exam-datetime-dialog__heading">
-            <div><h2 id={headingId}>{label}</h2><p>Choose a date and local time.</p></div>
+            <div><h2 id={headingId}>{displayLabel}</h2><p>{entryDeadline ? 'Choose when normal candidate entry should close.' : 'Choose a date and local time.'}</p></div>
             <button type="button" className="exam-datetime__icon-button" aria-label="Close date picker" onClick={close}><RiCloseLine size={20} /></button>
           </header>
           <div className="exam-calendar__navigation">
@@ -105,9 +108,9 @@ export function ExamDateTimePicker({ label, value, onChange, min = '', disabled 
           </div>
           <div className="exam-datetime__time">
             <span><RiTimeLine size={18} aria-hidden="true" /> Time <small>24-hour</small></span>
-            <SelectControl label={`${label} hour`} value={hours} options={HOURS} onChange={(hour) => changeTime(hour, minutes)} />
+            <SelectControl label={`${displayLabel} hour`} value={hours} options={HOURS} onChange={(hour) => changeTime(hour, minutes)} />
             <span aria-hidden="true">:</span>
-            <SelectControl label={`${label} minute`} value={minutes} options={MINUTES} onChange={(minute) => changeTime(hours, minute)} />
+            <SelectControl label={`${displayLabel} minute`} value={minutes} options={MINUTES} onChange={(minute) => changeTime(hours, minute)} />
           </div>
           <p id={helpId} className={`exam-datetime__hint${tooEarly ? ' is-error' : ''}`} role={tooEarly ? 'alert' : undefined}>
             {tooEarly ? `Choose a time on or after ${new Date(effectiveMin).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.` : 'Times use this device’s local timezone.'}
