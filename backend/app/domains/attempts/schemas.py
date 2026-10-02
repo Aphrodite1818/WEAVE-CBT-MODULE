@@ -93,20 +93,20 @@ class AttemptReasonPayload(InputBase):
 
 
 class AttemptBulkInterruptPayload(AttemptReasonPayload):
-    attempt_ids: list[UUID] = Field(min_length=1, max_length=5000)
+    candidate_ids: list[UUID] = Field(min_length=1, max_length=5000)
 
-    @field_validator("attempt_ids")
+    @field_validator("candidate_ids")
     @classmethod
-    def unique_attempt_ids(cls, value: list[UUID]) -> list[UUID]:
+    def unique_candidate_ids(cls, value: list[UUID]) -> list[UUID]:
         if len(value) != len(set(value)):
-            raise ValueError("attempt_ids cannot contain duplicates")
+            raise ValueError("candidate_ids cannot contain duplicates")
         return value
 
 
 class AttemptBulkOperatorResponse(OutputBase):
     action: Literal["interrupt"]
     updated_count: int
-    attempt_ids: list[UUID]
+    candidate_ids: list[UUID]
 
 
 class AttemptOperatorResponse(OutputBase):
