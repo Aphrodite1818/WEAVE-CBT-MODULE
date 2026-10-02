@@ -11,6 +11,10 @@ from app.domains.candidates.exceptions import CandidateRosterError
 from app.domains.candidates.lifecycle_service import CandidateService
 from app.domains.candidates.models import CandidateStatus
 from app.domains.candidates.schemas import (
+    CandidateAttemptStateFilter,
+    CandidateBulkActionPayload,
+    CandidateBulkActionResponse,
+    CandidateBulkLateStartGrantPayload,
     CandidateLateStartAuthorizationResponse,
     CandidateLateStartGrantPayload,
     CandidateLateStartRevocationPayload,
@@ -60,6 +64,9 @@ def _domain_http_error(exc: Exception) -> HTTPException:
             "consumed",
             "active examination",
             "not part of this examination",
+            "has already started",
+            "attempt controls",
+            "normal entry deadline",
         )
     ):
         code = status.HTTP_409_CONFLICT
@@ -80,6 +87,7 @@ async def list_exam_roster(
     candidate_status: CandidateStatus | None = Query(default=None, alias="status"),
     class_id: UUID | None = Query(default=None),
     search: str | None = Query(default=None, max_length=128),
+    attempt_state: CandidateAttemptStateFilter | None = Query(default=None),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=100),
 ) -> CandidateRosterResponse:
@@ -91,8 +99,64 @@ async def list_exam_roster(
             status=candidate_status,
             class_id=class_id,
             search=search,
+            attempt_state=attempt_state,
             offset=offset,
             limit=limit,
+        )
+    except (
+        AcademicAuthorizationError,
+        CandidateRosterError,
+        ExamNotFound,
+        ValueError,
+    ) as exc:
+        raise _domain_http_error(exc) from exc
+
+
+@router.post(
+    "/exams/{exam_id}/candidates/bulk-block",
+    response_model=CandidateBulkActionResponse,
+)
+async def bulk_block_candidates(
+    exam_id: UUID,
+    payload: CandidateBulkActionPayload,
+    db: DbSession,
+    actor: CurrentLocalActor,
+) -> CandidateBulkActionResponse:
+    try:
+        return await CandidateService.bulk_block_candidates(
+            db,
+            actor=actor,
+            exam_id=exam_id,
+            candidate_ids=payload.candidate_ids,
+            reason=payload.reason,
+        )
+    except (
+        AcademicAuthorizationError,
+        CandidateRosterError,
+        ExamNotFound,
+        ValueError,
+    ) as exc:
+        raise _domain_http_error(exc) from exc
+
+
+@router.post(
+    "/exams/{exam_id}/candidates/bulk-late-start",
+    response_model=CandidateBulkActionResponse,
+)
+async def bulk_grant_late_start(
+    exam_id: UUID,
+    payload: CandidateBulkLateStartGrantPayload,
+    db: DbSession,
+    actor: CurrentLocalActor,
+) -> CandidateBulkActionResponse:
+    try:
+        return await CandidateService.bulk_grant_late_start(
+            db,
+            actor=actor,
+            exam_id=exam_id,
+            candidate_ids=payload.candidate_ids,
+            reason=payload.reason,
+            expires_at=payload.expires_at,
         )
     except (
         AcademicAuthorizationError,
