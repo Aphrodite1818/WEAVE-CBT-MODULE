@@ -197,8 +197,10 @@ describe('Admin roster workspace', () => {
     expect(screen.queryByRole('menuitem', { name: /bulk block/i })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('menuitem', { name: /interrupt active attempts/i }))
+    expect(screen.getAllByRole('region', { name: /bulk interrupt attempts selection/i })).toHaveLength(1)
     fireEvent.click(screen.getByRole('checkbox', { name: /select ada okafor/i }))
-    fireEvent.click(screen.getAllByRole('button', { name: /continue \(1\)/i })[0])
+    expect(screen.getAllByRole('button', { name: /continue \(1\)/i })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: /continue \(1\)/i }))
     fireEvent.change(screen.getByPlaceholderText(/one reason for this bulk action/i), { target: { value: 'Network instability in Lab 2' } })
     fireEvent.click(screen.getByRole('button', { name: /^Interrupt 1$/i }))
 
