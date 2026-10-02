@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -89,6 +90,23 @@ class AttemptAnswerResponse(OutputBase):
 
 class AttemptReasonPayload(InputBase):
     reason: str = Field(min_length=1, max_length=500)
+
+
+class AttemptBulkInterruptPayload(AttemptReasonPayload):
+    attempt_ids: list[UUID] = Field(min_length=1, max_length=5000)
+
+    @field_validator("attempt_ids")
+    @classmethod
+    def unique_attempt_ids(cls, value: list[UUID]) -> list[UUID]:
+        if len(value) != len(set(value)):
+            raise ValueError("attempt_ids cannot contain duplicates")
+        return value
+
+
+class AttemptBulkOperatorResponse(OutputBase):
+    action: Literal["interrupt"]
+    updated_count: int
+    attempt_ids: list[UUID]
 
 
 class AttemptOperatorResponse(OutputBase):
