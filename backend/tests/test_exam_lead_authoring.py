@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import ast
 import os
 import unittest
 from datetime import UTC, datetime
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from uuid import UUID, uuid4
@@ -29,9 +27,6 @@ from app.domains.exams.schemas import (
     ExamResponse,
 )
 from app.domains.exams.service import ExamService
-
-BACKEND_ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = BACKEND_ROOT / "alembic" / "versions" / "20260918_exam_lead_author.py"
 
 
 def make_actor(
@@ -109,19 +104,6 @@ class ExamLeadContractTests(unittest.TestCase):
         )
         self.assertIsNotNone(candidates)
         self.assertIsNotNone(assignment)
-
-    def test_migration_is_valid_and_backfills_teacher_creator_lead(self) -> None:
-        source = MIGRATION.read_text(encoding="utf-8")
-        ast.parse(source)
-        self.assertIn(
-            'down_revision: str | Sequence[str] | None = "20260917_exam_execution"',
-            source,
-        )
-        self.assertIn('"lead_teacher_id"', source)
-        self.assertIn('"lead_assigned_by_actor_id"', source)
-        self.assertIn('"lead_assigned_at"', source)
-        self.assertIn("t.id::text = a.weave_membership_id", source)
-        self.assertIn("a.role = 'teacher'", source)
 
 
 class ExamLeadPolicyTests(unittest.IsolatedAsyncioTestCase):
@@ -297,11 +279,14 @@ class ExamLeadPolicyTests(unittest.IsolatedAsyncioTestCase):
         admin = make_actor(role="admin")
         exam = make_exam(status=ExamStatus.SUBMITTED)
 
-        with patch.object(
-            ExamRepository,
-            "get_exam_by_id",
-            new=AsyncMock(return_value=exam),
-        ), self.assertRaisesRegex(ExamStateError, "DRAFT"):
+        with (
+            patch.object(
+                ExamRepository,
+                "get_exam_by_id",
+                new=AsyncMock(return_value=exam),
+            ),
+            self.assertRaisesRegex(ExamStateError, "DRAFT"),
+        ):
             await ExamService.assign_lead_teacher(
                 db,
                 actor=admin,  # type: ignore[arg-type]

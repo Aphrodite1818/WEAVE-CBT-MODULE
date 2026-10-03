@@ -1,0 +1,37 @@
+param([switch]$Preview)
+
+$ErrorActionPreference = 'Stop'
+$repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$targets = @(
+    '.ruff_cache', '.uv-cache',
+    'backend/.pytest_cache', 'backend/.ruff_cache',
+    'frontend/dist', 'frontend/.vite', 'frontend/node_modules/.vite',
+    'frontend/node_modules/.vite-temp',
+    'deployment/manager/.pytest_cache', 'deployment/manager/.ruff_cache'
+)
+$sourceRoots = @('backend/app', 'backend/tests', 'deployment/manager/src', 'deployment/manager/tests')
+foreach ($sourceRoot in $sourceRoots) {
+    $sourcePath = Join-Path $repositoryRoot $sourceRoot
+    if (Test-Path -LiteralPath $sourcePath) {
+        $targets += Get-ChildItem -LiteralPath $sourcePath -Directory -Recurse -Filter '__pycache__' |
+            ForEach-Object { $_.FullName }
+    }
+}
+foreach ($target in $targets) {
+    $targetPath = if ([IO.Path]::IsPathRooted($target)) { $target } else { Join-Path $repositoryRoot $target }
+    $resolvedTarget = [IO.Path]::GetFullPath($targetPath)
+    if (-not $resolvedTarget.StartsWith($repositoryRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Cleanup target is outside the repository: $resolvedTarget"
+    }
+    if (Test-Path -LiteralPath $resolvedTarget) {
+        if ((Get-Item -LiteralPath $resolvedTarget).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw "Refusing to clean a linked directory: $resolvedTarget"
+        }
+        if ($Preview) {
+            Write-Output "Would remove $resolvedTarget"
+        } else {
+            Remove-Item -LiteralPath $resolvedTarget -Recurse -Force
+            Write-Output "Removed $resolvedTarget"
+        }
+    }
+}

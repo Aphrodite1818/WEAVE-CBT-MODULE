@@ -46,7 +46,7 @@ ENV CCACHE_DIR=/root/.cache/ccache \
 
 
 # =======================================================
-# Compile the backend once for API, worker and migrations
+# Compile the backend once for API, worker and schema bootstrap
 # =======================================================
 
 FROM python-build-base AS backend-builder
@@ -85,18 +85,16 @@ RUN apt-get update \
 
 
 # =======================================================
-# Migration-only runtime used by CI for an early smoke test
+# Bootstrap-only runtime for an early schema smoke test
 # =======================================================
 
-FROM runtime-base AS migration-runtime
+FROM runtime-base AS bootstrap-runtime
 
 COPY --from=backend-builder \
     /workspace/deployment/docker/app/build/nuitka/runtime/weave-cbt.dist \
     /app/weave-cbt
 
-ENV WEAVE_ALEMBIC_CONFIG=/app/weave-cbt/migrations/alembic.ini
-
-CMD ["/app/weave-cbt/weave-cbt", "migrate"]
+CMD ["/app/weave-cbt/weave-cbt", "bootstrap"]
 
 
 # ===============================
@@ -113,9 +111,7 @@ COPY --from=backend-builder \
 # the Nuitka backend compilation stage.
 COPY --from=frontend-builder /workspace/frontend/dist /app/web
 
-ENV WEAVE_ALEMBIC_CONFIG=/app/weave-cbt/migrations/alembic.ini
-
 EXPOSE 8000
 
-# API is the default process. Compose selects worker/migrate modes explicitly.
+# API is the default process. Compose selects worker/bootstrap modes explicitly.
 CMD ["/app/weave-cbt/weave-cbt", "api"]

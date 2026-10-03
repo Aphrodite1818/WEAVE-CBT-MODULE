@@ -14,7 +14,7 @@ The Windows x64 installer bundles the native Qt manager and an Ubuntu WSL2 files
 
 ## Setup and recovery
 
-Open the manager and select **Set up this computer**. It prepares a current WSL runtime, resumes after a required Windows restart, generates a strong random database password, downloads the services, and verifies the migration and staff portal. The dashboard provides the staff portal and a copyable student address.
+Open the manager and select **Set up this computer**. It prepares a current WSL runtime, resumes after a required Windows restart, generates a strong random database password, downloads the services, and verifies database initialization and the staff portal. The dashboard provides the staff portal and a copyable student address.
 
 A failed setup can be retried. Existing `runtime.env` credentials are reused because PostgreSQL does not change the password of an initialized volume when its environment changes. If school data exists without its configuration, setup stops and requests restoration rather than replacing credentials.
 

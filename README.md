@@ -1,5 +1,7 @@
 # Weave CBT
 
+Database setup and handoff cleanup: [Database initialization](docs/database-initialization.md).
+
 Weave CBT is a **school-hosted Computer-Based Testing runtime** that extends the Weave school-management platform.
 
 The CBT application runs entirely on infrastructure controlled by the school and is accessed by teachers, administrators, and students through the school's local network.
@@ -1658,7 +1660,7 @@ Development should proceed incrementally:
 
 ```text
 1. Core settings/database/Redis/security
-2. Database base models and Alembic
+2. Database base models and automatic first-install bootstrap
 3. Installation pairing
 4. Local staff authentication/session system
 5. Academic projections

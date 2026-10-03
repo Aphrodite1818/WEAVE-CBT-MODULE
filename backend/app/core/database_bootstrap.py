@@ -1,0 +1,179 @@
+"""Create a fresh PostgreSQL schema, without modifying existing school data."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+
+from sqlalchemy import Column, inspect, text
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.orm import configure_mappers
+
+import app.model_registry  # noqa: F401
+from app.core.database import Base, engine
+from app.domains.exams.database_schema import (
+    CONTRIBUTOR_TRIGGERS,
+    create_contributor_triggers,
+)
+
+logger = logging.getLogger(__name__)
+_BOOTSTRAP_LOCK_KEY = 873324110920260903
+
+
+def _validate_existing_schema(connection: Connection) -> None:
+    """Reject incompatible schemas instead of treating create_all as an upgrade."""
+    inspector = inspect(connection)
+    problems: list[str] = []
+    for table in Base.metadata.sorted_tables:
+        columns = {
+            column["name"]: column
+            for column in inspector.get_columns(table.name, schema="public")
+        }
+        for expected in table.columns:
+            actual = columns.get(expected.name)
+            if actual is None:
+                problems.append(f"{table.name}.{expected.name} is missing")
+            elif (
+                str(actual["type"].compile(dialect=connection.dialect))
+                != str(expected.type.compile(dialect=connection.dialect))
+                or actual["nullable"] != expected.nullable
+            ):
+                problems.append(
+                    f"{table.name}.{expected.name} has an incompatible type or nullability"
+                )
+        actual_pk = inspector.get_pk_constraint(table.name, schema="public")[
+            "constrained_columns"
+        ]
+        if actual_pk != [column.name for column in table.primary_key.columns]:
+            problems.append(f"{table.name} has an incompatible primary key")
+        actual_indexes = {
+            item["name"]: item
+            for item in inspector.get_indexes(table.name, schema="public")
+        }
+        for index in table.indexes:
+            actual = actual_indexes.get(index.name)
+            simple_columns = all(isinstance(item, Column) for item in index.expressions)
+            if (
+                actual is None
+                or bool(actual["unique"]) != bool(index.unique)
+                or (
+                    simple_columns
+                    and actual["column_names"]
+                    != [item.name for item in index.expressions]
+                )
+            ):
+                problems.append(
+                    f"{table.name} index {index.name} is missing or incompatible"
+                )
+        actual_checks = {
+            item["name"]
+            for item in inspector.get_check_constraints(table.name, schema="public")
+        }
+        actual_unique = {
+            tuple(item["column_names"])
+            for item in inspector.get_unique_constraints(table.name, schema="public")
+        }
+        actual_fks = {
+            (
+                tuple(item["constrained_columns"]),
+                item["referred_table"],
+                tuple(item["referred_columns"]),
+                item["options"].get("ondelete"),
+            )
+            for item in inspector.get_foreign_keys(table.name, schema="public")
+        }
+        for constraint in table.constraints:
+            if (
+                constraint.__visit_name__ == "check_constraint"
+                and constraint.name not in actual_checks
+            ):
+                problems.append(f"{table.name} check {constraint.name} is missing")
+            elif (
+                constraint.__visit_name__ == "unique_constraint"
+                and tuple(column.name for column in constraint.columns)
+                not in actual_unique
+            ):
+                problems.append(
+                    f"{table.name} unique constraint {constraint.name} is missing"
+                )
+            elif constraint.__visit_name__ == "foreign_key_constraint":
+                signature = (
+                    tuple(element.parent.name for element in constraint.elements),
+                    constraint.elements[0].column.table.name,
+                    tuple(element.column.name for element in constraint.elements),
+                    constraint.ondelete,
+                )
+                if signature not in actual_fks:
+                    problems.append(
+                        f"{table.name} foreign key {constraint.name} is missing or incompatible"
+                    )
+    triggers = set(
+        connection.execute(
+            text(
+                "SELECT c.relname, t.tgname FROM pg_catalog.pg_trigger t "
+                "JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid "
+                "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
+                "WHERE n.nspname = 'public' AND NOT t.tgisinternal AND t.tgenabled <> 'D'"
+            )
+        ).tuples()
+    )
+    for required in CONTRIBUTOR_TRIGGERS:
+        if required not in triggers:
+            problems.append(
+                f"{required[0]} trigger {required[1]} is missing or disabled"
+            )
+    if problems:
+        raise RuntimeError(
+            "The existing CBT database schema is incompatible. Refusing automatic repair. "
+            "Back up its data and apply an explicit schema upgrade before restarting. "
+            + "; ".join(problems[:12])
+        )
+
+
+async def bootstrap_database(database_engine: AsyncEngine = engine) -> bool:
+    """Initialize once under a transaction lock; return whether tables were created."""
+    configure_mappers()
+    expected_tables = {table.name for table in Base.metadata.tables.values()}
+    if not expected_tables:
+        raise RuntimeError("The model registry is empty; refusing database bootstrap.")
+    async with database_engine.begin() as connection:
+        await connection.execute(
+            text("SELECT pg_advisory_xact_lock(:key)"), {"key": _BOOTSTRAP_LOCK_KEY}
+        )
+        # Models and trigger SQL consistently use the public schema.
+        await connection.execute(text("SET LOCAL search_path TO public"))
+        result = await connection.execute(
+            text(
+                "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'"
+            )
+        )
+        existing_tables = set(result.scalars())
+        if existing_tables:
+            missing = expected_tables - existing_tables
+            if missing:
+                raise RuntimeError(
+                    "The CBT database is partially initialized or belongs to another application. "
+                    "Refusing automatic repair. Missing tables: "
+                    + ", ".join(sorted(missing))
+                )
+            await connection.run_sync(_validate_existing_schema)
+            logger.info("CBT database schema validated; initialization skipped")
+            return False
+        await connection.run_sync(
+            lambda sync: Base.metadata.create_all(sync, checkfirst=False)
+        )
+        await connection.run_sync(create_contributor_triggers)
+        logger.info("Created %s CBT tables in a fresh database", len(expected_tables))
+        return True
+
+
+async def _main() -> None:
+    try:
+        await bootstrap_database()
+    finally:
+        await engine.dispose()
+
+
+if __name__ == "__main__":
+    asyncio.run(_main())

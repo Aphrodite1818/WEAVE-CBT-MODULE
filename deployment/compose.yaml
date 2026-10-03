@@ -23,9 +23,9 @@ services:
       retries: 10
     restart: unless-stopped
 
-  migrate:
+  bootstrap:
     image: ${WEAVE_IMAGE:?WEAVE_IMAGE is required}
-    command: [/app/weave-cbt/weave-cbt, migrate]
+    command: [/app/weave-cbt/weave-cbt, bootstrap]
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
@@ -55,7 +55,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      migrate:
+      bootstrap:
         condition: service_completed_successfully
     restart: unless-stopped
     stop_grace_period: 30s
@@ -76,7 +76,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      migrate:
+      bootstrap:
         condition: service_completed_successfully
     restart: unless-stopped
     stop_grace_period: 30s

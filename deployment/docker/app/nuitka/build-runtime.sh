@@ -27,11 +27,9 @@ rm -rf "${OUTPUT_DIR}"
 mkdir -p "${OUTPUT_DIR}"
 
 # Compile the full backend once. The resulting executable dispatches between
-# API, worker and migration modes at runtime.
-# Alembic loads env.py dynamically, so logging.config must be bundled explicitly.
+# API, worker and schema bootstrap modes at runtime.
 "${PYTHON_BIN}" -m nuitka \
     "${NUITKA_OPTIONS[@]}" \
-    --include-module=logging.config \
     --output-dir="${OUTPUT_DIR}" \
     --output-filename="weave-cbt" \
     "${ENTRYPOINT}"
@@ -55,33 +53,6 @@ if [[ "${DIST_DIR}" != "${CANONICAL_DIST_DIR}" ]]; then
     mv "${DIST_DIR}" "${CANONICAL_DIST_DIR}"
     DIST_DIR="${CANONICAL_DIST_DIR}"
 fi
-
-MIGRATION_DIR="${DIST_DIR}/migrations"
-mkdir -p "${MIGRATION_DIR}"
-
-cp "${BACKEND_ROOT}/alembic.ini" "${MIGRATION_DIR}/alembic.ini"
-cp -R "${BACKEND_ROOT}/alembic" "${MIGRATION_DIR}/alembic"
-
-if grep -Eq '^[[:space:]]*sourceless[[:space:]]*=' \
-    "${MIGRATION_DIR}/alembic.ini"; then
-    sed -i -E \
-        's/^[[:space:]]*sourceless[[:space:]]*=.*$/sourceless = true/' \
-        "${MIGRATION_DIR}/alembic.ini"
-else
-    sed -i \
-        '/^\[alembic\]/a sourceless = true' \
-        "${MIGRATION_DIR}/alembic.ini"
-fi
-
-"${PYTHON_BIN}" -m compileall \
-    -b \
-    -q \
-    "${MIGRATION_DIR}/alembic"
-
-find "${MIGRATION_DIR}/alembic" \
-    -type f \
-    -name "*.py" \
-    -delete
 
 test -x "${DIST_DIR}/weave-cbt"
 

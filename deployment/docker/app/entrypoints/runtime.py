@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import os
+import asyncio
 import sys
-from pathlib import Path
-from typing import Callable
+from collections.abc import Callable
 
 
 def run_api() -> None:
     """Start the WEAVE CBT FastAPI server."""
     import uvicorn
-
     from app.core.settings import settings
     from app.main import app
 
@@ -25,44 +23,30 @@ def run_api() -> None:
 
 def run_worker() -> None:
     """Start the WEAVE CBT ARQ worker."""
-    from arq.worker import run_worker
-
     from app.workers.worker import WorkerSettings
+    from arq.worker import run_worker
 
     run_worker(WorkerSettings)
 
 
-def get_alembic_config():
-    """Resolve the Alembic configuration for source and compiled runtimes."""
-    from alembic.config import Config
+def run_bootstrap() -> None:
+    """Initialize a fresh database or validate an existing schema."""
+    from app.core.database import dispose_database_engine
+    from app.core.database_bootstrap import bootstrap_database
 
-    configured_path = os.getenv("WEAVE_ALEMBIC_CONFIG")
+    async def initialize() -> None:
+        try:
+            await bootstrap_database()
+        finally:
+            await dispose_database_engine()
 
-    if configured_path:
-        config_path = Path(configured_path)
-    else:
-        repo_root = Path(__file__).resolve().parents[4]
-        config_path = repo_root / "backend" / "alembic.ini"
-
-    if not config_path.is_file():
-        raise RuntimeError(
-            f"Alembic configuration was not found at: {config_path}"
-        )
-
-    return Config(str(config_path))
-
-
-def run_migrate() -> None:
-    """Upgrade the database schema to the latest Alembic migration."""
-    from alembic import command
-
-    command.upgrade(get_alembic_config(), "head")
+    asyncio.run(initialize())
 
 
 COMMANDS: dict[str, Callable[[], None]] = {
     "api": run_api,
     "worker": run_worker,
-    "migrate": run_migrate,
+    "bootstrap": run_bootstrap,
 }
 
 

@@ -57,6 +57,7 @@ jobs:
       ENVIRONMENT: dev
       DEBUG: "false"
       DATABASE_URL: postgresql+asyncpg://weave:weave@127.0.0.1:5432/weave_cbt_test
+      WEAVE_BOOTSTRAP_TEST_DATABASE_URL: postgresql+asyncpg://weave:weave@127.0.0.1:5432/weave_cbt_test
       REDIS_URL: redis://127.0.0.1:6379/0
       WEAVE_API_BASE_URL: https://example.test
       IDENTITY_STORAGE_PATH: /tmp/weave-cbt/identity
@@ -81,19 +82,15 @@ jobs:
         run: uv sync --locked
 
       - name: Ruff lint
-        run: uv run ruff check app tests alembic
+        run: uv run ruff check app tests
 
       - name: Ruff format check
-        run: uv run ruff format --check app tests alembic
+        run: uv run ruff format --check app tests
 
-      - name: Alembic heads
-        run: uv run alembic heads
-
-      - name: Upgrade database
-        run: uv run alembic upgrade head
-
-      - name: Alembic drift check
-        run: uv run alembic check
+      - name: Initialize and validate database
+        run: |
+          uv run python -m app.core.database_bootstrap
+          uv run python -m app.core.database_bootstrap
 
       - name: Run backend tests
         run: uv run pytest -q

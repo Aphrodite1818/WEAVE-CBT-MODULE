@@ -55,6 +55,9 @@ test-results/
 dump.rdb
 appendonlydir/
 .weave-cbt/
+.weave-storage/
+.uv-cache/
+.kilo/
 
 # Logs
 logs/

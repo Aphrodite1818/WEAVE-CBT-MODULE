@@ -23,7 +23,7 @@ Architectural rules:
 - application services control transaction boundaries;
 - FastAPI dependencies do not automatically commit;
 - database connectivity is required for API startup;
-- schema creation and migrations are managed by Alembic;
+- fresh schemas are created and existing schemas validated at startup;
 - Redis and process memory must never replace PostgreSQL
   for durable examination state.
 """

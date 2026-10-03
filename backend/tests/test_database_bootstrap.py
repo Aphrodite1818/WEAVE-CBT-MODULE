@@ -1,0 +1,175 @@
+"""Exercise first-install safety against disposable PostgreSQL databases.
+
+Set WEAVE_BOOTSTRAP_TEST_DATABASE_URL to a local test database connection. Each
+test creates and drops its own uniquely named database; the source is untouched.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import os
+from uuid import uuid4
+
+import pytest
+import pytest_asyncio
+from sqlalchemy import text
+from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import create_async_engine
+
+from app.core.database import Base
+from app.core.database_bootstrap import bootstrap_database
+from app.domains.auth.models import LocalActorSession, LocalRefreshToken
+
+
+def test_current_schema_contains_durable_runtime_and_auth_contracts():
+    assert {
+        "cbt_runtime_states",
+        "realtime_outbox_events",
+        "student_exam_sessions",
+    } <= set(Base.metadata.tables)
+    assert {
+        "weave_access_token_encrypted",
+        "weave_access_token_expires_at",
+        "weave_refresh_token_encrypted",
+        "weave_refresh_token_expires_at",
+        "weave_refresh_operation_id",
+        "weave_auth_state",
+    } <= set(LocalActorSession.__table__.c.keys())
+    assert {"refresh_operation_id", "replacement_token_encrypted"} <= set(
+        LocalRefreshToken.__table__.c.keys()
+    )
+
+
+@pytest_asyncio.fixture
+async def fresh_database():
+    source = os.environ.get("WEAVE_BOOTSTRAP_TEST_DATABASE_URL")
+    if not source:
+        pytest.skip(
+            "WEAVE_BOOTSTRAP_TEST_DATABASE_URL is required for disposable PostgreSQL tests"
+        )
+    url = make_url(source)
+    if (
+        url.host not in {"localhost", "127.0.0.1"}
+        or not url.database
+        or "test" not in url.database
+    ):
+        pytest.fail(
+            "Bootstrap integration tests require an explicitly configured local test database"
+        )
+    database_name = "weave_bootstrap_test_" + uuid4().hex
+    admin = create_async_engine(url, isolation_level="AUTOCOMMIT")
+    database = create_async_engine(url.set(database=database_name))
+    created = False
+    try:
+        async with admin.connect() as connection:
+            await connection.execute(text(f'CREATE DATABASE "{database_name}"'))
+            created = True
+        yield database
+    finally:
+        await database.dispose()
+        if created:
+            assert database_name.startswith("weave_bootstrap_test_")
+            async with admin.connect() as connection:
+                await connection.execute(
+                    text(f'DROP DATABASE "{database_name}" WITH (FORCE)')
+                )
+        await admin.dispose()
+
+
+@pytest.mark.asyncio
+async def test_fresh_startup_and_restart_preserve_data(fresh_database):
+    assert await bootstrap_database(fresh_database) is True
+    async with fresh_database.begin() as connection:
+        tables = set(
+            (
+                await connection.execute(
+                    text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+                )
+            ).scalars()
+        )
+        assert tables == set(Base.metadata.tables)
+        await connection.execute(
+            text("CREATE TABLE public.bootstrap_sentinel (value text NOT NULL)")
+        )
+        await connection.execute(
+            text("INSERT INTO public.bootstrap_sentinel VALUES ('keep me')")
+        )
+    assert await bootstrap_database(fresh_database) is False
+    async with fresh_database.connect() as connection:
+        assert (
+            await connection.execute(
+                text("SELECT value FROM public.bootstrap_sentinel")
+            )
+        ).scalar_one() == "keep me"
+
+
+@pytest.mark.asyncio
+async def test_concurrent_startup_initializes_exactly_once(fresh_database):
+    results = await asyncio.gather(
+        *(bootstrap_database(fresh_database) for _ in range(3))
+    )
+    assert results.count(True) == 1
+    assert results.count(False) == 2
+
+
+@pytest.mark.asyncio
+async def test_partial_schema_is_rejected_without_repair(fresh_database):
+    async with fresh_database.begin() as connection:
+        await connection.execute(
+            text("CREATE TABLE public.alembic_version (version_num text)")
+        )
+    with pytest.raises(RuntimeError, match="Refusing automatic repair"):
+        await bootstrap_database(fresh_database)
+    async with fresh_database.connect() as connection:
+        tables = set(
+            (
+                await connection.execute(
+                    text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+                )
+            ).scalars()
+        )
+        assert tables == {"alembic_version"}
+
+
+@pytest.mark.asyncio
+async def test_old_column_definition_is_rejected(fresh_database):
+    await bootstrap_database(fresh_database)
+    async with fresh_database.begin() as connection:
+        await connection.execute(
+            text("ALTER TABLE public.exams ALTER COLUMN status TYPE varchar(8)")
+        )
+    with pytest.raises(RuntimeError, match="exams.status has an incompatible"):
+        await bootstrap_database(fresh_database)
+
+
+@pytest.mark.asyncio
+async def test_missing_contributor_trigger_is_rejected(fresh_database):
+    await bootstrap_database(fresh_database)
+    async with fresh_database.begin() as connection:
+        await connection.execute(
+            text(
+                "DROP TRIGGER trg_exam_selection_contributor ON public.exam_question_selections"
+            )
+        )
+    with pytest.raises(
+        RuntimeError, match="trigger trg_exam_selection_contributor is missing"
+    ):
+        await bootstrap_database(fresh_database)
+
+
+@pytest.mark.asyncio
+async def test_failed_initialization_rolls_back_all_tables(fresh_database, monkeypatch):
+    def fail(_connection):
+        raise RuntimeError("trigger installation failed")
+
+    monkeypatch.setattr("app.core.database_bootstrap.create_contributor_triggers", fail)
+    with pytest.raises(RuntimeError, match="trigger installation failed"):
+        await bootstrap_database(fresh_database)
+    async with fresh_database.connect() as connection:
+        assert not list(
+            (
+                await connection.execute(
+                    text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+                )
+            ).scalars()
+        )

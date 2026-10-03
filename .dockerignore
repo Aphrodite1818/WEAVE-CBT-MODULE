@@ -24,6 +24,10 @@ frontend/.vite/
 
 # Local deployment/build artifacts
 deployment/docker/app/build/
+**/.weave-storage/
+.weave-cbt/
+.uv-cache/
+.kilo/
 
 # Secrets and local environment files
 .env

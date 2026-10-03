@@ -123,7 +123,6 @@ class ExamExecutionControl(Base):
             values_callable=lambda enum_cls: [item.value for item in enum_cls],
         ),
         nullable=True,
-        index=True,
     )
     results_decided_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),

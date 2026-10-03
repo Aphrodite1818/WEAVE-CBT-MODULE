@@ -36,7 +36,7 @@ class BackupService:
         checked = self.runtime.execute(["gzip", "-t", str(backup)], timeout=120)
         if not checked.succeeded:
             raise RuntimeError("The database backup is damaged; restoration was stopped before changing the database.")
-        stopped = self.runtime.execute(["sh", "-lc", f"{prefix} stop api worker nginx migrate"], timeout=120)
+        stopped = self.runtime.execute(["sh", "-lc", f"{prefix} stop api worker nginx bootstrap"], timeout=120)
         if not stopped.succeeded:
             raise RuntimeError("Unable to stop application services before database restoration.")
         recreate = 'dropdb --if-exists --force -U "$POSTGRES_USER" "$POSTGRES_DB" && createdb -U "$POSTGRES_USER" "$POSTGRES_DB"'

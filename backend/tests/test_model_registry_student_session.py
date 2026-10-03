@@ -9,7 +9,7 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 
 
 class ModelRegistryTests(unittest.TestCase):
-    def test_student_session_model_is_registered_for_alembic(self):
+    def test_student_session_model_is_registered_for_bootstrap(self):
         registry = (
             Path(__file__).resolve().parents[1] / "app" / "model_registry.py"
         ).read_text(encoding="utf-8")

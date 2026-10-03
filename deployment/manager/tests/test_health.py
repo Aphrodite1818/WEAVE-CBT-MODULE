@@ -16,7 +16,7 @@ class FakeDeployment:
             '{"Service":"api","State":"running","Health":""}',
             '{"Service":"worker","State":"running","Health":""}',
             '{"Service":"nginx","State":"running","Health":""}',
-            '{"Service":"migrate","State":"exited","ExitCode":0}',
+            '{"Service":"bootstrap","State":"exited","ExitCode":0}',
         ])
 
 
@@ -36,15 +36,15 @@ def test_health_rejects_missing_api_replica(monkeypatch):
     assert "api" in snapshot.detail
 
 
-def test_health_rejects_missing_or_failed_database_migrations(monkeypatch):
-    for migration in ('', '{"Service":"migrate","State":"exited","ExitCode":1}', '{"Service":"migrate","State":"exited"}'):
+def test_health_rejects_missing_or_failed_database_initialization(monkeypatch):
+    for initialization in ('', '{"Service":"bootstrap","State":"exited","ExitCode":1}', '{"Service":"bootstrap","State":"exited"}'):
         deployment = FakeDeployment()
-        raw = deployment.compose_ps_json().replace('{"Service":"migrate","State":"exited","ExitCode":0}', migration)
+        raw = deployment.compose_ps_json().replace('{"Service":"bootstrap","State":"exited","ExitCode":0}', initialization)
         deployment.compose_ps_json = lambda raw=raw: raw
         health = HealthService(deployment)
         monkeypatch.setattr(health, "_web_reachable", lambda: True)
         assert not health.snapshot().healthy
-        assert "migration" in health.snapshot().detail
+        assert "initialization" in health.snapshot().detail
 
 
 def test_portal_404_is_not_healthy(monkeypatch):

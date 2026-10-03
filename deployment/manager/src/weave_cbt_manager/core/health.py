@@ -70,19 +70,19 @@ class HealthService:
         except Exception as exc:
             return HealthSnapshot(False, False, False, str(exc))
         counts: dict[str, int] = {}
-        migration_ok = False
+        bootstrap_ok = False
         for record in records:
             service = str(record.get("Service") or record.get("service") or "")
             state = str(record.get("State") or record.get("state") or "").lower()
             health = str(record.get("Health") or record.get("health") or "").lower()
             exit_code = record.get("ExitCode", record.get("exit_code"))
-            if service == "migrate" and state in {"exited", "stopped"}:
-                migration_ok = exit_code is not None and str(exit_code) == "0"
+            if service == "bootstrap" and state in {"exited", "stopped"}:
+                bootstrap_ok = exit_code is not None and str(exit_code) == "0"
             if state == "running" and health not in {"unhealthy", "starting"}:
                 counts[service] = counts.get(service, 0) + 1
         missing = [f"{service} ({counts.get(service, 0)}/{expected})" for service, expected in self.REQUIRED_RUNNING.items() if counts.get(service, 0) < expected]
-        if not migration_ok:
-            missing.append("Database migration has not completed successfully")
+        if not bootstrap_ok:
+            missing.append("Database initialization has not completed successfully")
         services_ready = not missing
         web_reachable = self._web_reachable() if services_ready else False
         detail = "Healthy" if services_ready and web_reachable else "; ".join(missing) or "Web endpoint is not reachable."
